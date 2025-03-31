@@ -15,3 +15,6 @@ always-lobotomize-villagers-in-vehicles: false
 
 #The sound to play when a villager restocks. Leave empty ("") for no sound.
 restock-sound: "ENTITY_VILLAGER_CELEBRATE"
+
+# Radius to check for villagers when a block is modified
+priority-check-radius: 3

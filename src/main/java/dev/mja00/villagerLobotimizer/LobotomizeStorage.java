@@ -32,6 +32,8 @@ public class LobotomizeStorage {
     private boolean lobotomizePassengers;
     private Sound restockSound;
     private Logger logger;
+    private final Map<Chunk, Long> changedChunks = new HashMap<>();
+    private int priorityCheckRadius; // Radius to check for villagers around block changes
 
     static {
         IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
@@ -69,6 +71,7 @@ public class LobotomizeStorage {
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.priorityCheckRadius = plugin.getConfig().getInt("priority-check-radius", 3);
         String soundName = plugin.getConfig().getString("restock-sound");
 
         try {
@@ -251,6 +254,15 @@ public class LobotomizeStorage {
 
         public void run() {
             LobotomizeStorage.this.activeVillagers.removeIf((villager) -> LobotomizeStorage.this.processVillager(villager, true));
+        }
+    }
+
+    public void handleBlockChange(Block block) {
+        Chunk chunk = block.getChunk();
+        changedChunks.put(chunk, System.currentTimeMillis());
+
+        if (plugin.isDebugging()) {
+            logger.info("[Debug] Tracking chunk change at " + chunk.getX() + "," + chunk.getZ());
         }
     }
 }

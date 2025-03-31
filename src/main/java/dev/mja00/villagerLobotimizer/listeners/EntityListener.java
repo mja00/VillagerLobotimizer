@@ -75,15 +75,11 @@ public class EntityListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
-        if (plugin.isDebugging()) {
-            plugin.getLogger().info("[Debug] Block broken at " + event.getBlock().getLocation());
-        }
+        this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
-        if (plugin.isDebugging()) {
-            plugin.getLogger().info("[Debug] Block placed at " + event.getBlock().getLocation());
-        }
+        this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
 }
