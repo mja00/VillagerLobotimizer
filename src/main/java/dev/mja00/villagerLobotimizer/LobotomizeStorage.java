@@ -154,68 +154,39 @@ public class LobotomizeStorage {
     }
 
     private boolean processVillager(@NotNull Villager villager, boolean active) {
+        if (!villager.isValid() || villager.isDead()) {
+            return true; // Remove from current collection
+        }
+
         Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
-        // If the chunk is not loaded, and the villager is not active, we want to add them to the active list
+        // If the chunk is not loaded, keep current status
         if (!villager.getWorld().isChunkLoaded(villagerLocation.getBlockX() >> 4, villagerLocation.getBlockZ() >> 4)) {
+            return false; // No change
+        }
+
+        boolean shouldBeActive = determineShouldBeActive(villager);
+
+        if (shouldBeActive) {
             if (!active) {
+                // Currently inactive but should be active
+                villager.setAware(true);
                 this.activeVillagers.add(villager);
+                saveVillagerStatus(villager, true);
+                return true; // Remove from inactive list
             }
-
-            return !active;
-        } else if (villager.isValid() && !villager.isDead()) {
-            // We want to check the name of the villager. As we want a nametag with "nobrain" to lobotomize the villager always and a tag with "alwaysbrain" to not lobotomize the villager
-            Component customName = villager.customName();
-            String villagerName = customName == null ? "" : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
-            // Handle the villagers name. Note: All villagers are added to the active list on server start, even if they were previously lobotomized (so their awareness may be false)
-            if (villagerName.contains("nobrain")) {
-                if (active) {
-                    villager.setAware(false);
-                    saveVillagerStatus(villager, false);
-                    this.inactiveVillagers.add(villager);
-                    return true;
-                }
-                return false;
-            } else if (villagerName.contains("alwaysbrain")) {
-                if (!active) {
-                    villager.setAware(true);
-                    saveVillagerStatus(villager, true);
-                    this.activeVillagers.add(villager);
-                    return true;
-                }
-                return false;
-            }
-            Material roofType = villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() - 1, villagerLocation.getBlockZ()).getType();
-            boolean hasRoof = roofType == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() + 2, villagerLocation.getBlockZ()));
-            // Check if: 
-            // 1. Either lobotomize passengers is disabled OR the villager is not riding a vehicle AND
-            // 2. Either only professions is enabled and villager has no profession OR the villager can move in any cardinal directions
-            // 3. The villager is set to always have a brain
-            if ((!this.lobotomizePassengers || !(villager.getVehicle() instanceof Vehicle)) && (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE || this.canMoveCardinally(villager.getWorld(), villagerLocation.getBlockX(), villagerLocation.getBlockY(), villagerLocation.getBlockZ(), hasRoof))) {
-                if (active) {
-                    return false;
-                } else {
-                    villager.setAware(true);
-                    saveVillagerStatus(villager, true);
-                    this.activeVillagers.add(villager);
-                    return true;
-                }
-            } else {
-                this.refreshTrades(villager); // Ensure villagers don't get stale while being lobotomized
-                if (!active) {
-                    return false;
-                } else {
-                    villager.setAware(false);
-                    saveVillagerStatus(villager, false);
-                    this.inactiveVillagers.add(villager);
-                    return true;
-                }
-            }
+            return false; // Already active, no change
         } else {
-            if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), because it was either dead, invalid, or in an unloaded chunk");
-            }
+            // Should be inactive
+            this.refreshTrades(villager); // Ensure villagers don't get stale while being lobotomized
 
-            return true;
+            if (active) {
+                // Currently active but should be inactive
+                villager.setAware(false);
+                this.inactiveVillagers.add(villager);
+                saveVillagerStatus(villager, false);
+                return true; // Remove from active list
+            }
+            return false; // Already inactive, no change
         }
     }
 
@@ -375,5 +346,41 @@ public class LobotomizeStorage {
     private void saveVillagerStatus(Villager villager, boolean active) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         pdc.set(this.statusKey, PersistentDataType.BOOLEAN, active);
+    }
+
+    private boolean determineShouldBeActive(Villager villager) {
+        Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+
+        // Check villager name first - this takes priority
+        Component customName = villager.customName();
+        String villagerName = customName == null ? "" : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+
+        if (villagerName.contains("nobrain")) {
+            return false; // Always inactive
+        } else if (villagerName.contains("alwaysbrain")) {
+            return true; // Always active
+        }
+
+        // Check if in vehicle
+        if (this.lobotomizePassengers && villager.getVehicle() instanceof Vehicle) {
+            return false; // Should be inactive
+        }
+
+        // Check profession condition
+        if (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE) {
+            return true; // Should be active
+        }
+
+        // Check movement ability
+        Material roofType = villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() - 1, villagerLocation.getBlockZ()).getType();
+        boolean hasRoof = roofType == Material.HONEY_BLOCK ||
+                this.testImpassable(IMPASSABLE_ALL, villager.getWorld().getBlockAt(
+                        villagerLocation.getBlockX(), villagerLocation.getBlockY() + 2, villagerLocation.getBlockZ()));
+
+        return this.canMoveCardinally(villager.getWorld(),
+                villagerLocation.getBlockX(),
+                villagerLocation.getBlockY(),
+                villagerLocation.getBlockZ(),
+                hasRoof);
     }
 }
