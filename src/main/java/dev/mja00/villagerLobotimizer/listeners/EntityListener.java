@@ -28,7 +28,7 @@ public class EntityListener implements Listener {
 
     @EventHandler
     public final void onLoad(ChunkLoadEvent event) {
-        if (this.plugin.isDebugging()) {
+        if (this.plugin.isChunkDebugging()) {
             for (Entity entity : event.getChunk().getEntities()) {
                 if (entity instanceof Villager) {
                     this.plugin.getLogger().info("[Debug] Caught " + event.getEventName() + " for villager " + entity + " (" + entity.getUniqueId() + "); The villager should have been added to the storage");
@@ -39,7 +39,7 @@ public class EntityListener implements Listener {
 
     @EventHandler
     public final void onUnload(ChunkUnloadEvent event) {
-        if (this.plugin.isDebugging()) {
+        if (this.plugin.isChunkDebugging()) {
             for (Entity entity : event.getChunk().getEntities()) {
                 if (entity instanceof Villager) {
                     this.plugin.getLogger().info("[Debug] Caught " + event.getEventName() + " for villager " + entity + " (" + entity.getUniqueId() + "); The villager should have been removed from the storage");
@@ -48,6 +48,7 @@ public class EntityListener implements Listener {
         }
     }
 
+    // Realistically only these two events are ever used. The others are for debugging purposes
     @EventHandler
     public final void onAdd(EntityAddToWorldEvent event) {
         if (event.getEntity() instanceof Villager) {

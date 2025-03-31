@@ -1,5 +1,7 @@
 package dev.mja00.villagerLobotimizer;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Vehicle;
@@ -10,6 +12,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
+import java.util.logging.Logger;
 
 public class LobotomizeStorage {
     private static final EnumSet<Material> IMPASSABLE_REGULAR;
@@ -28,6 +31,7 @@ public class LobotomizeStorage {
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
     private Sound restockSound;
+    private Logger logger;
 
     static {
         IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
@@ -59,6 +63,7 @@ public class LobotomizeStorage {
 
     public LobotomizeStorage(VillagerLobotimizer plugin) {
         this.plugin = plugin;
+        this.logger = plugin.getLogger();
         this.checkInterval = plugin.getConfig().getLong("check-interval");
         this.inactiveCheckInterval = plugin.getConfig().getLong("inactive-check-interval", this.checkInterval);
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
@@ -88,7 +93,7 @@ public class LobotomizeStorage {
     public final void addVillager(@NotNull Villager villager) {
         this.activeVillagers.add(villager);
         if (this.plugin.isDebugging()) {
-            this.plugin.getLogger().info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ")");
+            this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ")");
         }
     }
 
@@ -107,9 +112,9 @@ public class LobotomizeStorage {
 
         if (this.plugin.isDebugging()) {
             if (removed) {
-                this.plugin.getLogger().info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + active);
+                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + active);
             } else {
-                this.plugin.getLogger().info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId() + "), but it was not tracked");
+                this.logger.info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId() + "), but it was not tracked");
             }
         }
     }
@@ -117,14 +122,15 @@ public class LobotomizeStorage {
     public final void flush() {
         // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
         this.inactiveVillagers.removeIf((villager) -> {
-            this.plugin.getLogger().info("Un-lobotomizing Villager " + villager.getName());
+            this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
             villager.setAware(true);
             return true;
         });
     }
 
     private boolean processVillager(@NotNull Villager villager, boolean active) {
-        Location villagerLocation = villager.getLocation().add((double)0.0F, 0.51, (double)0.0F);
+        Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        // If the chunk is not loaded, and the villager is not active, we want to add them to the active list
         if (!villager.getWorld().isChunkLoaded(villagerLocation.getBlockX() >> 4, villagerLocation.getBlockZ() >> 4)) {
             if (!active) {
                 this.activeVillagers.add(villager);
@@ -132,8 +138,31 @@ public class LobotomizeStorage {
 
             return !active;
         } else if (villager.isValid() && !villager.isDead()) {
+            // We want to check the name of the villager. As we want a nametag with "nobrain" to lobotomize the villager always and a tag with "alwaysbrain" to not lobotomize the villager
+            Component customName = villager.customName();
+            String villagerName = customName == null ? "" : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+            // Handle the villagers name. Note: All villagers are added to the active list on server start, even if they were previously lobotomized (so their awareness may be false)
+            if (villagerName.contains("nobrain")) {
+                if (active) {
+                    villager.setAware(false);
+                    this.inactiveVillagers.add(villager);
+                    return true;
+                }
+                return false;
+            } else if (villagerName.contains("alwaysbrain")) {
+                if (!active) {
+                    villager.setAware(true);
+                    this.activeVillagers.add(villager);
+                    return true;
+                }
+                return false;
+            }
             Material roofType = villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() - 1, villagerLocation.getBlockZ()).getType();
             boolean hasRoof = roofType == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() + 2, villagerLocation.getBlockZ()));
+            // Check if: 
+            // 1. Either lobotomize passengers is disabled OR the villager is not riding a vehicle AND
+            // 2. Either only professions is enabled and villager has no profession OR the villager can move in any cardinal directions
+            // 3. The villager is set to always have a brain
             if ((!this.lobotomizePassengers || !(villager.getVehicle() instanceof Vehicle)) && (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE || this.canMoveCardinally(villager.getWorld(), villagerLocation.getBlockX(), villagerLocation.getBlockY(), villagerLocation.getBlockZ(), hasRoof))) {
                 if (active) {
                     return false;
@@ -143,7 +172,7 @@ public class LobotomizeStorage {
                     return true;
                 }
             } else {
-                this.refreshTrades(villager);
+                this.refreshTrades(villager); // Ensure villagers don't get stale while being lobotomized
                 if (!active) {
                     return false;
                 } else {
@@ -154,7 +183,7 @@ public class LobotomizeStorage {
             }
         } else {
             if (this.plugin.isDebugging()) {
-                this.plugin.getLogger().info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), because it was either dead, invalid, or in an unloaded chunk");
+                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), because it was either dead, invalid, or in an unloaded chunk");
             }
 
             return true;

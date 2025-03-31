@@ -68,6 +68,7 @@ public class LobotomizeCommand {
         return this.getVillagerDetails(source, (Villager) target);
     }
 
+    // This ensures the executor is a player and that they are looking at a villager
     private @Nullable Entity getLookedTarget(CommandSourceStack source) {
         if (!(source.getExecutor() instanceof Player player)) {
             source.getSender().sendMessage(Component.text("Only players can use this command."));

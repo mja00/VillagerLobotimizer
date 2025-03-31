@@ -1,14 +1,12 @@
 package dev.mja00.villagerLobotimizer;
 
-import com.destroystokyo.paper.event.server.ServerTickEndEvent;
-import com.destroystokyo.paper.event.server.ServerTickStartEvent;
 import dev.mja00.villagerLobotimizer.listeners.EntityListener;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import org.bukkit.event.EventHandler;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class VillagerLobotimizer extends JavaPlugin {
     private boolean debugging = false;
+    private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
 
     @Override
@@ -39,6 +37,14 @@ public final class VillagerLobotimizer extends JavaPlugin {
 
     public void setDebugging(boolean debugging) {
         this.debugging = debugging;
+    }
+
+    public boolean isChunkDebugging() {
+        return this.chunkDebugging;
+    }
+
+    public void setChunkDebugging(boolean chunkDebugging) {
+        this.chunkDebugging = chunkDebugging;
     }
 
     public LobotomizeStorage getStorage() {
