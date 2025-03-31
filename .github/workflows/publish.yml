@@ -21,17 +21,22 @@ jobs:
       # Publish to Hangar using the gradle plugin
       # This outputs: Successfully published VillagerLobotomy version 1.2-snapshot-4f5226c to Hangar: https://hangar.papermc.io/mja00/VillagerLobotomy/versions/1.2-snapshot-4f5226c at the end
       - name: Publish
-        uses: mathiasvr/command-output@v2.0.0
         id: publish
         env:
           HANGAR_API_KEY: ${{ secrets.HANGAR_API_TOKEN }}
-        with:
-          run: ./gradlew build publishPluginPublicationToHangar --stacktrace
+        run: |
+          output=$(./gradlew build publishPluginPublicationToHangar --stacktrace)
+          echo "$output"
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo "$output" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       - name: Parse publish result
         id: parse-publish-result
         run: |
-          echo "::set-output name=version::$(echo ${{ steps.publish.outputs.stdout }} | grep -oP 'Successfully published VillagerLobotomy version \K[^ ]+')"
-          echo "::set-output name=url::$(echo ${{ steps.publish.outputs.stdout }} | grep -oP 'Successfully published VillagerLobotomy version \K[^ ]+ to Hangar: \K[^ ]+')"
+          version=$(echo "${{ steps.publish.outputs.output }}" | grep "Successfully published VillagerLobotomy version" | sed -E 's/.*version ([^ ]+) to.*/\1/')
+          url=$(echo "${{ steps.publish.outputs.output }}" | grep "Successfully published VillagerLobotomy version" | sed -E 's/.*Hangar: ([^ ]+).*/\1/')
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "url=$url" >> $GITHUB_OUTPUT
       - name: Get current date in ISO 8601 format
         id: date
         run: echo "date=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
