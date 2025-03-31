@@ -18,6 +18,7 @@ public final class VillagerLobotimizer extends JavaPlugin {
         this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, command -> {
             command.registrar().register(lobotomizeCommand.createCommand("lobotomy"));
         });
+        this.debugging = getConfig().getBoolean("debug", false);
         // Plugin startup logic
         getLogger().info("I'm ready to lobotomize your villagers!");
     }

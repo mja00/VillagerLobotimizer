@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
@@ -12,6 +13,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class LobotomizeStorage {
@@ -23,8 +25,8 @@ public class LobotomizeStorage {
     private static final EnumSet<Material> IMPASSABLE_REGULAR_TALL;
     private final VillagerLobotimizer plugin;
     private final NamespacedKey key;
-    private final Set<Villager> activeVillagers = new LinkedHashSet<>(128);
-    private final Set<Villager> inactiveVillagers = new LinkedHashSet<>(128);
+    private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
+    private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private long checkInterval;
     private long inactiveCheckInterval;
     private long restockInterval;
@@ -32,6 +34,12 @@ public class LobotomizeStorage {
     private boolean lobotomizePassengers;
     private Sound restockSound;
     private Logger logger;
+    private boolean blockChangeDetectionEnabled;
+    private boolean tpsBasedDetection;
+    private double tpsThreshold;
+    private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
+    private int priorityCheckRadius; // Radius to check for villagers around block changes
+    private final NamespacedKey statusKey;
 
     static {
         IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
@@ -69,6 +77,11 @@ public class LobotomizeStorage {
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.priorityCheckRadius = plugin.getConfig().getInt("priority-check-radius", 3);
+        this.blockChangeDetectionEnabled = plugin.getConfig().getBoolean("block-change-detection-enabled", true);
+        this.tpsBasedDetection = plugin.getConfig().getBoolean("tps-based-detection", false);
+        this.tpsThreshold = plugin.getConfig().getDouble("tps-threshold", 18.0);
+        this.statusKey = new NamespacedKey(plugin, "lobotomyStatus");
         String soundName = plugin.getConfig().getString("restock-sound");
 
         try {
@@ -80,6 +93,7 @@ public class LobotomizeStorage {
         this.key = new NamespacedKey(plugin, "lastRestock");
         Bukkit.getScheduler().runTaskTimer(plugin, new DeactivatorTask(), this.checkInterval, this.checkInterval);
         Bukkit.getScheduler().runTaskTimer(plugin, new ActivatorTask(), this.inactiveCheckInterval, this.inactiveCheckInterval);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::processChangedChunks, 5L, 5L);
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -91,7 +105,24 @@ public class LobotomizeStorage {
     }
 
     public final void addVillager(@NotNull Villager villager) {
-        this.activeVillagers.add(villager);
+        // Check if we already have a stored status
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        Boolean storedStatus = pdc.get(this.statusKey, PersistentDataType.BOOLEAN);
+
+        if (storedStatus != null) {
+            // Use stored status
+            if (storedStatus) {
+                this.activeVillagers.add(villager);
+                villager.setAware(true);
+            } else {
+                this.inactiveVillagers.add(villager);
+                villager.setAware(false);
+            }
+        } else {
+            // No stored status, add to active list and determine status later
+            this.activeVillagers.add(villager);
+        }
+
         if (this.plugin.isDebugging()) {
             this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ")");
         }
@@ -129,64 +160,39 @@ public class LobotomizeStorage {
     }
 
     private boolean processVillager(@NotNull Villager villager, boolean active) {
+        if (!villager.isValid() || villager.isDead()) {
+            return true; // Remove from current collection
+        }
+
         Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
-        // If the chunk is not loaded, and the villager is not active, we want to add them to the active list
+        // If the chunk is not loaded, keep current status
         if (!villager.getWorld().isChunkLoaded(villagerLocation.getBlockX() >> 4, villagerLocation.getBlockZ() >> 4)) {
+            return false; // No change
+        }
+
+        boolean shouldBeActive = determineShouldBeActive(villager);
+
+        if (shouldBeActive) {
             if (!active) {
+                // Currently inactive but should be active
+                villager.setAware(true);
                 this.activeVillagers.add(villager);
+                saveVillagerStatus(villager, true);
+                return true; // Remove from inactive list
             }
-
-            return !active;
-        } else if (villager.isValid() && !villager.isDead()) {
-            // We want to check the name of the villager. As we want a nametag with "nobrain" to lobotomize the villager always and a tag with "alwaysbrain" to not lobotomize the villager
-            Component customName = villager.customName();
-            String villagerName = customName == null ? "" : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
-            // Handle the villagers name. Note: All villagers are added to the active list on server start, even if they were previously lobotomized (so their awareness may be false)
-            if (villagerName.contains("nobrain")) {
-                if (active) {
-                    villager.setAware(false);
-                    this.inactiveVillagers.add(villager);
-                    return true;
-                }
-                return false;
-            } else if (villagerName.contains("alwaysbrain")) {
-                if (!active) {
-                    villager.setAware(true);
-                    this.activeVillagers.add(villager);
-                    return true;
-                }
-                return false;
-            }
-            Material roofType = villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() - 1, villagerLocation.getBlockZ()).getType();
-            boolean hasRoof = roofType == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() + 2, villagerLocation.getBlockZ()));
-            // Check if: 
-            // 1. Either lobotomize passengers is disabled OR the villager is not riding a vehicle AND
-            // 2. Either only professions is enabled and villager has no profession OR the villager can move in any cardinal directions
-            // 3. The villager is set to always have a brain
-            if ((!this.lobotomizePassengers || !(villager.getVehicle() instanceof Vehicle)) && (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE || this.canMoveCardinally(villager.getWorld(), villagerLocation.getBlockX(), villagerLocation.getBlockY(), villagerLocation.getBlockZ(), hasRoof))) {
-                if (active) {
-                    return false;
-                } else {
-                    villager.setAware(true);
-                    this.activeVillagers.add(villager);
-                    return true;
-                }
-            } else {
-                this.refreshTrades(villager); // Ensure villagers don't get stale while being lobotomized
-                if (!active) {
-                    return false;
-                } else {
-                    villager.setAware(false);
-                    this.inactiveVillagers.add(villager);
-                    return true;
-                }
-            }
+            return false; // Already active, no change
         } else {
-            if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), because it was either dead, invalid, or in an unloaded chunk");
-            }
+            // Should be inactive
+            this.refreshTrades(villager); // Ensure villagers don't get stale while being lobotomized
 
-            return true;
+            if (active) {
+                // Currently active but should be inactive
+                villager.setAware(false);
+                this.inactiveVillagers.add(villager);
+                saveVillagerStatus(villager, false);
+                return true; // Remove from active list
+            }
+            return false; // Already inactive, no change
         }
     }
 
@@ -237,20 +243,186 @@ public class LobotomizeStorage {
     }
 
     public final class ActivatorTask implements Runnable {
-        public ActivatorTask() {
-        }
-
         public void run() {
-            LobotomizeStorage.this.inactiveVillagers.removeIf((villager) -> LobotomizeStorage.this.processVillager(villager, false));
+            // Create a copy to avoid concurrent modification
+            Set<Villager> toRemove = new HashSet<>();
+            for (Villager villager : inactiveVillagers) {
+                if (processVillager(villager, false)) {
+                    toRemove.add(villager);
+                }
+            }
+            inactiveVillagers.removeAll(toRemove);
         }
     }
 
     public final class DeactivatorTask implements Runnable {
-        public DeactivatorTask() {
+        public void run() {
+            // Create a copy to avoid concurrent modification
+            Set<Villager> toRemove = new HashSet<>();
+            for (Villager villager : activeVillagers) {
+                if (processVillager(villager, true)) {
+                    toRemove.add(villager);
+                }
+            }
+            activeVillagers.removeAll(toRemove);
+        }
+    }
+
+    public void handleBlockChange(Block block) {
+        // Skip if block change detection is disabled
+        if (!blockChangeDetectionEnabled) {
+            return;
         }
 
-        public void run() {
-            LobotomizeStorage.this.activeVillagers.removeIf((villager) -> LobotomizeStorage.this.processVillager(villager, true));
+        // Skip if TPS-based detection is enabled and TPS is below threshold
+        if (tpsBasedDetection) {
+            double currentTps = plugin.getServer().getTPS()[0]; // Get 1 minute TPS
+            if (currentTps < tpsThreshold) return;
         }
+
+        Chunk chunk = block.getChunk();
+        changedChunks.put(chunk, System.currentTimeMillis());
+
+        // Also mark neighboring chunks if the block is at the edge
+        int blockX = block.getX() & 0xF;
+        int blockZ = block.getZ() & 0xF;
+
+        World world = block.getWorld();
+
+        // Check adjacent chunks if the block is at the edge
+        if (blockX <= 1) {
+            Chunk neighbor = world.getChunkAt(chunk.getX() - 1, chunk.getZ());
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        } else if (blockX >= 14) {
+            Chunk neighbor = world.getChunkAt(chunk.getX() + 1, chunk.getZ());
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        }
+
+        if (blockZ <= 1) {
+            Chunk neighbor = world.getChunkAt(chunk.getX(), chunk.getZ() - 1);
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        } else if (blockZ >= 14) {
+            Chunk neighbor = world.getChunkAt(chunk.getX(), chunk.getZ() + 1);
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        }
+    }
+
+    private void processChangedChunks() {
+        // Skip processing if block change detection is disabled
+        if (!blockChangeDetectionEnabled) {
+            changedChunks.clear();
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        // Clean up old entries
+        changedChunks.entrySet().removeIf(entry -> {
+            Chunk chunk = entry.getKey();
+            long changeTime = entry.getValue();
+
+            // If change is older than 30 seconds, remove it
+            if (now - changeTime > 30000) {
+                return true;
+            }
+
+            // Skip unloaded chunks
+            if (!chunk.isLoaded()) {
+                return true;
+            }
+
+            if (plugin.isDebugging()) {
+                logger.info("[Debug] Processing changed chunk: " + chunk.getX() + "," + chunk.getZ());
+            }
+
+            for (Map.Entry<Chunk, Long> innerEntry : new HashMap<>(changedChunks).entrySet()) {
+                Chunk innerChunk = innerEntry.getKey();
+                if (innerChunk.isLoaded()) {
+                    processVillagersInChunk(innerChunk);
+                }
+            }
+
+            return false; // Keep tracking recent changes
+        });
+    }
+
+    private void processVillagersInChunk(Chunk chunk) {
+        if (!chunk.isLoaded()) return;
+
+        // Get all entities in the chunk
+        Entity[] entities = chunk.getEntities();
+        for (Entity entity : entities) {
+            if (entity instanceof Villager) {
+                Villager villager = (Villager) entity;
+
+                // First check inactive villagers for better responsiveness
+                if (inactiveVillagers.contains(villager)) {
+                    if (processVillager(villager, false)) {
+                        if (plugin.isDebugging()) {
+                            logger.info("[Debug] Reactivated villager due to block change: " + villager.getUniqueId());
+                        }
+                    }
+                } else if (activeVillagers.contains(villager)) {
+                    if (processVillager(villager, true)) {
+                        if (plugin.isDebugging()) {
+                            logger.info("[Debug] Deactivated villager due to block change: " + villager.getUniqueId());
+                        }
+                    }
+                }
+                // If not in either set, it's not being tracked
+            }
+        }
+    }
+
+    private void saveVillagerStatus(Villager villager, boolean active) {
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        pdc.set(this.statusKey, PersistentDataType.BOOLEAN, active);
+    }
+
+    private boolean determineShouldBeActive(Villager villager) {
+        Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+
+        // Check villager name first - this takes priority
+        Component customName = villager.customName();
+        String villagerName = customName == null ? "" : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+
+        if (villagerName.contains("nobrain")) {
+            return false; // Always inactive
+        } else if (villagerName.contains("alwaysbrain")) {
+            return true; // Always active
+        }
+
+        // Check if in vehicle
+        if (this.lobotomizePassengers && villager.getVehicle() instanceof Vehicle) {
+            return false; // Should be inactive
+        }
+
+        // Check profession condition
+        if (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE) {
+            return true; // Should be active
+        }
+
+        // Check movement ability
+        Material roofType = villager.getWorld().getBlockAt(villagerLocation.getBlockX(), villagerLocation.getBlockY() - 1, villagerLocation.getBlockZ()).getType();
+        boolean hasRoof = roofType == Material.HONEY_BLOCK ||
+                this.testImpassable(IMPASSABLE_ALL, villager.getWorld().getBlockAt(
+                        villagerLocation.getBlockX(), villagerLocation.getBlockY() + 2, villagerLocation.getBlockZ()));
+
+        return this.canMoveCardinally(villager.getWorld(),
+                villagerLocation.getBlockX(),
+                villagerLocation.getBlockY(),
+                villagerLocation.getBlockZ(),
+                hasRoof);
+    }
+
+    public boolean isBlockChangeDetectionEnabled() {
+        return blockChangeDetectionEnabled;
+    }
+
+    public boolean isTpsBasedDetectionEnabled() {
+        return tpsBasedDetection;
+    }
+
+    public double getTpsThreshold() {
+        return tpsThreshold;
     }
 }
