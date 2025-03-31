@@ -1,0 +1,6 @@
+name: VillagerLobotimizer
+version: '1.0'
+main: dev.mja00.villagerLobotimizer.VillagerLobotimizer
+api-version: '1.21'
+authors: [ mja00 ]
+description: Disable the nag message about blocks that can cause comment execution
