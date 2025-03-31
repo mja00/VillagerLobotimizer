@@ -8,7 +8,10 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 
@@ -67,6 +70,20 @@ public class EntityListener implements Listener {
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().info("[Debug] Caught " + event.getEventName() + " for villager " + event.getEntity() + " (" + event.getEntity().getUniqueId() + "); The villager should have been removed from the storage");
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (plugin.isDebugging()) {
+            plugin.getLogger().info("[Debug] Block broken at " + event.getBlock().getLocation());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        if (plugin.isDebugging()) {
+            plugin.getLogger().info("[Debug] Block placed at " + event.getBlock().getLocation());
         }
     }
 }
