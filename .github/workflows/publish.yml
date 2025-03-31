@@ -17,6 +17,7 @@ jobs:
               with:
                 java-version: 21
                 distribution: 'temurin'
+                cache: 'gradle'
             - name: Publish
               env:
                 HANGAR_API_KEY: ${{ secrets.HANGAR_API_TOKEN }}

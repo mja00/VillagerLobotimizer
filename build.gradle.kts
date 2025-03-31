@@ -52,7 +52,9 @@ val supportedVersions = listOf("1.21.x")
 
 hangarPublish {
     publications.register("plugin") {
-        version.set(project.version.toString() + "-snapshot-" + getCurrentCommitHash())
+        val currentCommitHash = getCurrentCommitHash().get()
+        println("Current commit hash: $currentCommitHash")
+        version.set(project.version.toString() + "-snapshot-" + currentCommitHash)
         id.set("VillagerLobotomy")
         channel.set("Snapshot")
         changelog = fetchLastCommitMessage()
