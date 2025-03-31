@@ -34,6 +34,9 @@ public class LobotomizeStorage {
     private boolean lobotomizePassengers;
     private Sound restockSound;
     private Logger logger;
+    private boolean blockChangeDetectionEnabled;
+    private boolean tpsBasedDetection;
+    private double tpsThreshold;
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
     private int priorityCheckRadius; // Radius to check for villagers around block changes
     private final NamespacedKey statusKey;
@@ -75,6 +78,9 @@ public class LobotomizeStorage {
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.priorityCheckRadius = plugin.getConfig().getInt("priority-check-radius", 3);
+        this.blockChangeDetectionEnabled = plugin.getConfig().getBoolean("block-change-detection-enabled", true);
+        this.tpsBasedDetection = plugin.getConfig().getBoolean("tps-based-detection", false);
+        this.tpsThreshold = plugin.getConfig().getDouble("tps-threshold", 18.0);
         this.statusKey = new NamespacedKey(plugin, "lobotomyStatus");
         String soundName = plugin.getConfig().getString("restock-sound");
 
@@ -263,6 +269,17 @@ public class LobotomizeStorage {
     }
 
     public void handleBlockChange(Block block) {
+        // Skip if block change detection is disabled
+        if (!blockChangeDetectionEnabled) {
+            return;
+        }
+
+        // Skip if TPS-based detection is enabled and TPS is below threshold
+        if (tpsBasedDetection) {
+            double currentTps = plugin.getServer().getTPS()[0]; // Get 1 minute TPS
+            if (currentTps < tpsThreshold) return;
+        }
+
         Chunk chunk = block.getChunk();
         changedChunks.put(chunk, System.currentTimeMillis());
 
@@ -291,6 +308,12 @@ public class LobotomizeStorage {
     }
 
     private void processChangedChunks() {
+        // Skip processing if block change detection is disabled
+        if (!blockChangeDetectionEnabled) {
+            changedChunks.clear();
+            return;
+        }
+
         long now = System.currentTimeMillis();
         // Clean up old entries
         changedChunks.entrySet().removeIf(entry -> {
@@ -389,5 +412,17 @@ public class LobotomizeStorage {
                 villagerLocation.getBlockY(),
                 villagerLocation.getBlockZ(),
                 hasRoof);
+    }
+
+    public boolean isBlockChangeDetectionEnabled() {
+        return blockChangeDetectionEnabled;
+    }
+
+    public boolean isTpsBasedDetectionEnabled() {
+        return tpsBasedDetection;
+    }
+
+    public double getTpsThreshold() {
+        return tpsThreshold;
     }
 }

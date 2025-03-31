@@ -33,6 +33,7 @@ public class LobotomizeCommand {
                 .then(Commands.literal("debug").executes((command) -> debugCommand(command.getSource()))
                         .then(Commands.argument("villager", ArgumentTypes.entity()).executes((command) -> debugCommandSpecific(command.getSource(), command.getArgument("villager", EntitySelectorArgumentResolver.class))))
                         .then(Commands.literal("toggle").executes((command) -> toggleDebugCommand(command.getSource()))))
+                .then(Commands.literal("status").executes((command) -> statusCommand(command.getSource())))
                 .then(Commands.literal("wake").executes((command) -> wakeCommand(command.getSource())))
                 .then(Commands.literal("reload").executes((command) -> reloadCommand(command.getSource())))
                 .build();
@@ -49,13 +50,40 @@ public class LobotomizeCommand {
         message = message.append(Component.text("\nActive: "))
                 .append(Component.text(String.valueOf(active)).color(NamedTextColor.GREEN))
                 .append(Component.text(" ("))
-                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)active / (double)total) / (double)100.0F)).color(NamedTextColor.GREEN))
+                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)active / (double)Math.max(1, total)) / (double)100.0F)).color(NamedTextColor.GREEN))
                 .append(Component.text("%)"));
         message = message.append(Component.text("\nLobotomized: "))
                 .append(Component.text(String.valueOf(inactive)).color(NamedTextColor.RED))
                 .append(Component.text(" ("))
-                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)inactive / (double)total) / (double)100.0F)).color(NamedTextColor.GREEN))
+                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)inactive / (double)Math.max(1, total)) / (double)100.0F)).color(NamedTextColor.GREEN))
                 .append(Component.text("%)"));
+        sender.sendMessage(message);
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int statusCommand(CommandSourceStack source) throws CommandSyntaxException {
+        CommandSender sender = source.getSender();
+
+        // Get current TPS
+        double currentTps = this.plugin.getServer().getTPS()[0]; // 1-minute average
+
+        Component message = Component.text("Block Change Detection: ")
+                .append(Component.text(this.plugin.getStorage().isBlockChangeDetectionEnabled() ? "Enabled" : "Disabled")
+                        .color(this.plugin.getStorage().isBlockChangeDetectionEnabled() ? NamedTextColor.GREEN : NamedTextColor.RED));
+
+        message = message.append(Component.text("\nTPS-Based Detection: "))
+                .append(Component.text(this.plugin.getStorage().isTpsBasedDetectionEnabled() ? "Enabled" : "Disabled")
+                        .color(this.plugin.getStorage().isTpsBasedDetectionEnabled() ? NamedTextColor.GREEN : NamedTextColor.RED));
+
+        message = message.append(Component.text("\nTPS Threshold: "))
+                .append(Component.text(String.valueOf(this.plugin.getStorage().getTpsThreshold()))
+                        .color(NamedTextColor.YELLOW));
+
+        message = message.append(Component.text("\nCurrent TPS: "))
+                .append(Component.text(String.format("%.2f", currentTps))
+                        .color(currentTps < this.plugin.getStorage().getTpsThreshold() ? NamedTextColor.RED : NamedTextColor.GREEN));
+
         sender.sendMessage(message);
 
         return Command.SINGLE_SUCCESS;
@@ -162,5 +190,4 @@ public class LobotomizeCommand {
                 .append(Component.text(". Messages about villager tracking will now be printed to your console.")));
         return Command.SINGLE_SUCCESS;
     }
-
 }

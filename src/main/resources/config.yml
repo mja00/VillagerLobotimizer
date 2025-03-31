@@ -18,3 +18,15 @@ restock-sound: "ENTITY_VILLAGER_CELEBRATE"
 
 # Radius to check for villagers when a block is modified
 priority-check-radius: 3
+
+# Whether debugging mode is enabled (provides more detailed logging)
+debug: false
+
+# Whether to detect block changes to quickly update villager status
+block-change-detection-enabled: true
+
+# Whether to enable TPS-based detection (only process villagers when server TPS is above threshold)
+tps-based-detection: false
+
+# The TPS threshold below which villager processing is reduced
+tps-threshold: 18.0
