@@ -338,7 +338,14 @@ public class LobotomizeStorage {
                             logger.info("[Debug] Reactivated villager due to block change: " + villager.getUniqueId());
                         }
                     }
+                } else if (activeVillagers.contains(villager)) {
+                    if (processVillager(villager, true)) {
+                        if (plugin.isDebugging()) {
+                            logger.info("[Debug] Deactivated villager due to block change: " + villager.getUniqueId());
+                        }
+                    }
                 }
+                // If not in either set, it's not being tracked
             }
         }
     }
