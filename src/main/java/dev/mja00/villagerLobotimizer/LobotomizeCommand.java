@@ -185,6 +185,9 @@ public class LobotomizeCommand {
 
     private int toggleDebugCommand(CommandSourceStack source) throws CommandSyntaxException {
         this.plugin.setDebugging(!this.plugin.isDebugging());
+        // Update the config
+        this.plugin.getConfig().set("debug", this.plugin.isDebugging());
+        this.plugin.saveConfig();
         source.getSender().sendMessage(Component.text("Debug mode: ")
                 .append(Component.text(this.plugin.isDebugging() ? "enabled" : "disabled"))
                 .append(Component.text(". Messages about villager tracking will now be printed to your console.")));
