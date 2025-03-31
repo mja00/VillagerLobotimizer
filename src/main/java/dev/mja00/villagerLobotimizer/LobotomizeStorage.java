@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
@@ -288,7 +289,35 @@ public class LobotomizeStorage {
                 logger.info("[Debug] Processing changed chunk: " + chunk.getX() + "," + chunk.getZ());
             }
 
+            for (Map.Entry<Chunk, Long> innerEntry : new HashMap<>(changedChunks).entrySet()) {
+                Chunk innerChunk = innerEntry.getKey();
+                if (innerChunk.isLoaded()) {
+                    processVillagersInChunk(innerChunk);
+                }
+            }
+
             return false; // Keep tracking recent changes
         });
+    }
+
+    private void processVillagersInChunk(Chunk chunk) {
+        if (!chunk.isLoaded()) return;
+
+        // Get all entities in the chunk
+        Entity[] entities = chunk.getEntities();
+        for (Entity entity : entities) {
+            if (entity instanceof Villager) {
+                Villager villager = (Villager) entity;
+
+                // First check inactive villagers for better responsiveness
+                if (inactiveVillagers.contains(villager)) {
+                    if (processVillager(villager, false)) {
+                        if (plugin.isDebugging()) {
+                            logger.info("[Debug] Reactivated villager due to block change: " + villager.getUniqueId());
+                        }
+                    }
+                }
+            }
+        }
     }
 }
