@@ -52,9 +52,10 @@ val supportedVersions = listOf("1.21.x")
 
 hangarPublish {
     publications.register("plugin") {
-        version.set(project.version.toString())
+        version.set(project.version.toString() + "-snapshot-" + getCurrentCommitHash())
         id.set("VillagerLobotomy")
         channel.set("Snapshot")
+        changelog = fetchLastCommitMessage()
 
         apiKey.set(System.getenv("HANGAR_API_KEY"))
 
@@ -74,4 +75,14 @@ tasks.processResources {
     filesMatching("plugin.yml") {
         expand(props)
     }
-} 
+}
+
+// Thanks emily :)
+
+fun fetchLastCommitMessage(): Provider<String> =
+    providers.exec { commandLine("git", "log", "-1", "--pretty=%B") }.standardOutput.asText.map(String::trim)
+
+fun getCurrentCommitHash(): Provider<String> =
+    providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+    }.standardOutput.asText.map(String::trim)
