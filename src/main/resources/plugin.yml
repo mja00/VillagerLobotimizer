@@ -1,6 +1,7 @@
 name: VillagerLobotimizer
-version: '1.0'
+version: '1.1'
 main: dev.mja00.villagerLobotimizer.VillagerLobotimizer
 api-version: '1.21'
 authors: [ mja00 ]
-description: Disable the nag message about blocks that can cause comment execution
+description: A plugin that turns off Villager' brains when they're stuck in a trading hall.
+website: https://github.com/mja00/VillagerLobotimizer

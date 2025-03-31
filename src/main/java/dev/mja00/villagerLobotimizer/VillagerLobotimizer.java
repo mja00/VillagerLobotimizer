@@ -8,7 +8,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class VillagerLobotimizer extends JavaPlugin {
-    private boolean debugging = true;
+    private boolean debugging = false;
     private LobotomizeStorage storage;
 
     @Override
