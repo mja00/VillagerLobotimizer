@@ -13,6 +13,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class LobotomizeStorage {
@@ -35,6 +36,7 @@ public class LobotomizeStorage {
     private Logger logger;
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
     private int priorityCheckRadius; // Radius to check for villagers around block changes
+    private final NamespacedKey statusKey;
 
     static {
         IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
@@ -73,6 +75,7 @@ public class LobotomizeStorage {
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.priorityCheckRadius = plugin.getConfig().getInt("priority-check-radius", 3);
+        this.statusKey = new NamespacedKey(plugin, "lobotomyStatus");
         String soundName = plugin.getConfig().getString("restock-sound");
 
         try {
@@ -96,7 +99,24 @@ public class LobotomizeStorage {
     }
 
     public final void addVillager(@NotNull Villager villager) {
-        this.activeVillagers.add(villager);
+        // Check if we already have a stored status
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        Boolean storedStatus = pdc.get(this.statusKey, PersistentDataType.BOOLEAN);
+
+        if (storedStatus != null) {
+            // Use stored status
+            if (storedStatus) {
+                this.activeVillagers.add(villager);
+                villager.setAware(true);
+            } else {
+                this.inactiveVillagers.add(villager);
+                villager.setAware(false);
+            }
+        } else {
+            // No stored status, add to active list and determine status later
+            this.activeVillagers.add(villager);
+        }
+
         if (this.plugin.isDebugging()) {
             this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ")");
         }
@@ -150,6 +170,7 @@ public class LobotomizeStorage {
             if (villagerName.contains("nobrain")) {
                 if (active) {
                     villager.setAware(false);
+                    saveVillagerStatus(villager, false);
                     this.inactiveVillagers.add(villager);
                     return true;
                 }
@@ -157,6 +178,7 @@ public class LobotomizeStorage {
             } else if (villagerName.contains("alwaysbrain")) {
                 if (!active) {
                     villager.setAware(true);
+                    saveVillagerStatus(villager, true);
                     this.activeVillagers.add(villager);
                     return true;
                 }
@@ -173,6 +195,7 @@ public class LobotomizeStorage {
                     return false;
                 } else {
                     villager.setAware(true);
+                    saveVillagerStatus(villager, true);
                     this.activeVillagers.add(villager);
                     return true;
                 }
@@ -182,6 +205,7 @@ public class LobotomizeStorage {
                     return false;
                 } else {
                     villager.setAware(false);
+                    saveVillagerStatus(villager, false);
                     this.inactiveVillagers.add(villager);
                     return true;
                 }
@@ -327,5 +351,10 @@ public class LobotomizeStorage {
                 }
             }
         }
+    }
+
+    private void saveVillagerStatus(Villager villager, boolean active) {
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        pdc.set(this.statusKey, PersistentDataType.BOOLEAN, active);
     }
 }
