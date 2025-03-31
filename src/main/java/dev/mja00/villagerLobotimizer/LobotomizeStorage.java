@@ -24,8 +24,8 @@ public class LobotomizeStorage {
     private static final EnumSet<Material> IMPASSABLE_REGULAR_TALL;
     private final VillagerLobotimizer plugin;
     private final NamespacedKey key;
-    private final Set<Villager> activeVillagers = new LinkedHashSet<>(128);
-    private final Set<Villager> inactiveVillagers = new LinkedHashSet<>(128);
+    private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
+    private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private long checkInterval;
     private long inactiveCheckInterval;
     private long restockInterval;
@@ -33,7 +33,7 @@ public class LobotomizeStorage {
     private boolean lobotomizePassengers;
     private Sound restockSound;
     private Logger logger;
-    private final Map<Chunk, Long> changedChunks = new HashMap<>();
+    private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
     private int priorityCheckRadius; // Radius to check for villagers around block changes
 
     static {
@@ -242,20 +242,28 @@ public class LobotomizeStorage {
     }
 
     public final class ActivatorTask implements Runnable {
-        public ActivatorTask() {
-        }
-
         public void run() {
-            LobotomizeStorage.this.inactiveVillagers.removeIf((villager) -> LobotomizeStorage.this.processVillager(villager, false));
+            // Create a copy to avoid concurrent modification
+            Set<Villager> toRemove = new HashSet<>();
+            for (Villager villager : inactiveVillagers) {
+                if (processVillager(villager, false)) {
+                    toRemove.add(villager);
+                }
+            }
+            inactiveVillagers.removeAll(toRemove);
         }
     }
 
     public final class DeactivatorTask implements Runnable {
-        public DeactivatorTask() {
-        }
-
         public void run() {
-            LobotomizeStorage.this.activeVillagers.removeIf((villager) -> LobotomizeStorage.this.processVillager(villager, true));
+            // Create a copy to avoid concurrent modification
+            Set<Villager> toRemove = new HashSet<>();
+            for (Villager villager : activeVillagers) {
+                if (processVillager(villager, true)) {
+                    toRemove.add(villager);
+                }
+            }
+            activeVillagers.removeAll(toRemove);
         }
     }
 
