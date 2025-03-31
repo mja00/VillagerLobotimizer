@@ -1,0 +1,23 @@
+name: Publish snapshot to Hangar
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+    publish:
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+            - name: Validate Gradle wrapper
+              uses: gradle/wrapper-validation-action@v2
+            - name: Setup Java
+              uses: actions/setup-java@v4
+              with:
+                java-version: 21
+                distribution: 'temurin'
+            - name: Publish
+              env:
+                HANGAR_API_KEY: ${{ secrets.HANGAR_API_TOKEN }}
+              run: ./gradlew build publishPluginPublicationToHangar --stacktrace
