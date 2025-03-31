@@ -295,8 +295,27 @@ public class LobotomizeStorage {
         Chunk chunk = block.getChunk();
         changedChunks.put(chunk, System.currentTimeMillis());
 
-        if (plugin.isDebugging()) {
-            logger.info("[Debug] Tracking chunk change at " + chunk.getX() + "," + chunk.getZ());
+        // Also mark neighboring chunks if the block is at the edge
+        int blockX = block.getX() & 0xF;
+        int blockZ = block.getZ() & 0xF;
+
+        World world = block.getWorld();
+
+        // Check adjacent chunks if the block is at the edge
+        if (blockX <= 1) {
+            Chunk neighbor = world.getChunkAt(chunk.getX() - 1, chunk.getZ());
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        } else if (blockX >= 14) {
+            Chunk neighbor = world.getChunkAt(chunk.getX() + 1, chunk.getZ());
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        }
+
+        if (blockZ <= 1) {
+            Chunk neighbor = world.getChunkAt(chunk.getX(), chunk.getZ() - 1);
+            changedChunks.put(neighbor, System.currentTimeMillis());
+        } else if (blockZ >= 14) {
+            Chunk neighbor = world.getChunkAt(chunk.getX(), chunk.getZ() + 1);
+            changedChunks.put(neighbor, System.currentTimeMillis());
         }
     }
 
