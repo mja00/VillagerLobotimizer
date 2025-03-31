@@ -83,6 +83,7 @@ public class LobotomizeStorage {
         this.key = new NamespacedKey(plugin, "lastRestock");
         Bukkit.getScheduler().runTaskTimer(plugin, new DeactivatorTask(), this.checkInterval, this.checkInterval);
         Bukkit.getScheduler().runTaskTimer(plugin, new ActivatorTask(), this.inactiveCheckInterval, this.inactiveCheckInterval);
+        Bukkit.getScheduler().runTaskTimer(plugin, this::processChangedChunks, 5L, 5L);
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -264,5 +265,30 @@ public class LobotomizeStorage {
         if (plugin.isDebugging()) {
             logger.info("[Debug] Tracking chunk change at " + chunk.getX() + "," + chunk.getZ());
         }
+    }
+
+    private void processChangedChunks() {
+        long now = System.currentTimeMillis();
+        // Clean up old entries
+        changedChunks.entrySet().removeIf(entry -> {
+            Chunk chunk = entry.getKey();
+            long changeTime = entry.getValue();
+
+            // If change is older than 30 seconds, remove it
+            if (now - changeTime > 30000) {
+                return true;
+            }
+
+            // Skip unloaded chunks
+            if (!chunk.isLoaded()) {
+                return true;
+            }
+
+            if (plugin.isDebugging()) {
+                logger.info("[Debug] Processing changed chunk: " + chunk.getX() + "," + chunk.getZ());
+            }
+
+            return false; // Keep tracking recent changes
+        });
     }
 }
