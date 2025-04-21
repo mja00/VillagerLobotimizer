@@ -9,6 +9,7 @@ import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -33,6 +34,7 @@ public class LobotomizeStorage {
     private Sound restockSound;
     private Sound levelUpSound;
     private Logger logger;
+    private Random random = new Random();
 
     static {
         IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
@@ -233,6 +235,7 @@ public class LobotomizeStorage {
             if (this.levelUpSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
+            this.addParticlesAroundSelf(Particle.HAPPY_VILLAGER, villager);
             // Write a log message if we're debugging
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
@@ -279,6 +282,26 @@ public class LobotomizeStorage {
             return 2;
         }
         return 1;
+    }
+
+    private void addParticlesAroundSelf(Particle particle, Villager villager) {
+        World world = villager.getWorld();
+        double scale = 1.0;
+        BoundingBox boundingBox = villager.getBoundingBox();
+        // Get a random source
+        for (int i = 0; i < 5; i++) {
+            double d = this.random.nextGaussian() * 0.02;
+            double d1 = this.random.nextGaussian() * 0.02;
+            double d2 = this.random.nextGaussian() * 0.02;
+            // Get a vertical offset above the villager
+            double randomY = villager.getY() + boundingBox.getHeight() * this.random.nextDouble();
+            double xScale = (2.0 * this.random.nextDouble() - 1.0) * scale;
+            double randomX = villager.getX() + boundingBox.getWidthX() * xScale;
+            double zScale = (2.0 * this.random.nextDouble() - 1.0) * scale;
+            double randomZ = villager.getZ() + boundingBox.getWidthZ() * zScale;
+            // Spawn the particle
+            world.spawnParticle(particle, randomX, randomY, randomZ, 1, d, d1, d2, 0.0);
+        }
     }
 
     public final class ActivatorTask implements Runnable {

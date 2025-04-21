@@ -18,3 +18,9 @@ restock-sound: "ENTITY_VILLAGER_CELEBRATE"
 
 #The sound played when a villager is leveled up. Leave empty ("") for no sound.
 level-up-sound: "ENTITY_VILLAGER_CELEBRATE"
+
+#Debug mode. Prints debug messages to the console.
+debug: false
+
+#Chunk debug mode. Prints debug messages related to chunks
+chunk-debug: false

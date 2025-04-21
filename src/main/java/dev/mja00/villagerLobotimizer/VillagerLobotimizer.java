@@ -2,7 +2,11 @@ package dev.mja00.villagerLobotimizer;
 
 import dev.mja00.villagerLobotimizer.listeners.EntityListener;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import org.bukkit.configuration.InvalidConfigurationException;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.io.IOException;
 
 public final class VillagerLobotimizer extends JavaPlugin {
     private boolean debugging = false;
@@ -18,8 +22,14 @@ public final class VillagerLobotimizer extends JavaPlugin {
         this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, command -> {
             command.registrar().register(lobotomizeCommand.createCommand("lobotomy"));
         });
+        // Set our debugs based on the config
+        this.debugging = this.getConfig().getBoolean("debug");
+        this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
         // Plugin startup logic
         getLogger().info("I'm ready to lobotomize your villagers!");
+        if (this.isDebugging()) {
+            getLogger().info("Debug mode is enabled. This will print debug messages to the console.");
+        }
     }
 
     @Override
@@ -37,6 +47,9 @@ public final class VillagerLobotimizer extends JavaPlugin {
 
     public void setDebugging(boolean debugging) {
         this.debugging = debugging;
+        // Update the config
+        this.getConfig().set("debug", this.debugging);
+        this.saveConfig();
     }
 
     public boolean isChunkDebugging() {
@@ -45,6 +58,9 @@ public final class VillagerLobotimizer extends JavaPlugin {
 
     public void setChunkDebugging(boolean chunkDebugging) {
         this.chunkDebugging = chunkDebugging;
+        // Update the config
+        this.getConfig().set("chunk-debug", this.chunkDebugging);
+        this.saveConfig();
     }
 
     public LobotomizeStorage getStorage() {
