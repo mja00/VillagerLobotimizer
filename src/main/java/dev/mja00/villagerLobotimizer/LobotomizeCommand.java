@@ -111,6 +111,10 @@ public class LobotomizeCommand {
                 .append(Component.text(lobotomized).color(lobotomized ? NamedTextColor.GREEN : NamedTextColor.RED));
         message = message.append(Component.text("\nIs marked as Active: "))
                 .append(Component.text(active).color(active ? NamedTextColor.GREEN : NamedTextColor.RED));
+        message = message.append(Component.text("\nVillager level: "))
+                .append(Component.text(villager.getVillagerLevel()).color(NamedTextColor.GREEN));
+        message = message.append(Component.text("\nVillager experience: "))
+                .append(Component.text(villager.getVillagerExperience()).color(NamedTextColor.GREEN));
         source.getSender().sendMessage(message);
 
         return Command.SINGLE_SUCCESS;

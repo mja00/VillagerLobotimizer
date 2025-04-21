@@ -31,6 +31,7 @@ public class LobotomizeStorage {
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
     private Sound restockSound;
+    private Sound levelUpSound;
     private Logger logger;
 
     static {
@@ -74,6 +75,12 @@ public class LobotomizeStorage {
         try {
             this.restockSound = soundName != null && !soundName.isEmpty() ? Sound.valueOf(soundName) : null;
         } catch (IllegalArgumentException var4) {
+            plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
+        }
+
+        try {
+            this.levelUpSound = soundName != null && !soundName.isEmpty() ? Sound.valueOf(soundName) : null;
+        } catch (IllegalArgumentException var5) {
             plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
         }
 
@@ -212,6 +219,25 @@ public class LobotomizeStorage {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
         }
+        // Lets also see if we need to level up the villager
+        int currentLevel = villager.getVillagerLevel();
+        // If we're max level, then just return early
+        if (currentLevel == 5) {
+            return;
+        }
+        int expectedLevel = this.getVillagerLevel(villager);
+        if (currentLevel < expectedLevel) {
+            // We can just set the villager level to the expected level
+            int increaseAmount = Math.max(0, expectedLevel - currentLevel);
+            villager.increaseLevel(increaseAmount);
+            if (this.levelUpSound != null) {
+                villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+            }
+            // Write a log message if we're debugging
+            if (this.plugin.isDebugging()) {
+                this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
+            }
+        }
     }
 
     private boolean canMoveThrough(World w, int x, int y, int z, boolean roof) {
@@ -234,6 +260,25 @@ public class LobotomizeStorage {
         Boolean zMinusOne = this.canMoveThrough(w, x, y, z - 1, roof);
 
         return xPlusOne || xMinusOne || zPlusOne || zMinusOne;
+    }
+
+    private int getVillagerLevel(Villager villager) {
+        int villagerExperience = villager.getVillagerExperience();
+
+        // https://minecraft.wiki/w/Trading#Level
+        if (villagerExperience >= 250) {
+            return 5;
+        }
+        if (villagerExperience >= 150) {
+            return 4;
+        }
+        if (villagerExperience >= 70) {
+            return 3;
+        }
+        if (villagerExperience >= 10) {
+            return 2;
+        }
+        return 1;
     }
 
     public final class ActivatorTask implements Runnable {

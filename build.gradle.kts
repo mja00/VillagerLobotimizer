@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.2"
+version = "1.3"
 
 repositories {
     mavenCentral()
@@ -44,7 +44,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks {
     runServer {
-        minecraftVersion("1.21.4")
+        minecraftVersion("1.21.5")
     }
 }
 
