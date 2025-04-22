@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.5"
+version = "1.6"
 
 repositories {
     mavenCentral()
@@ -54,9 +54,23 @@ hangarPublish {
     publications.register("plugin") {
         val currentCommitHash = getCurrentCommitHash().get()
         println("Current commit hash: $currentCommitHash")
-        version.set(project.version.toString() + "-snapshot-" + currentCommitHash)
+        val isTagged = isThisCommitTagged().get()
+        println("Is this commit tagged? $isTagged")
+        val tag = if (isTagged) getCommitTag().get() else null
+        if (tag != null) {
+            println("Tag: $tag")
+        }
         id.set("VillagerLobotomy")
-        channel.set("Snapshot")
+        // If the tag is the same as the current project version then we're doing a release publish
+        if (tag != null && tag == project.version.toString()) {
+            println("Tagged and tag matches version, doing a release publish")
+            version.set(project.version.toString())
+            channel.set("Release")
+        } else {
+            println("Not tagged or tag does not match version, doing a snapshot publish")
+            version.set(project.version.toString() + "-snapshot-" + currentCommitHash)
+            channel.set("Snapshot")
+        }
         changelog = fetchLastCommitMessage()
 
         apiKey.set(System.getenv("HANGAR_API_KEY"))
@@ -88,3 +102,20 @@ fun getCurrentCommitHash(): Provider<String> =
     providers.exec {
         commandLine("git", "rev-parse", "--short", "HEAD")
     }.standardOutput.asText.map(String::trim)
+
+fun isThisCommitTagged(): Provider<Boolean> =
+    providers.exec {
+        commandLine("git", "describe", "--exact-match", "--tags")
+        isIgnoreExitValue = true
+        // will spit out fatal: No names found, cannot describe anything. if not tagged
+        // Also ignore any exit codes
+    }.standardOutput.asText.map {
+        it.isNotEmpty() && !it.startsWith("fatal")
+    }
+
+fun getCommitTag(): Provider<String> =
+    providers.exec {
+        commandLine("git", "describe", "--exact-match", "--tags")
+    }.standardOutput.asText.map {
+        it.trim()
+    }

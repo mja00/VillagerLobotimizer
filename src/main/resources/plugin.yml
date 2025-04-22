@@ -1,5 +1,5 @@
 name: VillagerLobotimizer
-version: '1.5'
+version: '1.6'
 main: dev.mja00.villagerLobotimizer.VillagerLobotimizer
 api-version: '1.21'
 authors: [ mja00 ]

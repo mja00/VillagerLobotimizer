@@ -237,7 +237,7 @@ public class LobotomizeStorage {
             if (this.levelUpSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
-            PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0);
+            PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
             villager.addPotionEffect(regenEffect);
             // Write a log message if we're debugging
             if (this.plugin.isDebugging()) {
