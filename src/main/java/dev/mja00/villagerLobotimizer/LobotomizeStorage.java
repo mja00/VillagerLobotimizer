@@ -9,6 +9,8 @@ import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
@@ -235,7 +237,8 @@ public class LobotomizeStorage {
             if (this.levelUpSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
-            this.addParticlesAroundSelf(Particle.HAPPY_VILLAGER, villager);
+            PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0);
+            villager.addPotionEffect(regenEffect);
             // Write a log message if we're debugging
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
