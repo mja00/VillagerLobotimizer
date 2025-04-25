@@ -80,12 +80,19 @@ public class LobotomizeStorage {
             this.restockSound = soundName != null && !soundName.isEmpty() ? Sound.valueOf(soundName) : null;
         } catch (IllegalArgumentException var4) {
             plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
+        } catch (Exception badError) {
+            plugin.getLogger().warning("Unknown error while trying to get sound name \"" + soundName + "\". Villagers won't have any sounds.");
+            plugin.getLogger().warning(badError.toString());
         }
+
 
         try {
             this.levelUpSound = soundName != null && !soundName.isEmpty() ? Sound.valueOf(soundName) : null;
         } catch (IllegalArgumentException var5) {
             plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
+        } catch (Exception badError) {
+            plugin.getLogger().warning("Unknown error while trying to get sound name \"" + soundName + "\". Villagers won't have any sounds.");
+            plugin.getLogger().warning(badError.toString());
         }
 
         this.key = new NamespacedKey(plugin, "lastRestock");
