@@ -2,10 +2,11 @@ plugins {
     java
     id("xyz.jpenilla.run-paper") version "2.3.1"
     id("io.papermc.hangar-publish-plugin") version "0.1.2"
+    id("com.gradleup.shadow") version "9.0.0-beta13"
 }
 
 group = "dev.mja00"
-version = "1.6.1"
+version = "1.7.0"
 
 repositories {
     mavenCentral()
@@ -22,6 +23,7 @@ repositories {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.19.0")
+    implementation(group = "org.bstats", name = "bstats-bukkit", version = "3.1.0")
 }
 
 val targetJavaVersion = 21
@@ -43,8 +45,40 @@ tasks.withType<JavaCompile>().configureEach {
 }
 
 tasks {
+    processResources {
+        val props = mapOf("version" to version)
+        inputs.properties(props)
+        filteringCharset = "UTF-8"
+        filesMatching("plugin.yml") {
+            expand(props)
+        }
+    }
+
     runServer {
+        dependsOn(shadowJar)
         minecraftVersion("1.21.5")
+    }
+
+    build {
+        dependsOn(shadowJar)
+    }
+
+    jar {
+        enabled = false
+    }
+
+    shadowJar {
+        minimize()
+
+        archiveClassifier = null
+        archiveVersion = project.version.toString()
+
+        dependencies {
+            include(dependency("org.bstats:bstats-bukkit"))
+            include(dependency("org.bstats:bstats-base"))
+        }
+
+        relocate("org.bstats", "dev.mja00.villagerLobotomizer.bstats")
     }
 }
 
@@ -81,15 +115,6 @@ hangarPublish {
                 platformVersions.set(supportedVersions)
             }
         }
-    }
-}
-
-tasks.processResources {
-    val props = mapOf("version" to version)
-    inputs.properties(props)
-    filteringCharset = "UTF-8"
-    filesMatching("plugin.yml") {
-        expand(props)
     }
 }
 

@@ -1,14 +1,16 @@
-package dev.mja00.villagerLobotimizer;
+package dev.mja00.villagerLobotomizer;
 
-import dev.mja00.villagerLobotimizer.listeners.EntityListener;
+import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
-import org.bukkit.configuration.InvalidConfigurationException;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.MultiLineChart;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.Callable;
 
-public final class VillagerLobotimizer extends JavaPlugin {
+public final class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
@@ -25,6 +27,21 @@ public final class VillagerLobotimizer extends JavaPlugin {
         // Set our debugs based on the config
         this.debugging = this.getConfig().getBoolean("debug");
         this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
+
+        Metrics metrics = new Metrics(this, 25704);
+
+        metrics.addCustomChart(new MultiLineChart("villagers", () -> {
+            Map<String, Integer> returnMap = new HashMap<>();
+            LobotomizeStorage storage = getStorage();
+            int active = storage.getActive().size();
+            int inactive = storage.getLobotomized().size();
+            int total = active + inactive;
+            returnMap.put("active", active);
+            returnMap.put("inactive", inactive);
+            returnMap.put("total", total);
+            return returnMap;
+        }));
+
         // Plugin startup logic
         getLogger().info("I'm ready to lobotomize your villagers!");
         if (this.isDebugging()) {

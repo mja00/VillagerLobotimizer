@@ -1,4 +1,4 @@
-package dev.mja00.villagerLobotimizer;
+package dev.mja00.villagerLobotomizer;
 
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -24,7 +24,7 @@ public class LobotomizeStorage {
     private static final EnumSet<Material> IMPASSABLE_ALL;
     private static final EnumSet<Material> IMPASSABLE_REGULAR_FLOOR;
     private static final EnumSet<Material> IMPASSABLE_REGULAR_TALL;
-    private final VillagerLobotimizer plugin;
+    private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
     private final Set<Villager> activeVillagers = new LinkedHashSet<>(128);
     private final Set<Villager> inactiveVillagers = new LinkedHashSet<>(128);
@@ -66,7 +66,7 @@ public class LobotomizeStorage {
         IMPASSABLE_REGULAR_TALL.addAll(IMPASSABLE_TALL);
     }
 
-    public LobotomizeStorage(VillagerLobotimizer plugin) {
+    public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
         this.checkInterval = plugin.getConfig().getLong("check-interval");

@@ -1,8 +1,8 @@
-package dev.mja00.villagerLobotimizer.listeners;
+package dev.mja00.villagerLobotomizer.listeners;
 
 import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
-import dev.mja00.villagerLobotimizer.VillagerLobotimizer;
+import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -13,9 +13,9 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 
 public class EntityListener implements Listener {
-    private final VillagerLobotimizer plugin;
+    private final VillagerLobotomizer plugin;
 
-    public EntityListener(VillagerLobotimizer plugin) {
+    public EntityListener(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         for (World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {

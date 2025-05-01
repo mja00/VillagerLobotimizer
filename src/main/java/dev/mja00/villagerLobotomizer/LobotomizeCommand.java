@@ -1,4 +1,4 @@
-package dev.mja00.villagerLobotimizer;
+package dev.mja00.villagerLobotomizer;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -21,9 +21,9 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 public class LobotomizeCommand {
-    private final VillagerLobotimizer plugin;
+    private final VillagerLobotomizer plugin;
 
-    public LobotomizeCommand(VillagerLobotimizer plugin) {
+    public LobotomizeCommand(VillagerLobotomizer plugin) {
         this.plugin = plugin;
     }
 

@@ -1,6 +1,6 @@
 name: VillagerLobotimizer
-version: '1.6.1'
-main: dev.mja00.villagerLobotimizer.VillagerLobotimizer
+version: '1.7.0'
+main: dev.mja00.villagerLobotomizer.VillagerLobotomizer
 api-version: '1.21'
 authors: [ mja00 ]
 description: A plugin that turns off Villager' brains when they're stuck in a trading hall.
