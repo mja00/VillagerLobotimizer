@@ -111,11 +111,16 @@ hangarPublish {
 
         platforms {
             paper {
-                jar.set(tasks.jar.flatMap { it.archiveFile })
+                jar.set(tasks.shadowJar.flatMap { it.archiveFile })
                 platformVersions.set(supportedVersions)
             }
         }
     }
+}
+
+// Add explicit dependency for the publish task
+tasks.named("publishPluginPublicationToHangar") {
+    dependsOn(tasks.shadowJar)
 }
 
 // Thanks emily :)
