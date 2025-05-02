@@ -103,10 +103,12 @@ public class LobotomizeCommand {
     private int getVillagerDetails(CommandSourceStack source, Villager villager) {
         boolean lobotomized = this.plugin.getStorage().getLobotomized().contains(villager);
         boolean active = this.plugin.getStorage().getActive().contains(villager);
+        // If they aren't aware we should ignore the hasAI call
+        boolean hasAI = villager.isAware() && villager.hasAI();
         Component message = Component.text("Is Awareness enabled: ")
                 .append(Component.text(villager.isAware()).color(villager.isAware() ? NamedTextColor.GREEN : NamedTextColor.RED));
         message = message.append(Component.text("\nIs AI enabled: "))
-                .append(Component.text(villager.hasAI()).color(villager.hasAI() ? NamedTextColor.GREEN : NamedTextColor.RED));
+                .append(Component.text(hasAI).color(hasAI ? NamedTextColor.GREEN : NamedTextColor.RED));
         message = message.append(Component.text("\nIs marked as Lobotomized: "))
                 .append(Component.text(lobotomized).color(lobotomized ? NamedTextColor.GREEN : NamedTextColor.RED));
         message = message.append(Component.text("\nIs marked as Active: "))
