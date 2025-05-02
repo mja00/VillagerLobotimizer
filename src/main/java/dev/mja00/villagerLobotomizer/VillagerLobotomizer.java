@@ -1,23 +1,37 @@
 package dev.mja00.villagerLobotomizer;
 
+import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
+import dev.mja00.villagerLobotomizer.objects.Modrinth;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.MultiLineChart;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 public final class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
+    static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
+    static final HttpClient client = HttpClient.newHttpClient();
+    static final Gson gson = new Gson();
+    public boolean needsUpdate = false;
 
     @Override
     public void onEnable() {
         this.saveDefaultConfig();
+        this.checkForUpdates();
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);
@@ -82,5 +96,42 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public LobotomizeStorage getStorage() {
         return this.storage;
+    }
+
+    private void checkForUpdates() {
+        // We need to GET the url. It returns an array of objects for each version
+        // This'll be scheduled off thread so no need to worry here
+        String currentVersion = this.getPluginMeta().getVersion();
+        this.getLogger().info("Checking for updates...");
+        this.getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            String responseBody = null;
+            CompletableFuture<HttpResponse<String>> response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+            try {
+                responseBody = response.thenApply(HttpResponse::body).get(5, TimeUnit.SECONDS);
+            } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
+                this.getLogger().warning("Failed to check for updates: " + e.getMessage());
+                return;
+            }
+            if (responseBody == null || responseBody.isEmpty()) {
+                this.getLogger().warning("Failed to check for updates: No response from the server");
+                return;
+            }
+            // Parse our response into json
+            List<Modrinth.ModrinthVersion> versions =  Modrinth.fromJson(responseBody);
+            if (versions == null || versions.isEmpty()) {
+                this.getLogger().warning("Failed to check for updates: No versions found");
+                return;
+            }
+            Modrinth.ModrinthVersion latestVersion = versions.getFirst();
+
+            // Both versions will be semver, so we can do a simple compare to see if current is less than latest
+            if (currentVersion.compareTo(latestVersion.getVersionNumber()) < 0) {
+                this.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
+                this.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
+                this.needsUpdate = true;
+            } else {
+                this.getLogger().info("You are running the latest version of VillagerLobotomizer.");
+            }
+        });
     }
 }
