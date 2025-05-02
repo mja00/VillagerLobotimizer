@@ -96,7 +96,7 @@ hangarPublish {
         }
         id.set("VillagerLobotomy")
         // If the tag is the same as the current project version then we're doing a release publish
-        if (tag != null && tag == project.version.toString()) {
+        if (tag != null && tag.replace("v", "") == project.version.toString()) {
             println("Tagged and tag matches version, doing a release publish")
             version.set(project.version.toString())
             channel.set("Release")

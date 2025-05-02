@@ -29,6 +29,7 @@ jobs:
         id: publish
         env:
           HANGAR_API_KEY: ${{ secrets.HANGAR_API_TOKEN }}
+          IS_TAGGED_RUN: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: |
           output=$(./gradlew build publishPluginPublicationToHangar --stacktrace)
           echo "$output"
