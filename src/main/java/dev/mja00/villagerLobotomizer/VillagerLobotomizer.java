@@ -6,6 +6,7 @@ import dev.mja00.villagerLobotomizer.objects.Modrinth;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.MultiLineChart;
+import org.bstats.charts.SingleLineChart;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.URI;
@@ -44,6 +45,17 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
         Metrics metrics = new Metrics(this, 25704);
 
+        this.setupMetrics(metrics);
+
+        // Plugin startup logic
+        getLogger().info("I'm ready to lobotomize your villagers!");
+        if (this.isDebugging()) {
+            getLogger().info("Debug mode is enabled. This will print debug messages to the console.");
+        }
+    }
+
+    private void setupMetrics(Metrics metrics) {
+        // Currently bstats' site doesn't support creating multiline charts, so we need to also split this into 3 single line charts
         metrics.addCustomChart(new MultiLineChart("villagers", () -> {
             Map<String, Integer> returnMap = new HashMap<>();
             LobotomizeStorage storage = getStorage();
@@ -56,11 +68,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
             return returnMap;
         }));
 
-        // Plugin startup logic
-        getLogger().info("I'm ready to lobotomize your villagers!");
-        if (this.isDebugging()) {
-            getLogger().info("Debug mode is enabled. This will print debug messages to the console.");
-        }
+        metrics.addCustomChart(new SingleLineChart("active_villagers", () -> getStorage().getActive().size()));
+        metrics.addCustomChart(new SingleLineChart("inactive_villagers", () -> getStorage().getLobotomized().size()));
+        metrics.addCustomChart(new SingleLineChart("total_villagers", () -> getStorage().getActive().size() + getStorage().getLobotomized().size()));
     }
 
     @Override
