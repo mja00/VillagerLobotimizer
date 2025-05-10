@@ -139,9 +139,17 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 this.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
                 this.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
                 this.needsUpdate = true;
+            } else if (currentVersion.compareTo(latestVersion.getVersionNumber()) > 0) {
+                this.getLogger().info("Hey! How'd you get this build?");
             } else {
                 this.getLogger().info("You are running the latest version of VillagerLobotomizer.");
             }
         });
+    }
+
+    public void debugLog(String message) {
+        if (this.isDebugging()) {
+            this.getLogger().info("[Debug] " + message);
+        }
     }
 }

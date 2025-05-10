@@ -24,3 +24,9 @@ debug: false
 
 #Chunk debug mode. Prints debug messages related to chunks
 chunk-debug: false
+
+#To ignore villagers stuck in doors, set this to true.
+ignore-villagers-stuck-in-doors: false
+
+#To not lobotomize villagers surrounded by non-solid blocks, set this to true.
+ignore-non-solid-blocks: false

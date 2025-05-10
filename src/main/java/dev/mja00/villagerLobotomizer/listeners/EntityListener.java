@@ -3,12 +3,16 @@ package dev.mja00.villagerLobotomizer.listeners;
 import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
+import io.papermc.paper.event.block.BlockBreakBlockEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 
@@ -68,5 +72,15 @@ public class EntityListener implements Listener {
                 this.plugin.getLogger().info("[Debug] Caught " + event.getEventName() + " for villager " + event.getEntity() + " (" + event.getEntity().getUniqueId() + "); The villager should have been removed from the storage");
             }
         }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public final void onBlockBreak(BlockBreakEvent event) {
+        this.plugin.getStorage().handleBlockChange(event.getBlock());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public final void onBlockPlace(BlockPlaceEvent event) {
+        this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
 }
