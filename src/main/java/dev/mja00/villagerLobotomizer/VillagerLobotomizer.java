@@ -146,10 +146,4 @@ public final class VillagerLobotomizer extends JavaPlugin {
             }
         });
     }
-
-    public void debugLog(String message) {
-        if (this.isDebugging()) {
-            this.getLogger().info("[Debug] " + message);
-        }
-    }
 }

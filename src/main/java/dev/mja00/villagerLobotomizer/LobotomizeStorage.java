@@ -295,10 +295,6 @@ public class LobotomizeStorage {
         Block blockAtHead = w.getBlockAt(x, y + 1, z);
         Block blockAtFeet = w.getBlockAt(x, y, z);
         Block blockUnderFeet = w.getBlockAt(x, y - 1, z);
-        this.plugin.debugLog("Checking if we can move through " + x + ", " + y + ", " + z + " with roof = " + roof);
-        this.plugin.debugLog("Block at head: " + blockAtHead.getType());
-        this.plugin.debugLog("Block at feet: " + blockAtFeet.getType());
-        this.plugin.debugLog("Block under feet: " + blockUnderFeet.getType());
 
         // First check if the block at the head is solid, if so, then we can't move from here
         boolean isHeadImpassable = this.testImpassable(IMPASSABLE_REGULAR_FLOOR, blockAtHead);
@@ -306,15 +302,7 @@ public class LobotomizeStorage {
         boolean isFeetImpassable = this.testImpassable(IMPASSABLE_REGULAR, blockAtFeet);
         // Next check if the block under the feet is regular or tall
         boolean isUnderFeetImpassable = this.testImpassable(IMPASSABLE_TALL, blockUnderFeet);
-        this.plugin.debugLog("Block at head is impassable: " + isHeadImpassable);
-        this.plugin.debugLog("Block at feet is impassable: " + isFeetImpassable);
-        this.plugin.debugLog("Block under feet is impassable: " + isUnderFeetImpassable);
-        if (isHeadImpassable || isFeetImpassable || (roof && isUnderFeetImpassable)) {
-            return false;
-        }
-
-        // In the end return true
-        return true;
+        return !isHeadImpassable && !isFeetImpassable && (!roof || !isUnderFeetImpassable);
     }
 
     private boolean testImpassable(@NotNull EnumSet<Material> set, @NotNull Block b) {
@@ -323,12 +311,6 @@ public class LobotomizeStorage {
         if (set.contains(type)) {
             return true;
         }
-        this.plugin.debugLog("Testing impassable for " + type);
-        this.plugin.debugLog("Set: " + set);
-        this.plugin.debugLog("Contains: " + set.contains(type));
-        this.plugin.debugLog("Is passable: " + !b.isPassable());
-        this.plugin.debugLog("Is not water: " + (type != Material.WATER));
-        this.plugin.debugLog("Is solid: " + type.isSolid());
         boolean isCarpet = type.name().contains("_CARPET");
         boolean isWater = type == Material.WATER;
         boolean isABypassBlock = (isCarpet || DOOR_BLOCKS.contains(type));
@@ -337,9 +319,7 @@ public class LobotomizeStorage {
         // 1. It isn't water and it's not passable
         // 2. AND it's not a bypass block (the early return ensures if it's in our testing set, it's impassable)
         // 3. AND it's in the set
-        boolean isImpassable = !isWater && !b.isPassable() && !isABypassBlock && !isNonSolid && set.contains(type);
-        this.plugin.debugLog("Is impassable: " + isImpassable);
-        return isImpassable;
+        return !isWater && !b.isPassable() && !isABypassBlock && !isNonSolid && set.contains(type);
     }
 
     private boolean canMoveCardinally(World w, int x, int y, int z, boolean roof) {
@@ -348,12 +328,6 @@ public class LobotomizeStorage {
         Boolean xMinusOne = this.canMoveThrough(w, x - 1, y, z, roof);
         Boolean zPlusOne = this.canMoveThrough(w, x, y, z + 1, roof);
         Boolean zMinusOne = this.canMoveThrough(w, x, y, z - 1, roof);
-        this.plugin.debugLog("Checking if we can move cardinally");
-        this.plugin.debugLog("xPlusOne: " + xPlusOne);
-        this.plugin.debugLog("xMinusOne: " + xMinusOne);
-        this.plugin.debugLog("zPlusOne: " + zPlusOne);
-        this.plugin.debugLog("zMinusOne: " + zMinusOne);
-        this.plugin.debugLog("Can we move cardinally: " + (xPlusOne || xMinusOne || zPlusOne || zMinusOne));
 
         return xPlusOne || xMinusOne || zPlusOne || zMinusOne;
     }
