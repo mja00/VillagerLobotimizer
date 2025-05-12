@@ -314,12 +314,12 @@ public class LobotomizeStorage {
         boolean isCarpet = type.name().contains("_CARPET");
         boolean isWater = type == Material.WATER;
         boolean isABypassBlock = (isCarpet || DOOR_BLOCKS.contains(type));
-        boolean isNonSolid = !type.isSolid() && this.plugin.getConfig().getBoolean("ignore-non-solid-blocks");
+        boolean isNonSolid = !type.isSolid() && this.plugin.getConfig().getBoolean("ignore-non-solid-blocks") && !PROFESSION_BLOCKS.contains(type);
         // A block is impassable if:
         // 1. It isn't water and it's not passable
         // 2. AND it's not a bypass block (the early return ensures if it's in our testing set, it's impassable)
         // 3. AND it's in the set
-        return !isWater && !b.isPassable() && !isABypassBlock && !isNonSolid && set.contains(type);
+        return (!isWater && !b.isPassable() && !isABypassBlock && !isNonSolid) || set.contains(type);
     }
 
     private boolean canMoveCardinally(World w, int x, int y, int z, boolean roof) {
@@ -507,11 +507,8 @@ public class LobotomizeStorage {
 
         // Check movement
         Material floorBlockMaterial = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() - 1, villagerLoc.getBlockZ()).getType();
-        logger.info("Roof type: " + floorBlockMaterial);
         Block villagerRoof = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 2, villagerLoc.getBlockZ());
-        logger.info("Assumed block above villager: " + villagerRoof.getType());
         boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof);
-        logger.info("Has roof: " + hasRoof);
 
         return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);
     }
