@@ -1,5 +1,6 @@
 package dev.mja00.villagerLobotomizer;
 
+import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
@@ -250,14 +251,48 @@ public class LobotomizeStorage {
             return;
         }
 
+        Material jobSite = VillagerUtils.PROFESSION_TO_STATION.get(villager.getProfession());
+
+        // Check for a job site in a 1 block adjacent radius (including diagonals)
+        // This checks in a 2 block height box, for a total of 3x2x3 box
+        if(jobSite != null) {
+            Location location = villager.getLocation();
+            boolean found = false;
+            int[] yOffsets = {0, 1}; // feet and body levels
+            int yIndex = 0;
+            while (yIndex < yOffsets.length && !found) {
+                int checkY = location.getBlockY() + yOffsets[yIndex];
+                int x = -1;
+                while (x <= 1 && !found) {
+                    int z = -1;
+                    while (z <= 1 && !found) {
+                        if (!(x == 0 && z == 0)) {
+                            int checkX = location.getBlockX() + x;
+                            int checkZ = location.getBlockZ() + z;
+                            if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
+                                found = true;
+                            }
+                        }
+                        z++;
+                    }
+                    x++;
+                }
+                yIndex++;
+            }
+            if (!found) {
+                return;
+            }
+        }
+
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         Long lastRestock = pdc.get(this.key, PersistentDataType.LONG);
+
         if (lastRestock == null) {
             lastRestock = 0L;
         }
 
         long now = System.currentTimeMillis();
-        if (now - lastRestock > this.restockInterval) {
+        if (now - lastRestock > this.restockInterval && villager.getRestocksToday() < 2) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
@@ -267,12 +302,15 @@ public class LobotomizeStorage {
             }
 
             villager.setRecipes(recipes);
+            villager.setRestocksToday(villager.getRestocksToday() + 1);
 
             if (this.restockSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
         }
 
+        // Derek comment - Not sure if we want to split this level up check, to separate it from refresh trades. Might
+        // be better to(?)
         // Lets also see if we need to level up the villager
         int currentLevel = villager.getVillagerLevel();
 
@@ -282,7 +320,6 @@ public class LobotomizeStorage {
         }
 
         int expectedLevel = this.getVillagerLevel(villager);
-
 
         if (currentLevel < expectedLevel) {
             // We can just set the villager level to the expected level
