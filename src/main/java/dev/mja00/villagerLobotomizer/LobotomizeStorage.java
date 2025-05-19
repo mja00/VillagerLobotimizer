@@ -57,6 +57,7 @@ public class LobotomizeStorage {
     private long checkInterval;
     private long inactiveCheckInterval;
     private long restockInterval;
+    private long restockRandomRange;
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
     private Sound restockSound;
@@ -123,6 +124,7 @@ public class LobotomizeStorage {
         this.checkInterval = plugin.getConfig().getLong("check-interval");
         this.inactiveCheckInterval = plugin.getConfig().getLong("inactive-check-interval", this.checkInterval);
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
+        this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         String soundName = plugin.getConfig().getString("restock-sound");
@@ -265,6 +267,7 @@ public class LobotomizeStorage {
             }
 
             villager.setRecipes(recipes);
+
             if (this.restockSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
