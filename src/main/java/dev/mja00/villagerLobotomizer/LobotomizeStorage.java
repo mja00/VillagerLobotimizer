@@ -269,13 +269,18 @@ public class LobotomizeStorage {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
         }
+
         // Lets also see if we need to level up the villager
         int currentLevel = villager.getVillagerLevel();
+
         // If we're max level, then just return early
         if (currentLevel == 5) {
             return;
         }
+
         int expectedLevel = this.getVillagerLevel(villager);
+
+
         if (currentLevel < expectedLevel) {
             // We can just set the villager level to the expected level
             int increaseAmount = Math.max(0, expectedLevel - currentLevel);
@@ -285,6 +290,7 @@ public class LobotomizeStorage {
             }
             PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
             villager.addPotionEffect(regenEffect);
+
             // Write a log message if we're debugging
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
