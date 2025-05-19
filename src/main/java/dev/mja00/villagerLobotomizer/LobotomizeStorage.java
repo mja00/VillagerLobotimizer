@@ -243,6 +243,11 @@ public class LobotomizeStorage {
     }
 
     private void refreshTrades(@NotNull Villager villager) {
+        if (!villager.getWorld().isDayTime()) {
+            // It's night, do not refresh trades
+            return;
+        }
+
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         Long lastRestock = pdc.get(this.key, PersistentDataType.LONG);
         if (lastRestock == null) {
