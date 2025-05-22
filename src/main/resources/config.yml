@@ -7,6 +7,9 @@ inactive-check-interval: 150
 #Interval between villager trade restocks, in milliseconds
 restock-interval: 28800000
 
+#Range (in milliseconds) before restock-interval to start random restock checks. If set to 0, restocking is not randomized. If equal to or greater than restock-interval, restock will always occur.
+restock-random-range: 0
+
 #Whether to only lobotomize villagers with jobs
 only-lobotomize-villagers-with-professions: false
 

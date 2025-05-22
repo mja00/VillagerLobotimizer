@@ -1,5 +1,6 @@
 package dev.mja00.villagerLobotomizer;
 
+import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
@@ -57,6 +58,7 @@ public class LobotomizeStorage {
     private long checkInterval;
     private long inactiveCheckInterval;
     private long restockInterval;
+    private long restockRandomRange;
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
     private Sound restockSound;
@@ -123,6 +125,7 @@ public class LobotomizeStorage {
         this.checkInterval = plugin.getConfig().getLong("check-interval");
         this.inactiveCheckInterval = plugin.getConfig().getLong("inactive-check-interval", this.checkInterval);
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
+        this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         String soundName = plugin.getConfig().getString("restock-sound");
@@ -243,14 +246,53 @@ public class LobotomizeStorage {
     }
 
     private void refreshTrades(@NotNull Villager villager) {
+        if (!villager.getWorld().isDayTime()) {
+            // It's night, do not refresh trades
+            return;
+        }
+
+        Material jobSite = VillagerUtils.PROFESSION_TO_STATION.get(villager.getProfession());
+
+        // Check for a job site in a 1 block adjacent radius (including diagonals)
+        // This checks in a 2 block height box, for a total of 3x2x3 box
+        if(jobSite != null) {
+            Location location = villager.getLocation();
+            boolean found = false;
+            int[] yOffsets = {0, 1}; // feet and body levels
+            int yIndex = 0;
+            while (yIndex < yOffsets.length && !found) {
+                int checkY = location.getBlockY() + yOffsets[yIndex];
+                int x = -1;
+                while (x <= 1 && !found) {
+                    int z = -1;
+                    while (z <= 1 && !found) {
+                        if (!(x == 0 && z == 0)) {
+                            int checkX = location.getBlockX() + x;
+                            int checkZ = location.getBlockZ() + z;
+                            if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
+                                found = true;
+                            }
+                        }
+                        z++;
+                    }
+                    x++;
+                }
+                yIndex++;
+            }
+            if (!found) {
+                return;
+            }
+        }
+
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         Long lastRestock = pdc.get(this.key, PersistentDataType.LONG);
+
         if (lastRestock == null) {
             lastRestock = 0L;
         }
 
         long now = System.currentTimeMillis();
-        if (now - lastRestock > this.restockInterval) {
+        if (now - lastRestock > this.restockInterval && villager.getRestocksToday() < 2) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
@@ -260,17 +302,25 @@ public class LobotomizeStorage {
             }
 
             villager.setRecipes(recipes);
+            villager.setRestocksToday(villager.getRestocksToday() + 1);
+
             if (this.restockSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
             }
         }
+
+        // Derek comment - Not sure if we want to split this level up check, to separate it from refresh trades. Might
+        // be better to(?)
         // Lets also see if we need to level up the villager
         int currentLevel = villager.getVillagerLevel();
+
         // If we're max level, then just return early
         if (currentLevel == 5) {
             return;
         }
+
         int expectedLevel = this.getVillagerLevel(villager);
+
         if (currentLevel < expectedLevel) {
             // We can just set the villager level to the expected level
             int increaseAmount = Math.max(0, expectedLevel - currentLevel);
@@ -280,6 +330,7 @@ public class LobotomizeStorage {
             }
             PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
             villager.addPotionEffect(regenEffect);
+
             // Write a log message if we're debugging
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
