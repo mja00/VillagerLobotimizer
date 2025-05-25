@@ -306,6 +306,10 @@ public class LobotomizeStorage {
 
             if (this.restockSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+            } else {
+                villager.getWorld().playSound(villager.getLocation(), VillagerUtils.PROFESSION_TO_SOUND.get(villager.getProfession()),
+                        SoundCategory.NEUTRAL, 1.0F,
+                        1.0F);
             }
         }
 
