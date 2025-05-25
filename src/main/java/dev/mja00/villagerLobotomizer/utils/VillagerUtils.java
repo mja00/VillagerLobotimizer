@@ -47,8 +47,8 @@ public class VillagerUtils {
         // Professions with no workstation
         map.put(Villager.Profession.NITWIT, null);
         map.put(Villager.Profession.NONE, null);
-        soundMap.put(Villager.Profession.NITWIT, null);
-        soundMap.put(Villager.Profession.NONE, null);
+        soundMap.put(Villager.Profession.NITWIT, Sound.ENTITY_VILLAGER_CELEBRATE);
+        soundMap.put(Villager.Profession.NONE, Sound.ENTITY_VILLAGER_CELEBRATE);
 
         // One time registered map
         PROFESSION_TO_SOUND = Collections.unmodifiableMap(soundMap);
