@@ -1,3 +1,5 @@
+![image](https://github.com/user-attachments/assets/2716b281-48a6-4a1a-9305-0560684d4e0f)
+
 # VillagerLobotimizer
 
 A Minecraft Paper plugin that improves server performance by turning off villagers' AI when they're confined to trading halls.
@@ -24,32 +26,42 @@ A Minecraft Paper plugin that improves server performance by turning off village
 ## Configuration
 
 ```yaml
-# Interval between trapped checks, in ticks, for active villagers
+#Interval between trapped checks, in ticks, for active villagers
 check-interval: 150
 
-# Interval between trapped checks, in ticks, for inactive villagers
+#Interval between trapped checks, in ticks, for inactive villagers
 inactive-check-interval: 150
 
-# Interval between villager trade restocks, in milliseconds
+#Interval between villager trade restocks, in milliseconds
 restock-interval: 28800000
 
-# Whether to only lobotomize villagers with jobs
+#Range (in milliseconds) before restock-interval to start random restock checks. If set to 0, restocking is not randomized. If equal to or greater than restock-interval, restock will always occur.
+restock-random-range: 0
+
+#Whether to only lobotomize villagers with jobs
 only-lobotomize-villagers-with-professions: false
 
-# Whether to lobotomize villagers in boats/minecarts
+#Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
 
-# The sound to play when a villager restocks
-restock-sound: "ENTITY_VILLAGER_CELEBRATE"
+#The sound to play when a villager restocks. Leave empty ("") for default sounds.
+restock-sound: ""
 
-# The sound played when a villager is leveled up
+#The sound played when a villager is leveled up. Leave empty ("") for no sound.
 level-up-sound: "ENTITY_VILLAGER_CELEBRATE"
 
-# Debug mode. Prints debug messages to the console
+#Debug mode. Prints debug messages to the console.
 debug: false
 
-# Chunk debug mode. Prints messages related to chunks
+#Chunk debug mode. Prints debug messages related to chunks
 chunk-debug: false
+
+#To ignore villagers stuck in doors, set this to true.
+ignore-villagers-stuck-in-doors: false
+
+#To not lobotomize villagers surrounded by non-solid blocks, set this to true.
+ignore-non-solid-blocks: false
+
 ```
 
 ## Special Villager Names
