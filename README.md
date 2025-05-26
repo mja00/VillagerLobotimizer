@@ -9,7 +9,10 @@ A Minecraft Paper plugin that improves server performance by turning off village
 - Automatically detects when villagers are trapped in trading halls
 - Disables AI for trapped villagers to improve server performance
 - Maintains villager trading functionality while AI is disabled
-- Automatically refreshes villager trades on a configurable schedule
+- Automatically refreshes villager trades on a configurable schedule with randomization support
+- Profession-specific restock sounds and level-up celebrations
+- Optimized job site detection for better performance
+- Night-time trade refresh functionality
 - Allows naming villagers to control their behavior ("nobrain", "alwaysbrain")
 - Debug mode for troubleshooting
 - Command system for checking villager status and managing the plugin
@@ -44,7 +47,7 @@ only-lobotomize-villagers-with-professions: false
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
 
-#The sound to play when a villager restocks. Leave empty ("") for default sounds.
+#The sound to play when a villager restocks. Leave empty ("") for profession-specific default sounds.
 restock-sound: ""
 
 #The sound played when a villager is leveled up. Leave empty ("") for no sound.
@@ -68,6 +71,13 @@ ignore-non-solid-blocks: false
 
 - Name a villager with "nobrain" to force it to always be lobotomized
 - Name a villager with "alwaysbrain" to prevent it from ever being lobotomized
+
+## Sound System
+
+The plugin features an enhanced sound system:
+- **Profession-specific restock sounds**: When `restock-sound` is left empty, villagers will play sounds appropriate to their profession when restocking
+- **Customizable sounds**: You can override the default sounds by specifying a custom sound in the configuration
+- **Level-up celebrations**: Villagers play celebration sounds when they level up their trades
 
 ## Requirements
 
@@ -129,4 +139,4 @@ If you encounter any issues, please report them on [GitHub](https://github.com/m
 
 ## License
 
-This project is maintained by mja00. See the plugin.yml file for more information. 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
