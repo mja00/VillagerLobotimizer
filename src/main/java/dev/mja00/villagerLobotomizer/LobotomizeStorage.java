@@ -212,7 +212,9 @@ public class LobotomizeStorage {
             // Remove from whatever
             return true;
         }
+
         Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+
         // If the chunk is not loaded, and the villager is not active, we want to add them to the active list
         if (!villager.getWorld().isChunkLoaded(villagerLocation.getBlockX() >> 4, villagerLocation.getBlockZ() >> 4)) {
             return false; // Keep current if chunk is unloaded
@@ -233,6 +235,7 @@ public class LobotomizeStorage {
         } else {
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
+
             if (active) {
                 villager.setAware(false);
                 this.inactiveVillagers.add(villager);
@@ -537,6 +540,12 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Determines if a villager should be considered "active" based on name, vehicle, profession, and movement.
+     *
+     * @param villager The villager to check.
+     * @return true if the villager should be active, false otherwise.
+     */
     private boolean shouldBeActive(Villager villager) {
         Location villagerLoc = villager.getLocation().add(0.0F, 0.51, 0.0F);
 
