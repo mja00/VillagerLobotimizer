@@ -61,6 +61,7 @@ public class LobotomizeStorage {
     private long restockRandomRange;
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
+    private boolean checkRoof;
     private Sound restockSound;
     private Sound levelUpSound;
     private Logger logger;
@@ -128,6 +129,7 @@ public class LobotomizeStorage {
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
 
         // Empty our door set if the config is set to false
@@ -576,8 +578,12 @@ public class LobotomizeStorage {
         // Check movement
         Material floorBlockMaterial = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() - 1, villagerLoc.getBlockZ()).getType();
         Block villagerRoof = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 2, villagerLoc.getBlockZ());
+
+        if (this.checkRoof && villagerRoof.getType() == Material.AIR) {
+            return true;
+        }
+
         boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof);
-        //
 
         return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);
     }
