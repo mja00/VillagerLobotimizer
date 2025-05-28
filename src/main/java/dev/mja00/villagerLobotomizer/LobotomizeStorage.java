@@ -256,37 +256,8 @@ public class LobotomizeStorage {
             return;
         }
 
-        Material jobSite = VillagerUtils.PROFESSION_TO_STATION.get(villager.getProfession());
-
-        // Check for a job site in a 1 block adjacent radius (including diagonals)
-        // This checks in a 2 block height box, for a total of 3x2x3 box
-        if(jobSite != null) {
-            Location location = villager.getLocation();
-            boolean found = false;
-            int[] yOffsets = {0, 1}; // feet and body levels
-            int yIndex = 0;
-            while (yIndex < yOffsets.length && !found) {
-                int checkY = location.getBlockY() + yOffsets[yIndex];
-                int x = -1;
-                while (x <= 1 && !found) {
-                    int z = -1;
-                    while (z <= 1 && !found) {
-                        if (!(x == 0 && z == 0)) {
-                            int checkX = location.getBlockX() + x;
-                            int checkZ = location.getBlockZ() + z;
-                            if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
-                                found = true;
-                            }
-                        }
-                        z++;
-                    }
-                    x++;
-                }
-                yIndex++;
-            }
-            if (!found) {
-                return;
-            }
+        if (!VillagerUtils.isJobSiteNearby(villager)) {
+            return;
         }
 
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
