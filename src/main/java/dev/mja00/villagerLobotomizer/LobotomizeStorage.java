@@ -61,6 +61,7 @@ public class LobotomizeStorage {
     private long restockRandomRange;
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
+    private boolean checkRoof;
     private Sound restockSound;
     private Sound levelUpSound;
     private Logger logger;
@@ -128,6 +129,7 @@ public class LobotomizeStorage {
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
 
         // Empty our door set if the config is set to false
@@ -254,37 +256,8 @@ public class LobotomizeStorage {
             return;
         }
 
-        Material jobSite = VillagerUtils.PROFESSION_TO_STATION.get(villager.getProfession());
-
-        // Check for a job site in a 1 block adjacent radius (including diagonals)
-        // This checks in a 2 block height box, for a total of 3x2x3 box
-        if(jobSite != null) {
-            Location location = villager.getLocation();
-            boolean found = false;
-            int[] yOffsets = {0, 1}; // feet and body levels
-            int yIndex = 0;
-            while (yIndex < yOffsets.length && !found) {
-                int checkY = location.getBlockY() + yOffsets[yIndex];
-                int x = -1;
-                while (x <= 1 && !found) {
-                    int z = -1;
-                    while (z <= 1 && !found) {
-                        if (!(x == 0 && z == 0)) {
-                            int checkX = location.getBlockX() + x;
-                            int checkZ = location.getBlockZ() + z;
-                            if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
-                                found = true;
-                            }
-                        }
-                        z++;
-                    }
-                    x++;
-                }
-                yIndex++;
-            }
-            if (!found) {
-                return;
-            }
+        if (!VillagerUtils.isJobSiteNearby(villager)) {
+            return;
         }
 
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
@@ -576,8 +549,12 @@ public class LobotomizeStorage {
         // Check movement
         Material floorBlockMaterial = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() - 1, villagerLoc.getBlockZ()).getType();
         Block villagerRoof = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 2, villagerLoc.getBlockZ());
+
+        if (this.checkRoof && villagerRoof.getType() == Material.AIR) {
+            return true;
+        }
+
         boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof);
-        //
 
         return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);
     }
