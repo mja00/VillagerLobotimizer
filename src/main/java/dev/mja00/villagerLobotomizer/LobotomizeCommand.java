@@ -28,7 +28,7 @@ public class LobotomizeCommand {
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand(final String commandName) {
-        return Commands.literal(commandName).requires((command) -> command.getSender().isOp())
+        return Commands.literal(commandName).requires((command) -> command.getSender().hasPermission("lobotomy.command"))
                 .then(Commands.literal("info").executes((command) -> infoCommand(command.getSource())))
                 .then(Commands.literal("debug").executes((command) -> debugCommand(command.getSource()))
                         .then(Commands.argument("villager", ArgumentTypes.entity()).executes((command) -> debugCommandSpecific(command.getSource(), command.getArgument("villager", EntitySelectorArgumentResolver.class))))

@@ -5,3 +5,7 @@ api-version: '1.21'
 authors: [ mja00, DereC4 ]
 description: A plugin that turns off Villager's brains when they're stuck in a trading hall.
 website: https://github.com/mja00/VillagerLobotimizer
+permissions:
+  lobotomy.command:
+    description: "Allows the use of the lobotomy command"
+    default: op

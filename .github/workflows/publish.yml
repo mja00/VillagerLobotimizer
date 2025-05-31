@@ -12,7 +12,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    if: "!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]')"
+    if: ${{ !contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,6 +47,26 @@ jobs:
       - name: Get current date in ISO 8601 format
         id: date
         run: echo "date=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "VillagerLobotomy ${{ github.ref_name }}"
+          body: |
+            ## VillagerLobotomy ${{ steps.parse-publish-result.outputs.version }}
+            
+            **Released:** ${{ steps.date.outputs.date }}
+            
+            ### Downloads
+            - 📦 [Hangar](${{ steps.parse-publish-result.outputs.url }})
+            
+            ### What's Changed
+            Check the commits since the last release for detailed changes.
+          draft: false
+          prerelease: false
+          files: |
+            build/libs/*.jar
       - name: Announce to Discord
         uses: tsickert/discord-webhook@v6.0.0
         if: startsWith(github.ref, 'refs/tags/') && !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]')
