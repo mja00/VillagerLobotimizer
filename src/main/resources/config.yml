@@ -33,3 +33,6 @@ ignore-villagers-stuck-in-doors: false
 
 #To not lobotomize villagers surrounded by non-solid blocks, set this to true.
 ignore-non-solid-blocks: false
+
+#To check if there is a roof above a villager before lobotomizing, set this to true
+check-roof: true

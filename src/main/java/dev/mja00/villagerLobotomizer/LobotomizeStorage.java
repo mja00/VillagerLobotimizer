@@ -61,6 +61,7 @@ public class LobotomizeStorage {
     private long restockRandomRange;
     private boolean onlyProfessions;
     private boolean lobotomizePassengers;
+    private boolean checkRoof;
     private Sound restockSound;
     private Sound levelUpSound;
     private Logger logger;
@@ -128,6 +129,7 @@ public class LobotomizeStorage {
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
 
         // Empty our door set if the config is set to false
@@ -212,7 +214,9 @@ public class LobotomizeStorage {
             // Remove from whatever
             return true;
         }
+
         Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+
         // If the chunk is not loaded, and the villager is not active, we want to add them to the active list
         if (!villager.getWorld().isChunkLoaded(villagerLocation.getBlockX() >> 4, villagerLocation.getBlockZ() >> 4)) {
             return false; // Keep current if chunk is unloaded
@@ -233,6 +237,7 @@ public class LobotomizeStorage {
         } else {
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
+
             if (active) {
                 villager.setAware(false);
                 this.inactiveVillagers.add(villager);
@@ -251,37 +256,8 @@ public class LobotomizeStorage {
             return;
         }
 
-        Material jobSite = VillagerUtils.PROFESSION_TO_STATION.get(villager.getProfession());
-
-        // Check for a job site in a 1 block adjacent radius (including diagonals)
-        // This checks in a 2 block height box, for a total of 3x2x3 box
-        if(jobSite != null) {
-            Location location = villager.getLocation();
-            boolean found = false;
-            int[] yOffsets = {0, 1}; // feet and body levels
-            int yIndex = 0;
-            while (yIndex < yOffsets.length && !found) {
-                int checkY = location.getBlockY() + yOffsets[yIndex];
-                int x = -1;
-                while (x <= 1 && !found) {
-                    int z = -1;
-                    while (z <= 1 && !found) {
-                        if (!(x == 0 && z == 0)) {
-                            int checkX = location.getBlockX() + x;
-                            int checkZ = location.getBlockZ() + z;
-                            if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
-                                found = true;
-                            }
-                        }
-                        z++;
-                    }
-                    x++;
-                }
-                yIndex++;
-            }
-            if (!found) {
-                return;
-            }
+        if (!VillagerUtils.isJobSiteNearby(villager)) {
+            return;
         }
 
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
@@ -362,13 +338,16 @@ public class LobotomizeStorage {
 
     private boolean testImpassable(@NotNull EnumSet<Material> set, @NotNull Block b) {
         Material type = b.getType();
+
         // Skip any extra checks here
         if (set.contains(type)) {
             return true;
         }
+
         boolean isCarpet = type.name().contains("_CARPET");
+        boolean isBed = type.name().contains("_BED");
         boolean isWater = type == Material.WATER;
-        boolean isABypassBlock = (isCarpet || DOOR_BLOCKS.contains(type));
+        boolean isABypassBlock = (isBed || isCarpet || DOOR_BLOCKS.contains(type));
         boolean isNonSolid = !type.isSolid() && this.plugin.getConfig().getBoolean("ignore-non-solid-blocks") && !PROFESSION_BLOCKS.contains(type);
         // A block is impassable if:
         // 1. It isn't water and it's not passable
@@ -379,6 +358,7 @@ public class LobotomizeStorage {
 
     private boolean canMoveCardinally(World w, int x, int y, int z, boolean roof) {
         // Essentially check x + 1, x - 1, z + 1, z - 1, and return the or of the results
+        // Means as long as there's 1 walkable path it should not be lobotomized
         Boolean xPlusOne = this.canMoveThrough(w, x + 1, y, z, roof);
         Boolean xMinusOne = this.canMoveThrough(w, x - 1, y, z, roof);
         Boolean zPlusOne = this.canMoveThrough(w, x, y, z + 1, roof);
@@ -537,6 +517,12 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Determines if a villager should be considered "active" based on name, vehicle, profession, and movement.
+     *
+     * @param villager The villager to check.
+     * @return true if the villager should be active, false otherwise.
+     */
     private boolean shouldBeActive(Villager villager) {
         Location villagerLoc = villager.getLocation().add(0.0F, 0.51, 0.0F);
 
@@ -563,6 +549,11 @@ public class LobotomizeStorage {
         // Check movement
         Material floorBlockMaterial = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() - 1, villagerLoc.getBlockZ()).getType();
         Block villagerRoof = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 2, villagerLoc.getBlockZ());
+
+        if (this.checkRoof && villagerRoof.getType() == Material.AIR) {
+            return true;
+        }
+
         boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof);
 
         return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);

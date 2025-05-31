@@ -1,5 +1,6 @@
 package dev.mja00.villagerLobotomizer.utils;
 
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Sound;
 import org.bukkit.entity.Villager;
@@ -53,5 +54,36 @@ public class VillagerUtils {
         // One time registered map
         PROFESSION_TO_SOUND = Collections.unmodifiableMap(soundMap);
         PROFESSION_TO_STATION = Collections.unmodifiableMap(map);
+    }
+
+    /**
+     * Check for a job site in a 1 block adjacent radius (including diagonals)
+     * This checks in a 2 block height box, for a total of 3x2x3 box
+     * @param villager Villager entity the check is centered around
+     * @return
+     */
+    public static boolean isJobSiteNearby (Villager villager) {
+        Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
+
+        if (jobSite == null) return false;
+
+        Location location = villager.getLocation();
+        int[] yOffsets = {0, 1}; // feet and body levels
+        for (int yOffset : yOffsets) {
+            int checkY = location.getBlockY() + yOffset;
+            for (int x = -1; x <= 1; x++) {
+                for (int z = -1; z <= 1; z++) {
+                    if (x == 0 && z == 0) continue;
+
+                    int checkX = location.getBlockX() + x;
+                    int checkZ = location.getBlockZ() + z;
+
+                    if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }
