@@ -46,8 +46,8 @@ public class VillagerUtils {
         map.put(Villager.Profession.WEAPONSMITH, Material.GRINDSTONE);
 
         // Professions with no workstation
-        map.put(Villager.Profession.NITWIT, null);
-        map.put(Villager.Profession.NONE, null);
+        map.put(Villager.Profession.NITWIT, Material.AIR);
+        map.put(Villager.Profession.NONE, Material.AIR);
         soundMap.put(Villager.Profession.NITWIT, Sound.ENTITY_VILLAGER_CELEBRATE);
         soundMap.put(Villager.Profession.NONE, Sound.ENTITY_VILLAGER_CELEBRATE);
 
@@ -65,7 +65,7 @@ public class VillagerUtils {
     public static boolean isJobSiteNearby (Villager villager) {
         Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
 
-        if (jobSite == null) return false;
+        if (jobSite == Material.AIR) return false;
 
         Location location = villager.getLocation();
         int[] yOffsets = {0, 1}; // feet and body levels
