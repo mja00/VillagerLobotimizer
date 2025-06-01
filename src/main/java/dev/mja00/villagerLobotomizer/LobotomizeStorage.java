@@ -270,7 +270,7 @@ public class LobotomizeStorage {
         }
 
         long now = System.currentTimeMillis();
-        if (now - lastRestock > this.restockInterval && villager.getRestocksToday() < 2) {
+        if (now - lastRestock > (this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0)) && villager.getRestocksToday() < 2) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
