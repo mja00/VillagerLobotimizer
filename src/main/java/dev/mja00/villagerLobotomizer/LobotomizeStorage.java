@@ -5,6 +5,8 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
 import org.bukkit.block.Block;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
@@ -328,15 +330,25 @@ public class LobotomizeStorage {
         Block blockUnderFeet = w.getBlockAt(x, y - 1, z);
 
         // First check if the block at the head is solid, if so, then we can't move from here
-        boolean isHeadImpassable = this.testImpassable(IMPASSABLE_REGULAR_FLOOR, blockAtHead);
+        boolean isHeadImpassable = this.testImpassable(IMPASSABLE_REGULAR_FLOOR, blockAtHead, false);
         // Next check if the block at the feet is just regular (villagers can walk on carpets)
-        boolean isFeetImpassable = this.testImpassable(IMPASSABLE_REGULAR, blockAtFeet);
+        boolean isFeetImpassable = this.testImpassable(IMPASSABLE_REGULAR, blockAtFeet, false);
         // Next check if the block under the feet is regular or tall
-        boolean isUnderFeetImpassable = this.testImpassable(IMPASSABLE_TALL, blockUnderFeet);
+        boolean isUnderFeetImpassable = this.testImpassable(IMPASSABLE_TALL, blockUnderFeet, true);
         return !isHeadImpassable && !isFeetImpassable && (!roof || !isUnderFeetImpassable);
     }
 
-    private boolean testImpassable(@NotNull EnumSet<Material> set, @NotNull Block b) {
+    /**
+     * Tests if a block is impassable, based on the set provided.
+     * If onlyTallBlocks is true, it will only check for tall blocks.
+     * If false, it will check for all blocks in the set.
+     *
+     * @param set The set of materials to check against
+     * @param b The block to test
+     * @param onlyTallBlocks If true, only checks tall blocks
+     * @return true if the block is impassable, false otherwise
+     */
+    private boolean testImpassable(@NotNull EnumSet<Material> set, @NotNull Block b, boolean onlyTallBlocks) {
         Material type = b.getType();
 
         // Skip any extra checks here
@@ -344,10 +356,17 @@ public class LobotomizeStorage {
             return true;
         }
 
+        // If we're only checking tall blocks and we reach this part, return false early
+        if (onlyTallBlocks) {
+            return false;
+        }
+
         boolean isCarpet = type.name().contains("_CARPET");
         boolean isBed = type.name().contains("_BED");
         boolean isWater = type == Material.WATER;
-        boolean isABypassBlock = (isBed || isCarpet || DOOR_BLOCKS.contains(type));
+        BlockData blockData = b.getBlockData();
+        boolean isCrop = blockData instanceof Ageable;
+        boolean isABypassBlock = (isCrop || isBed || isCarpet || DOOR_BLOCKS.contains(type));
         boolean isNonSolid = !type.isSolid() && this.plugin.getConfig().getBoolean("ignore-non-solid-blocks") && !PROFESSION_BLOCKS.contains(type);
         // A block is impassable if:
         // 1. It isn't water and it's not passable
@@ -554,7 +573,7 @@ public class LobotomizeStorage {
             return true;
         }
 
-        boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof);
+        boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof, false);
 
         return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);
     }
