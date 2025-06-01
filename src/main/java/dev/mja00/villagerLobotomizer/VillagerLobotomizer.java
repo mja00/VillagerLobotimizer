@@ -7,6 +7,8 @@ import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.MultiLineChart;
 import org.bstats.charts.SingleLineChart;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.net.URI;
@@ -46,6 +48,19 @@ public final class VillagerLobotomizer extends JavaPlugin {
         Metrics metrics = new Metrics(this, 25704);
 
         this.setupMetrics(metrics);
+
+        // Check to see if plugman (or its fork Plugmanx) is installed. If so send a warning.
+        PluginManager pluginManager = this.getServer().getPluginManager();
+        for (Plugin plugin : pluginManager.getPlugins()) {
+            if (plugin.getName().toLowerCase().contains("plugman")) {
+                this.getLogger().warning("------------------------------");
+                this.getLogger().warning("Plugman is installed. While this plugin will not fully break with it installed, commands will stop working after a reload.");
+                this.getLogger().warning("This is due to the way commands are registered for Brigadier. Plugman does not support plugins that use Brigadier commands.");
+                this.getLogger().warning("A workaround is running \"/minecraft:reload\" after reloading this plugin, however this may break other plugins.");
+                this.getLogger().warning("-------------------------------");
+                break;
+            }
+        }
 
         // Plugin startup logic
         getLogger().info("I'm ready to lobotomize your villagers!");
