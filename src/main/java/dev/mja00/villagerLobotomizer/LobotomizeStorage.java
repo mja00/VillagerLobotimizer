@@ -205,7 +205,9 @@ public class LobotomizeStorage {
     public final void flush() {
         // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
         this.inactiveVillagers.removeIf((villager) -> {
-            this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
+            if (this.plugin.isDebugging()) {
+                this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
+            }
             villager.setAware(true);
             return true;
         });
@@ -235,6 +237,10 @@ public class LobotomizeStorage {
                 }
                 return true; // Remove from inactive list
             }
+            if (this.plugin.isDebugging() && this.plugin.getActiveVillagersTeam() != null) {
+                this.plugin.getActiveVillagersTeam().addEntity(villager);
+                villager.setGlowing(true);
+            }
             return false; // Already active
         } else {
             // Refresh any trades as this villager is inactive
@@ -248,6 +254,10 @@ public class LobotomizeStorage {
                 }
                 return true; // Remove from active
             }
+            if (this.plugin.isDebugging() && this.plugin.getInactiveVillagersTeam() != null) {
+                this.plugin.getInactiveVillagersTeam().addEntity(villager);
+                villager.setGlowing(true);
+            }
             return false;
         }
     }
@@ -257,6 +267,7 @@ public class LobotomizeStorage {
             // It's night, do not refresh trades
             return;
         }
+
 
         if (!VillagerUtils.isJobSiteNearby(villager)) {
             return;
