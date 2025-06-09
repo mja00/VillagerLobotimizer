@@ -135,9 +135,9 @@ public class LobotomizeStorage {
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
 
+        List<String> configNames = plugin.getConfig().getStringList("always-active-names");
         exemptNames = new HashSet<>();
-        List<String> configNames = plugin.getConfig().getStringList("")
-
+        exemptNames.addAll(configNames);
 
         // Empty our door set if the config is set to false
         if (!plugin.getConfig().getBoolean("ignore-villagers-stuck-in-doors")) {
@@ -567,7 +567,7 @@ public class LobotomizeStorage {
 
         if (villagerName.contains("nobrain")) {
             return false;
-        } else if (villagerName.contains("alwaysbrain")) {
+        } else if (exemptNames.contains(villagerName)) {
             return true;
         }
 
