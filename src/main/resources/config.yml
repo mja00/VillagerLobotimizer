@@ -21,10 +21,12 @@ only-lobotomize-villagers-with-professions: false
 always-lobotomize-villagers-in-vehicles: false
 
 #The sound to play when a villager restocks. Leave empty ("") for default sounds.
+#A list of sounds can be found at https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html
+#Use the name found in the description column, e.g. "entity.villager.celebrate" for the sound played when a villager restocks.
 restock-sound: ""
 
 #The sound played when a villager is leveled up. Leave empty ("") for no sound.
-level-up-sound: "ENTITY_VILLAGER_CELEBRATE"
+level-up-sound: "entity.villager.celebrate"
 
 #Debug mode. Prints debug messages to the console.
 debug: false

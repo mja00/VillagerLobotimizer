@@ -1,6 +1,9 @@
 package dev.mja00.villagerLobotomizer;
 
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
@@ -134,6 +137,22 @@ public class LobotomizeStorage {
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
+        String levelUpSoundName = plugin.getConfig().getString("level-up-sound");
+        // If soundName is all caps and using underscores convert it to lowercase and replace underscores with periods
+        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
+            this.logger.info("Found legacy sound name in config, converting to new format and saving config.");
+            soundName = soundName.toLowerCase(Locale.ROOT).replace('_', '.');
+            // Write this back out into the config
+            plugin.getConfig().set("restock-sound", soundName);
+            plugin.saveConfig();
+        }
+        // If either sound starts with "minecraft:" we can remove that part as we handle it
+        if (soundName != null && soundName.startsWith("minecraft:")) {
+            soundName = soundName.replace("minecraft:", "");
+        }
+        if (levelUpSoundName != null && levelUpSoundName.startsWith("minecraft:")) {
+            levelUpSoundName = levelUpSoundName.replace("minecraft:", "");
+        }
 
         List<String> configNames = plugin.getConfig().getStringList("always-active-names");
         exemptNames = new HashSet<>();
@@ -144,9 +163,17 @@ public class LobotomizeStorage {
             DOOR_BLOCKS.clear();
         }
 
+        // Get the registry
+        Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
+
         try {
-            this.restockSound = soundName != null && !soundName.isEmpty() ? Sound.valueOf(soundName) : null;
-        } catch (IllegalArgumentException var4) {
+            if (soundName != null && !soundName.isEmpty()) {
+                NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, soundName);
+                this.restockSound = soundRegistry.getOrThrow(key);
+            } else {
+                this.restockSound = null;
+            }
+        } catch (IllegalArgumentException | NoSuchElementException var4) {
             plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
         } catch (Exception badError) {
             plugin.getLogger().warning("Unknown error while trying to get sound name \"" + soundName + "\". Villagers won't have any sounds.");
@@ -155,11 +182,17 @@ public class LobotomizeStorage {
 
 
         try {
-            this.levelUpSound = soundName != null && !soundName.isEmpty() ? Sound.valueOf(soundName) : null;
-        } catch (IllegalArgumentException var5) {
-            plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
+            if (levelUpSoundName != null && !levelUpSoundName.isEmpty()) {
+                NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, levelUpSoundName);
+                // If the sound is not found, it will throw an exception
+                this.levelUpSound = soundRegistry.getOrThrow(key);
+            } else {
+                this.levelUpSound = null;
+            }
+        } catch (IllegalArgumentException | NoSuchElementException var5) {
+            plugin.getLogger().warning("Unknown sound name \"" + levelUpSoundName + "\"");
         } catch (Exception badError) {
-            plugin.getLogger().warning("Unknown error while trying to get sound name \"" + soundName + "\". Villagers won't have any sounds.");
+            plugin.getLogger().warning("Unknown error while trying to get sound name \"" + levelUpSoundName + "\". Villagers won't have any sounds.");
             plugin.getLogger().warning(badError.toString());
         }
 
@@ -298,7 +331,6 @@ public class LobotomizeStorage {
         lastRestockCheckDayTime = dayTime;
         if (gameTimeOverRestockTime) {
             lastRestockGameTime = gameTime;
-            // TODO: Force update demand
             villager.setRestocksToday(0);
         }
 
@@ -336,6 +368,8 @@ public class LobotomizeStorage {
 
             villager.setRecipes(recipes);
             villager.setRestocksToday(villager.getRestocksToday() + 1);
+            // Tell the villager to update pricing of their trades
+            villager.updateDemand();
 
             if (this.restockSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
