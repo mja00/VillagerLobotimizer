@@ -262,6 +262,49 @@ public class LobotomizeStorage {
         }
     }
 
+    private boolean needsToRestock(@NotNull Villager villager) {
+        for (MerchantRecipe recipe : villager.getRecipes()) {
+            if (recipe.getUses() > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean allowedToRestock(@NotNull Villager villager) {
+        int numberOfRestocksToday = villager.getRestocksToday();
+        Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
+        return numberOfRestocksToday == 0 || numberOfRestocksToday > 2 && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
+    }
+
+    private boolean shouldRestock(@NotNull Villager villager) {
+        // Get their last restock game time from their PDC, or 0
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        long lastRestockGameTime = pdc.getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
+        long lastRestockCheckDayTime = pdc.getOrDefault(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, 0L);
+        long gameTime = villager.getWorld().getGameTime();
+        boolean gameTimeOverRestockTime = gameTime > lastRestockGameTime;
+        long dayTime = villager.getWorld().getTime();
+        if (lastRestockCheckDayTime > 0L) {
+            long time = lastRestockCheckDayTime / 24000L;
+            long dayTimeOverRestockTime = dayTime / 24000L;
+            gameTimeOverRestockTime |= dayTimeOverRestockTime > time;
+        }
+        lastRestockCheckDayTime = dayTime;
+        if (gameTimeOverRestockTime) {
+            lastRestockGameTime = gameTime;
+            // TODO: Force update demand
+            villager.setRestocksToday(0);
+        }
+
+        // Store our PDC values
+        pdc.set(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, lastRestockGameTime);
+        pdc.set(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, lastRestockCheckDayTime);
+
+        return allowedToRestock(villager) && needsToRestock(villager);
+
+    }
+
     private void refreshTrades(@NotNull Villager villager) {
         if (!villager.getWorld().isDayTime()) {
             // It's night, do not refresh trades
@@ -274,14 +317,10 @@ public class LobotomizeStorage {
         }
 
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        Long lastRestock = pdc.get(this.key, PersistentDataType.LONG);
-
-        if (lastRestock == null) {
-            lastRestock = 0L;
-        }
+        long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
 
         long now = System.currentTimeMillis();
-        if (now - lastRestock > (this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0)) && villager.getRestocksToday() < 2) {
+        if (now - lastRestock > (this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0)) && shouldRestock(villager)) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
