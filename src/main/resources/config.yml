@@ -1,3 +1,7 @@
+#List of names that will always keep villagers active (case-insensitive)
+always-active-names:
+  - "alwaysbrain"
+
 #Interval between trapped checks, in ticks, for active villagers
 check-interval: 150
 

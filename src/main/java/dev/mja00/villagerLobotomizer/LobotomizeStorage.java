@@ -57,6 +57,7 @@ public class LobotomizeStorage {
     private final NamespacedKey chunkKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
+    private Set<String> exemptNames;
     private long checkInterval;
     private long inactiveCheckInterval;
     private long restockInterval;
@@ -133,6 +134,10 @@ public class LobotomizeStorage {
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
+
+        List<String> configNames = plugin.getConfig().getStringList("always-active-names");
+        exemptNames = new HashSet<>();
+        exemptNames.addAll(configNames);
 
         // Empty our door set if the config is set to false
         if (!plugin.getConfig().getBoolean("ignore-villagers-stuck-in-doors")) {
@@ -601,7 +606,7 @@ public class LobotomizeStorage {
 
         if (villagerName.contains("nobrain")) {
             return false;
-        } else if (villagerName.contains("alwaysbrain")) {
+        } else if (exemptNames.contains(villagerName)) {
             return true;
         }
 
