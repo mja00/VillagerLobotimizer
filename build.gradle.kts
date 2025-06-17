@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.9.5"
+version = "1.10.0"
 
 repositories {
     mavenCentral()
@@ -82,7 +82,8 @@ tasks {
     }
 }
 
-val supportedVersions = listOf("1.21.x")
+// Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
+val supportedVersions = listOf("1.21.6")
 
 hangarPublish {
     publications.register("plugin") {
