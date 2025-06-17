@@ -220,17 +220,39 @@ public final class VillagerLobotomizer extends JavaPlugin {
             }
             Modrinth.ModrinthVersion latestVersion = versions.getFirst();
 
-            // Both versions will be semver, so we can do a simple compare to see if current is less than latest
-            if (currentVersion.compareTo(latestVersion.getVersionNumber()) < 0) {
+            // Compare versions using proper semantic versioning
+            int comparison = compareSemVer(currentVersion, latestVersion.getVersionNumber());
+            if (comparison < 0) {
                 this.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
                 this.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
                 this.needsUpdate = true;
-            } else if (currentVersion.compareTo(latestVersion.getVersionNumber()) > 0) {
+            } else if (comparison > 0) {
                 this.getLogger().info("Hey! How'd you get this build?");
             } else {
                 this.getLogger().info("You are running the latest version of VillagerLobotomizer.");
             }
         });
+    }
+
+    /**
+     * Compares two semantic version strings.
+     * @param version1 First version string
+     * @param version2 Second version string
+     * @return -1 if version1 < version2, 0 if equal, 1 if version1 > version2
+     */
+    private int compareSemVer(String version1, String version2) {
+        String[] v1Parts = version1.split("\\.");
+        String[] v2Parts = version2.split("\\.");
+        
+        int length = Math.max(v1Parts.length, v2Parts.length);
+        for (int i = 0; i < length; i++) {
+            int v1 = i < v1Parts.length ? Integer.parseInt(v1Parts[i]) : 0;
+            int v2 = i < v2Parts.length ? Integer.parseInt(v2Parts[i]) : 0;
+            
+            if (v1 < v2) return -1;
+            if (v1 > v2) return 1;
+        }
+        return 0;
     }
 
     public Team getActiveVillagersTeam() {
