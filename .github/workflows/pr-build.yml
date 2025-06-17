@@ -52,12 +52,35 @@ jobs:
           const artifact = artifacts.data.artifacts.find(a => a.name === 'build-artifacts');
           
           if (artifact) {
-            const comment = `Build successful! 🎉\n\nYou can download the build artifacts [here](${artifact.archive_download_url}).`;
+            const comment = `Build successful! 🎉\n\nYou can download the build artifacts [here](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}).`;
             
-            await github.rest.issues.createComment({
+            // Find existing comment from this workflow
+            const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: comment
             });
+            
+            const existingComment = comments.data.find(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.includes('Build successful!')
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: comment
+              });
+            } else {
+              // Create new comment if none exists
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
           } 
