@@ -138,14 +138,11 @@ public class LobotomizeStorage {
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound");
-        // If soundName is all caps and using underscores convert it to lowercase and replace underscores with periods
-        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
-            this.logger.info("Found legacy sound name in config, converting to new format and saving config.");
-            soundName = soundName.toLowerCase(Locale.ROOT).replace('_', '.');
-            // Write this back out into the config
-            plugin.getConfig().set("restock-sound", soundName);
-            plugin.saveConfig();
-        }
+        
+        // Convert legacy sound names if needed
+        soundName = convertLegacySoundName(soundName, "restock-sound");
+        levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
+        
         // If either sound starts with "minecraft:" we can remove that part as we handle it
         if (soundName != null && soundName.startsWith("minecraft:")) {
             soundName = soundName.replace("minecraft:", "");
@@ -695,5 +692,16 @@ public class LobotomizeStorage {
             }
             activeVillagers.removeAll(toRemove);
         }
+    }
+
+    private String convertLegacySoundName(String soundName, String configKey) {
+        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
+            this.logger.info("Found legacy sound name in config, converting to new format and saving config.");
+            soundName = soundName.toLowerCase(Locale.ROOT).replace('_', '.');
+            // Write this back out into the config
+            this.plugin.getConfig().set(configKey, soundName);
+            this.plugin.saveConfig();
+        }
+        return soundName;
     }
 }
