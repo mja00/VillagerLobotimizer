@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.9.5"
+version = "1.10.0"
 
 repositories {
     mavenCentral()
@@ -21,8 +21,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
-    implementation("net.kyori:adventure-text-serializer-plain:4.19.0")
+    compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
+    implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation(group = "org.bstats", name = "bstats-bukkit", version = "3.1.0")
 }
 
@@ -56,7 +56,7 @@ tasks {
 
     runServer {
         dependsOn(shadowJar)
-        minecraftVersion("1.21.5")
+        minecraftVersion("1.21.6")
     }
 
     build {
@@ -82,7 +82,8 @@ tasks {
     }
 }
 
-val supportedVersions = listOf("1.21.x")
+// Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
+val supportedVersions = listOf("1.21.6")
 
 hangarPublish {
     publications.register("plugin") {

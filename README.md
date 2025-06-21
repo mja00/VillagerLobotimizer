@@ -29,6 +29,10 @@ A Minecraft Paper plugin that improves server performance by turning off village
 ## Configuration
 
 ```yaml
+#List of names that will always keep villagers active (case-insensitive)
+always-active-names:
+  - "alwaysbrain"
+
 #Interval between trapped checks, in ticks, for active villagers
 check-interval: 150
 
@@ -47,11 +51,13 @@ only-lobotomize-villagers-with-professions: false
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
 
-#The sound to play when a villager restocks. Leave empty ("") for profession-specific default sounds.
+#The sound to play when a villager restocks. Leave empty ("") for default sounds.
+#A list of sounds can be found at https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html
+#Use the name found in the description column, e.g. "entity.villager.celebrate" for the sound played when a villager restocks.
 restock-sound: ""
 
 #The sound played when a villager is leveled up. Leave empty ("") for no sound.
-level-up-sound: "ENTITY_VILLAGER_CELEBRATE"
+level-up-sound: "entity.villager.celebrate"
 
 #Debug mode. Prints debug messages to the console.
 debug: false
@@ -65,27 +71,35 @@ ignore-villagers-stuck-in-doors: false
 #To not lobotomize villagers surrounded by non-solid blocks, set this to true.
 ignore-non-solid-blocks: false
 
+#To check if there is a roof above a villager before lobotomizing, set this to true
+check-roof: true
+
+#Create teams for debugging purposes. This will create colored teams for inactive and active villagers. We use this to color their glowing effect.
+create-debug-teams: false
+
 ```
 
 ## Special Villager Names
 
 - Name a villager with "nobrain" to force it to always be lobotomized
-- Name a villager with "alwaysbrain" to prevent it from ever being lobotomized
+- Name a villager with "alwaysbrain" to prevent it from ever being lobotomized (configurable in `always-active-names`)
 
 ## Sound System
 
 The plugin features an enhanced sound system:
-- **Profession-specific restock sounds**: When `restock-sound` is left empty, villagers will play sounds appropriate to their profession when restocking
+- **Default restock sounds**: When `restock-sound` is left empty, villagers will play default sounds when restocking
 - **Customizable sounds**: You can override the default sounds by specifying a custom sound in the configuration
+- **Sound reference**: A complete list of available sounds can be found in the [Paper API documentation](https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html)
 - **Level-up celebrations**: Villagers play celebration sounds when they level up their trades
 
 ## Requirements
 
-- Paper 1.21+
+- Paper (or its forks) 1.21.6+
+- Java Development Kit (JDK) 21 for development
 
 ## Installation
 
-1. Download the latest release from [Modrinth](https://modrinth.com/plugin/villagerlobotomy)
+1. Download the latest release from [Modrinth](https://modrinth.com/plugin/villagerlobotomy) or [Hangar](https://hangar.papermc.io/mja00/VillagerLobotomy)
 2. Place the .jar file in your server's plugins folder
 3. Restart your server or use a plugin manager to load the plugin
 4. Configure the plugin settings in `plugins/VillagerLobotimizer/config.yml` if needed
