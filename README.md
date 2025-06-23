@@ -99,7 +99,7 @@ The plugin features an enhanced sound system:
 
 ## Installation
 
-1. Download the latest release from [Modrinth](https://modrinth.com/plugin/villagerlobotomy) or [Hangar](https://hangar.papermc.io/mja00/VillagerLobotomy)
+1. Download the latest release from [Modrinth](https://modrinth.com/plugin/villagerlobotomy) or [Hangar](https://hangar.papermc.io/mja00/VillagerLobotimizer)
 2. Place the .jar file in your server's plugins folder
 3. Restart your server or use a plugin manager to load the plugin
 4. Configure the plugin settings in `plugins/VillagerLobotimizer/config.yml` if needed
