@@ -728,8 +728,9 @@ public class LobotomizeStorage {
         @NotNull Location villagerPos = villager.getLocation().toBlockLocation();
         List<Villager> nearbyVillagers = villager.getWorld().getNearbyEntities(villagerBoundingBox, e -> e instanceof Villager && e != villager)
                 .stream()
-                .limit(5)
                 .map(e -> (Villager) e)
+                .filter(villagerFilter -> this.wantsToSpawnGolem(villagerFilter, gameTime))
+                .limit(5)
                 .toList();
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         if (nearbyVillagers.size() >= minVillagerAmount) {
