@@ -1,5 +1,6 @@
 plugins {
     java
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.17"
     id("xyz.jpenilla.run-paper") version "2.3.1"
     id("io.papermc.hangar-publish-plugin") version "0.1.2"
     id("com.gradleup.shadow") version "9.0.0-beta13"
@@ -18,10 +19,11 @@ repositories {
         name = "sonatype"
         url = uri("https://oss.sonatype.org/content/groups/public/")
     }
+    gradlePluginPortal()
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.6-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation(group = "org.bstats", name = "bstats-bukkit", version = "3.1.0")
 }
@@ -56,10 +58,11 @@ tasks {
 
     runServer {
         dependsOn(shadowJar)
-        minecraftVersion("1.21.6")
+        minecraftVersion("1.21.7")
     }
 
     build {
+        paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
         dependsOn(shadowJar)
     }
 
