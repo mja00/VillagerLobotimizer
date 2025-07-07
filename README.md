@@ -4,6 +4,8 @@
 
 A Minecraft Paper plugin that improves server performance by turning off villagers' AI when they're confined to trading halls.
 
+![](https://img.shields.io/bstats/players/25704?color=green?label=Players) ![](https://img.shields.io/bstats/servers/25704?color=green?label=Servers)
+
 ## Features
 
 - Automatically detects when villagers are trapped in trading halls
