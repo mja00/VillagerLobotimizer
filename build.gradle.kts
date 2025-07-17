@@ -58,7 +58,7 @@ tasks {
 
     runServer {
         dependsOn(shadowJar)
-        minecraftVersion("1.21.7")
+        minecraftVersion("1.21.8")
     }
 
     build {
@@ -86,7 +86,7 @@ tasks {
 }
 
 // Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
-val supportedVersions = listOf("1.21.6-1.21.7")
+val supportedVersions = listOf("1.21.6-1.21.8")
 
 hangarPublish {
     publications.register("plugin") {
