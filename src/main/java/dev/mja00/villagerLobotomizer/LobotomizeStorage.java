@@ -641,6 +641,11 @@ public class LobotomizeStorage {
             return true;
         }
 
+        // Is the villager currently sleeping? (A sleeping villager doesn't do anything really anyways)
+        if (villager.isSleeping()) {
+            return true;
+        }
+
         // Check vehicle
         if (this.lobotomizePassengers && villager.getVehicle() instanceof Vehicle) {
             return false;
