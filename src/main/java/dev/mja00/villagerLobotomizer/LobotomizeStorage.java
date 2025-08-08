@@ -387,7 +387,7 @@ public class LobotomizeStorage {
             return;
         }
 
-        int expectedLevel = this.getVillagerLevel(villager);
+        int expectedLevel = VillagerUtils.getVillagerLevel(villager);
 
         if (currentLevel < expectedLevel) {
             // We can just set the villager level to the expected level

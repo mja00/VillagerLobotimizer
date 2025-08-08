@@ -86,4 +86,25 @@ public class VillagerUtils {
         }
         return false;
     }
+
+    /**
+     * Returns the villager level based on experience.
+     * https://minecraft.wiki/w/Trading#Level
+     */
+    public static int getVillagerLevel(Villager villager) {
+        int villagerExperience = villager.getVillagerExperience();
+        if (villagerExperience >= 250) {
+            return 5;
+        }
+        if (villagerExperience >= 150) {
+            return 4;
+        }
+        if (villagerExperience >= 70) {
+            return 3;
+        }
+        if (villagerExperience >= 10) {
+            return 2;
+        }
+        return 1;
+    }
 }
