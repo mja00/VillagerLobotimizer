@@ -1,5 +1,7 @@
 package dev.mja00.villagerLobotomizer.utils;
 
+import java.util.Locale;
+
 public class StringUtils {
     /**
      * Compares two semantic version strings (e.g., "1.2.3").
@@ -29,8 +31,8 @@ public class StringUtils {
      * Stateless utility for string conversion only.
      */
     public static String convertLegacySoundNameFormat(String soundName) {
-        if (soundName != null && soundName.equals(soundName.toUpperCase(java.util.Locale.ROOT))) {
-            return soundName.toLowerCase(java.util.Locale.ROOT).replace('_', '.');
+        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
+            return soundName.toLowerCase(Locale.ROOT).replace('_', '.');
         }
         return soundName;
     }
