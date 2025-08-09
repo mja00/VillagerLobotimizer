@@ -297,15 +297,6 @@ public class LobotomizeStorage {
         }
     }
 
-    private boolean needsToRestock(@NotNull Villager villager) {
-        for (MerchantRecipe recipe : villager.getRecipes()) {
-            if (recipe.getUses() > 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private boolean allowedToRestock(@NotNull Villager villager) {
         int numberOfRestocksToday = villager.getRestocksToday();
         Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
@@ -335,8 +326,7 @@ public class LobotomizeStorage {
         pdc.set(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, lastRestockGameTime);
         pdc.set(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, lastRestockCheckDayTime);
 
-        return allowedToRestock(villager) && needsToRestock(villager);
-
+        return allowedToRestock(villager) && VillagerUtils.needsToRestock(villager);
     }
 
     private void refreshTrades(@NotNull Villager villager) {
@@ -472,44 +462,6 @@ public class LobotomizeStorage {
         return xPlusOne || xMinusOne || zPlusOne || zMinusOne;
     }
 
-    private int getVillagerLevel(Villager villager) {
-        int villagerExperience = villager.getVillagerExperience();
-
-        // https://minecraft.wiki/w/Trading#Level
-        if (villagerExperience >= 250) {
-            return 5;
-        }
-        if (villagerExperience >= 150) {
-            return 4;
-        }
-        if (villagerExperience >= 70) {
-            return 3;
-        }
-        if (villagerExperience >= 10) {
-            return 2;
-        }
-        return 1;
-    }
-
-    private void addParticlesAroundSelf(Particle particle, Villager villager) {
-        World world = villager.getWorld();
-        double scale = 1.0;
-        BoundingBox boundingBox = villager.getBoundingBox();
-        // Get a random source
-        for (int i = 0; i < 5; i++) {
-            double d = this.random.nextGaussian() * 0.02;
-            double d1 = this.random.nextGaussian() * 0.02;
-            double d2 = this.random.nextGaussian() * 0.02;
-            // Get a vertical offset above the villager
-            double randomY = villager.getY() + boundingBox.getHeight() * this.random.nextDouble();
-            double xScale = (2.0 * this.random.nextDouble() - 1.0) * scale;
-            double randomX = villager.getX() + boundingBox.getWidthX() * xScale;
-            double zScale = (2.0 * this.random.nextDouble() - 1.0) * scale;
-            double randomZ = villager.getZ() + boundingBox.getWidthZ() * zScale;
-            // Spawn the particle
-            world.spawnParticle(particle, randomX, randomY, randomZ, 1, d, d1, d2, 0.0);
-        }
-    }
 
     public void handleBlockChange(Block block) {
         // Create a list of chunks we'll add to
