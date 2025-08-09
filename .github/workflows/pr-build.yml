@@ -5,8 +5,9 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pull-requests: write
-  actions: write
+  issues: write
 
 jobs:
   build:
@@ -36,10 +37,19 @@ jobs:
         name: build-artifacts
         path: build/libs/
         retention-days: 7
+    
+    - name: Add artifact link to job summary
+      if: success()
+      run: |
+        {
+          echo "Build successful! 🎉"
+          echo
+          echo "You can download the build artifacts from the [run page](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+        } >> $GITHUB_STEP_SUMMARY
 
     - name: Comment PR with artifact link
       uses: actions/github-script@v7
-      if: success()
+      if: success() && github.event.pull_request.head.repo.full_name == github.repository
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         script: |
