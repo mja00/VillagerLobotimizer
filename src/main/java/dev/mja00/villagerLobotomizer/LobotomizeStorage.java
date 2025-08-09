@@ -297,36 +297,12 @@ public class LobotomizeStorage {
         }
     }
 
-    private boolean allowedToRestock(@NotNull Villager villager) {
-        int numberOfRestocksToday = villager.getRestocksToday();
-        Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
-        return numberOfRestocksToday == 0 || numberOfRestocksToday > 2 && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
-    }
-
     private boolean shouldRestock(@NotNull Villager villager) {
-        // Get their last restock game time from their PDC, or 0
-        PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestockGameTime = pdc.getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
-        long lastRestockCheckDayTime = pdc.getOrDefault(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, 0L);
-        long gameTime = villager.getWorld().getGameTime();
-        boolean gameTimeOverRestockTime = gameTime > lastRestockGameTime;
-        long dayTime = villager.getWorld().getTime();
-        if (lastRestockCheckDayTime > 0L) {
-            long time = lastRestockCheckDayTime / 24000L;
-            long dayTimeOverRestockTime = dayTime / 24000L;
-            gameTimeOverRestockTime |= dayTimeOverRestockTime > time;
-        }
-        lastRestockCheckDayTime = dayTime;
-        if (gameTimeOverRestockTime) {
-            lastRestockGameTime = gameTime;
-            villager.setRestocksToday(0);
-        }
-
-        // Store our PDC values
-        pdc.set(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, lastRestockGameTime);
-        pdc.set(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, lastRestockCheckDayTime);
-
-        return allowedToRestock(villager) && VillagerUtils.needsToRestock(villager);
+        return dev.mja00.villagerLobotomizer.utils.VillagerUtils.shouldRestock(
+            villager,
+            new NamespacedKey(this.plugin, "lastRestockGameTime"),
+            new NamespacedKey(this.plugin, "lastRestockCheckDayTime")
+        );
     }
 
     private void refreshTrades(@NotNull Villager villager) {
