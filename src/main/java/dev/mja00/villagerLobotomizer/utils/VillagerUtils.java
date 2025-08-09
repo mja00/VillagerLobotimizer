@@ -3,6 +3,7 @@ package dev.mja00.villagerLobotomizer.utils;
 import org.bukkit.*;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.util.BoundingBox;
 
 import java.util.Collections;
@@ -60,13 +61,16 @@ public class VillagerUtils {
     /**
      * Check for a job site in a 1 block adjacent radius (including diagonals)
      * This checks in a 2 block height box, for a total of 3x2x3 box
+     *
      * @param villager Villager entity the check is centered around
      * @return
      */
-    public static boolean isJobSiteNearby (Villager villager) {
+    public static boolean isJobSiteNearby(Villager villager) {
         Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
 
-        if (jobSite == Material.AIR) return false;
+        if (jobSite == Material.AIR) {
+            return false;
+        }
 
         Location location = villager.getLocation();
         int[] yOffsets = {0, 1}; // feet and body levels
@@ -74,7 +78,9 @@ public class VillagerUtils {
             int checkY = location.getBlockY() + yOffset;
             for (int x = -1; x <= 1; x++) {
                 for (int z = -1; z <= 1; z++) {
-                    if (x == 0 && z == 0) continue;
+                    if (x == 0 && z == 0) {
+                        continue;
+                    }
 
                     int checkX = location.getBlockX() + x;
                     int checkZ = location.getBlockZ() + z;
@@ -111,6 +117,7 @@ public class VillagerUtils {
 
     /**
      * Checks if a villager needs to restock by looking at their trade usage
+     *
      * @param villager The villager to check
      * @return true if any of the villager's trades have been used
      */
@@ -125,6 +132,7 @@ public class VillagerUtils {
 
     /**
      * Adds particles around a villager for visual effects
+     *
      * @param particle The type of particle to spawn
      * @param villager The villager to spawn particles around
      */
@@ -163,22 +171,25 @@ public class VillagerUtils {
      * Determines if a villager should restock, updating persistent data as needed.
      */
     public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockGameTimeKey, NamespacedKey lastRestockCheckDayTimeKey) {
-        org.bukkit.persistence.PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestockGameTime = pdc.getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long gameTime = villager.getWorld().getGameTime();
         boolean gameTimeOverRestockTime = gameTime > lastRestockGameTime;
         long dayTime = villager.getWorld().getTime();
+
         if (lastRestockCheckDayTime > 0L) {
             long time = lastRestockCheckDayTime / 24000L;
             long dayTimeOverRestockTime = dayTime / 24000L;
             gameTimeOverRestockTime |= dayTimeOverRestockTime > time;
         }
+
         lastRestockCheckDayTime = dayTime;
         if (gameTimeOverRestockTime) {
             lastRestockGameTime = gameTime;
             villager.setRestocksToday(0);
         }
+
         // Store our PDC values
         pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, lastRestockGameTime);
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, lastRestockCheckDayTime);
