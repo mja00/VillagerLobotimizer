@@ -652,13 +652,12 @@ public class LobotomizeStorage {
     }
 
     private String convertLegacySoundName(String soundName, String configKey) {
-        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
+        String converted = dev.mja00.villagerLobotomizer.utils.StringUtils.convertLegacySoundNameFormat(soundName);
+        if (!converted.equals(soundName)) {
             this.logger.info("Found legacy sound name in config, converting to new format and saving config.");
-            soundName = soundName.toLowerCase(Locale.ROOT).replace('_', '.');
-            // Write this back out into the config
-            this.plugin.getConfig().set(configKey, soundName);
+            this.plugin.getConfig().set(configKey, converted);
             this.plugin.saveConfig();
         }
-        return soundName;
+        return converted;
     }
 }
