@@ -1,9 +1,9 @@
 package dev.mja00.villagerLobotomizer;
 
+import dev.mja00.villagerLobotomizer.utils.StringUtils;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
-import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
@@ -18,7 +18,6 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.util.BoundingBox;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -55,35 +54,16 @@ public class LobotomizeStorage {
      */
     private static final EnumSet<Material> PROFESSION_BLOCKS;
     private static final EnumSet<Material> DOOR_BLOCKS;
-    private final VillagerLobotomizer plugin;
-    private final NamespacedKey key;
-    private final NamespacedKey chunkKey;
-    private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
-    private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
-    private Set<String> exemptNames;
-    private long checkInterval;
-    private long inactiveCheckInterval;
-    private long restockInterval;
-    private long restockRandomRange;
-    private boolean onlyProfessions;
-    private boolean lobotomizePassengers;
-    private boolean checkRoof;
-    private Sound restockSound;
-    private Sound levelUpSound;
-    private Logger logger;
-    private Random random = new Random();
-    // Used to track what chunks we need to trigger updates for
-    private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
 
     static {
         IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
         IMPASSABLE_FLOOR = EnumSet.noneOf(Material.class);
         IMPASSABLE_TALL = EnumSet.noneOf(Material.class);
         DOOR_BLOCKS = EnumSet.noneOf(Material.class);
-        for(Material m : Material.values()) {
+        for (Material m : Material.values()) {
             if (m.isOccluding()) {
                 if (m.name().contains("_CARPET")) {
-                    System.out.println("Adding " + m.toString() + " to IMPASSABLE_REGULAR");
+                    System.out.println("Adding " + m + " to IMPASSABLE_REGULAR");
                 }
                 IMPASSABLE_REGULAR.add(m);
             }
@@ -126,6 +106,26 @@ public class LobotomizeStorage {
         PROFESSION_BLOCKS.add(Material.GRINDSTONE);
     }
 
+    private final VillagerLobotomizer plugin;
+    private final NamespacedKey key;
+    private final NamespacedKey chunkKey;
+    private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
+    private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
+    // Used to track what chunks we need to trigger updates for
+    private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
+    private final Set<String> exemptNames;
+    private final long checkInterval;
+    private final long inactiveCheckInterval;
+    private final long restockInterval;
+    private final long restockRandomRange;
+    private final boolean onlyProfessions;
+    private final boolean lobotomizePassengers;
+    private final boolean checkRoof;
+    private Sound restockSound;
+    private Sound levelUpSound;
+    private final Logger logger;
+    private final Random random = new Random();
+
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
@@ -138,11 +138,11 @@ public class LobotomizeStorage {
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         String soundName = plugin.getConfig().getString("restock-sound");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound");
-        
+
         // Convert legacy sound names if needed
         soundName = convertLegacySoundName(soundName, "restock-sound");
         levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
-        
+
         // If either sound starts with "minecraft:" we can remove that part as we handle it
         if (soundName != null && soundName.startsWith("minecraft:")) {
             soundName = soundName.replace("minecraft:", "");
@@ -297,46 +297,12 @@ public class LobotomizeStorage {
         }
     }
 
-    private boolean needsToRestock(@NotNull Villager villager) {
-        for (MerchantRecipe recipe : villager.getRecipes()) {
-            if (recipe.getUses() > 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean allowedToRestock(@NotNull Villager villager) {
-        int numberOfRestocksToday = villager.getRestocksToday();
-        Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
-        return numberOfRestocksToday == 0 || numberOfRestocksToday > 2 && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
-    }
-
     private boolean shouldRestock(@NotNull Villager villager) {
-        // Get their last restock game time from their PDC, or 0
-        PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestockGameTime = pdc.getOrDefault(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, 0L);
-        long lastRestockCheckDayTime = pdc.getOrDefault(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, 0L);
-        long gameTime = villager.getWorld().getGameTime();
-        boolean gameTimeOverRestockTime = gameTime > lastRestockGameTime;
-        long dayTime = villager.getWorld().getTime();
-        if (lastRestockCheckDayTime > 0L) {
-            long time = lastRestockCheckDayTime / 24000L;
-            long dayTimeOverRestockTime = dayTime / 24000L;
-            gameTimeOverRestockTime |= dayTimeOverRestockTime > time;
-        }
-        lastRestockCheckDayTime = dayTime;
-        if (gameTimeOverRestockTime) {
-            lastRestockGameTime = gameTime;
-            villager.setRestocksToday(0);
-        }
-
-        // Store our PDC values
-        pdc.set(new NamespacedKey(this.plugin, "lastRestockGameTime"), PersistentDataType.LONG, lastRestockGameTime);
-        pdc.set(new NamespacedKey(this.plugin, "lastRestockCheckDayTime"), PersistentDataType.LONG, lastRestockCheckDayTime);
-
-        return allowedToRestock(villager) && needsToRestock(villager);
-
+        return VillagerUtils.shouldRestock(
+                villager,
+                new NamespacedKey(this.plugin, "lastRestockGameTime"),
+                new NamespacedKey(this.plugin, "lastRestockCheckDayTime")
+        );
     }
 
     private void refreshTrades(@NotNull Villager villager) {
@@ -387,7 +353,7 @@ public class LobotomizeStorage {
             return;
         }
 
-        int expectedLevel = this.getVillagerLevel(villager);
+        int expectedLevel = VillagerUtils.getVillagerLevel(villager);
 
         if (currentLevel < expectedLevel) {
             // We can just set the villager level to the expected level
@@ -429,8 +395,8 @@ public class LobotomizeStorage {
      * If onlyTallBlocks is true, it will only check for tall blocks.
      * If false, it will check for all blocks in the set.
      *
-     * @param set The set of materials to check against
-     * @param b The block to test
+     * @param set            The set of materials to check against
+     * @param b              The block to test
      * @param onlyTallBlocks If true, only checks tall blocks
      * @return true if the block is impassable, false otherwise
      */
@@ -472,44 +438,6 @@ public class LobotomizeStorage {
         return xPlusOne || xMinusOne || zPlusOne || zMinusOne;
     }
 
-    private int getVillagerLevel(Villager villager) {
-        int villagerExperience = villager.getVillagerExperience();
-
-        // https://minecraft.wiki/w/Trading#Level
-        if (villagerExperience >= 250) {
-            return 5;
-        }
-        if (villagerExperience >= 150) {
-            return 4;
-        }
-        if (villagerExperience >= 70) {
-            return 3;
-        }
-        if (villagerExperience >= 10) {
-            return 2;
-        }
-        return 1;
-    }
-
-    private void addParticlesAroundSelf(Particle particle, Villager villager) {
-        World world = villager.getWorld();
-        double scale = 1.0;
-        BoundingBox boundingBox = villager.getBoundingBox();
-        // Get a random source
-        for (int i = 0; i < 5; i++) {
-            double d = this.random.nextGaussian() * 0.02;
-            double d1 = this.random.nextGaussian() * 0.02;
-            double d2 = this.random.nextGaussian() * 0.02;
-            // Get a vertical offset above the villager
-            double randomY = villager.getY() + boundingBox.getHeight() * this.random.nextDouble();
-            double xScale = (2.0 * this.random.nextDouble() - 1.0) * scale;
-            double randomX = villager.getX() + boundingBox.getWidthX() * xScale;
-            double zScale = (2.0 * this.random.nextDouble() - 1.0) * scale;
-            double randomZ = villager.getZ() + boundingBox.getWidthZ() * zScale;
-            // Spawn the particle
-            world.spawnParticle(particle, randomX, randomY, randomZ, 1, d, d1, d2, 0.0);
-        }
-    }
 
     public void handleBlockChange(Block block) {
         // Create a list of chunks we'll add to
@@ -605,19 +533,19 @@ public class LobotomizeStorage {
         Entity[] entities = chunk.getEntities();
         for (Entity entity : entities) {
             if (entity instanceof Villager villager) {
-               if (inactiveVillagers.contains(villager)) {
-                   if (processVillager(villager, false)) {
-                       if (plugin.isDebugging()) {
-                           logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
-                       }
-                   }
-               } else if (activeVillagers.contains(villager)) {
-                     if (processVillager(villager, true)) {
-                          if (plugin.isDebugging()) {
+                if (inactiveVillagers.contains(villager)) {
+                    if (processVillager(villager, false)) {
+                        if (plugin.isDebugging()) {
                             logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
-                          }
-                     }
-               }
+                        }
+                    }
+                } else if (activeVillagers.contains(villager)) {
+                    if (processVillager(villager, true)) {
+                        if (plugin.isDebugging()) {
+                            logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
+                        }
+                    }
+                }
             }
         }
     }
@@ -669,6 +597,16 @@ public class LobotomizeStorage {
         return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);
     }
 
+    private String convertLegacySoundName(String soundName, String configKey) {
+        String converted = StringUtils.convertLegacySoundNameFormat(soundName);
+        if (!converted.equals(soundName)) {
+            this.logger.info("Found legacy sound name in config, converting to new format and saving config.");
+            this.plugin.getConfig().set(configKey, converted);
+            this.plugin.saveConfig();
+        }
+        return converted;
+    }
+
     public final class ActivatorTask implements Runnable {
         public ActivatorTask() {
         }
@@ -697,16 +635,5 @@ public class LobotomizeStorage {
             }
             activeVillagers.removeAll(toRemove);
         }
-    }
-
-    private String convertLegacySoundName(String soundName, String configKey) {
-        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
-            this.logger.info("Found legacy sound name in config, converting to new format and saving config.");
-            soundName = soundName.toLowerCase(Locale.ROOT).replace('_', '.');
-            // Write this back out into the config
-            this.plugin.getConfig().set(configKey, soundName);
-            this.plugin.saveConfig();
-        }
-        return soundName;
     }
 }
