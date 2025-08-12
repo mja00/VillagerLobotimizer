@@ -6,6 +6,14 @@ import io.papermc.paper.registry.RegistryKey;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.SpawnUtil;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.sensing.GolemSensor;
+import net.minecraft.world.phys.AABB;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Ageable;
@@ -13,6 +21,7 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
+import org.bukkit.event.entity.CreatureSpawnEvent;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
@@ -280,6 +289,8 @@ public class LobotomizeStorage {
         } else {
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
+
+            this.attemptGolemSpawn(villager, villager.getWorld().getGameTime(), 5);
 
             if (active) {
                 villager.setAware(false);
@@ -708,5 +719,53 @@ public class LobotomizeStorage {
             this.plugin.saveConfig();
         }
         return soundName;
+    }
+
+    private void attemptGolemSpawn(Villager villager, long gameTime, int minVillagerAmount) {
+        if (!wantsToSpawnGolem(villager, gameTime)) {
+            // If we don't want to spawn a golem, just return
+            return;
+        }
+        // Usually the game would check if we're actively talk to another villager and if we've slept recently
+        // Since the lobotomized villager cannot do these, we'll just assume that they've already met those requirements
+        BoundingBox villagerBoundingBox = villager.getBoundingBox().expand(10.0, 10.0, 10.0);
+        ServerLevel serverLevel = (ServerLevel) villager.getWorld();
+        @NotNull Location villagerPos = villager.getLocation().toBlockLocation();
+        List<Villager> nearbyVillagers = villager.getWorld().getNearbyEntities(villagerBoundingBox, e -> e instanceof Villager && e != villager)
+                .stream()
+                .map(e -> (Villager) e)
+                .filter(villagerFilter -> this.wantsToSpawnGolem(villagerFilter, gameTime))
+                .limit(5)
+                .toList();
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        if (nearbyVillagers.size() >= minVillagerAmount) {
+            // Try to spawn a golem
+            BlockPos pos = new BlockPos(villagerPos.getBlockX(), villagerPos.getBlockY(), villagerPos.getBlockZ());
+            // We want to spawn it in a 8 block range, with a 6 y offset with 10 attempts
+            boolean didSpawn = SpawnUtil.trySpawnMob(EntityType.IRON_GOLEM, EntitySpawnReason.MOB_SUMMONED, serverLevel, pos, 10, 8, 6, SpawnUtil.Strategy.LEGACY_IRON_GOLEM, false, CreatureSpawnEvent.SpawnReason.VILLAGE_DEFENSE, () -> {
+              pdc.set(new NamespacedKey(plugin, "lastGolemSpawn"), PersistentDataType.LONG, gameTime);
+            }).isPresent();
+            if (didSpawn) {
+                // Add to our villager's PDC when the last golem was spawned
+                nearbyVillagers.forEach((villager1) -> {
+                    PersistentDataContainer villagerPDC = villager1.getPersistentDataContainer();
+                    villagerPDC.set(new NamespacedKey(plugin, "lastGolemSpawn"), PersistentDataType.LONG, gameTime);
+                });
+            }
+        }
+    }
+
+    private boolean wantsToSpawnGolem(Villager villager, long gameTime) {
+        // Usually in Vanilla their memory of a spawn lasts 599 ticks (or 30 seconds)
+        // However memory doesn't work for lobotomized villagers, instead we store the last spawn time in their PDC
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        long lastGolemSpawn = pdc.getOrDefault(new NamespacedKey(plugin, "lastGolemSpawn"), PersistentDataType.LONG, 0L);
+        // If the last golem spawn time was more than 599 ticks ago, then we can attempt a spawn
+        if (gameTime - lastGolemSpawn > 599L) {
+            // Clear the PDC value so we can spawn a new golem
+            pdc.remove(new NamespacedKey(plugin, "lastGolemSpawn"));
+            return true;
+        }
+        return false;
     }
 }
