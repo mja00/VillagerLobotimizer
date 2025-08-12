@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+---
+## Project structure and entry points
+
+- **Main plugin class**: [src/main/java/dev/mja00/villagerLobotomizer/VillagerLobotomizer.java](mdc:src/main/java/dev/mja00/villagerLobotomizer/VillagerLobotomizer.java)
+  - Initializes config, update check, storage, events, commands (via Paper lifecycle), metrics, and optional debug teams
+  - Cleans up storage and debug teams on disable
+
+- **Command registration (Brigadier)**: [src/main/java/dev/mja00/villagerLobotomizer/LobotomizeCommand.java](mdc:src/main/java/dev/mja00/villagerLobotomizer/LobotomizeCommand.java)
+  - Registered in lifecycle `LifecycleEvents.COMMANDS`
+  - Permission-gated by `lobotomy.command`
+
+- **Entity and chunk events**: [src/main/java/dev/mja00/villagerLobotomizer/listeners/EntityListener.java](mdc:src/main/java/dev/mja00/villagerLobotomizer/listeners/EntityListener.java)
+  - Tracks villagers on add/remove; monitors block place/break and chunk load/unload for debug
+
+- **Core state and logic**: [src/main/java/dev/mja00/villagerLobotomizer/LobotomizeStorage.java](mdc:src/main/java/dev/mja00/villagerLobotomizer/LobotomizeStorage.java)
+  - Maintains sets for "active" and "inactive" villagers
+  - Periodic tasks: deactivator, activator, and chunk-change processing (intervals from config)
+  - Lobotomy decision: name overrides, sleeping status, vehicle state, profession, roof, and path cardinality
+  - Trade refresh and level-up logic using PDC keys and Paper registries
+
+- **Utilities**: [src/main/java/dev/mja00/villagerLobotomizer/utils/VillagerUtils.java](mdc:src/main/java/dev/mja00/villagerLobotomizer/utils/VillagerUtils.java)
+  - Profession to workstation map and default sounds; local job-site detection
+
+- **Update checker**: [src/main/java/dev/mja00/villagerLobotomizer/objects/Modrinth.java](mdc:src/main/java/dev/mja00/villagerLobotomizer/objects/Modrinth.java)
+  - JSON model for Modrinth API; used asynchronously in main class
+
+- **Plugin descriptor**: [src/main/resources/plugin.yml](mdc:src/main/resources/plugin.yml)
+  - Declares `main`, `api-version`, metadata, and `lobotomy.command` permission
+
+- **Configuration**: [src/main/resources/config.yml](mdc:src/main/resources/config.yml)
+  - Intervals, toggles, sound keys, and debug options; values are read in `VillagerLobotomizer` and `LobotomizeStorage`
+
+- **Build and tooling**: [build.gradle.kts](mdc:build.gradle.kts), [settings.gradle.kts](mdc:settings.gradle.kts)
+  - JDK 21 toolchain, Paperweight userdev, Run-Paper for dev server, Shadow for distribution, Hangar publish
+
+### Invariants and conventions
+
+- Do not block the main thread. All network I/O (e.g., Modrinth check) is asynchronous.
+- Always clean up: villagers in `inactive` are made aware on shutdown; scoreboard teams are unregistered on disable.
+- Add new commands via Brigadier and register inside `LifecycleEvents.COMMANDS`; update permissions in `plugin.yml` when needed.
+- Any new config-driven behavior must read from [config.yml](mdc:src/main/resources/config.yml) and avoid hardcoding constants.
+- When introducing persistent flags, prefer PDC with `NamespacedKey(plugin, key)` to avoid collisions.

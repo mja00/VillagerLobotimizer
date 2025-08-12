@@ -1,0 +1,36 @@
+---
+description: Paper API best practices for this plugin
+globs: src/main/java/**/*.java
+---
+## Paper API best practices
+
+- **No NMS/CraftBukkit**
+  - Never import or use `net.minecraft.*`, `org.bukkit.craftbukkit.*`, or Mojang-mapped NMS classes. Do not reflect into NMS.
+  - Use only Paper/Bukkit API and Adventure. If a capability is missing, prefer API-friendly alternatives or upstream API requests.
+
+- **Threading**
+  - Do not touch Bukkit entities/world off the main thread. Use async only for I/O (e.g., update checks) and return results to main thread if needed.
+
+- **Scheduling**
+  - Use `Bukkit.getScheduler().runTaskTimer(plugin, ...)` for periodic tasks and keep work small per tick.
+  - Reuse existing tasks in `LobotomizeStorage` for villager processing; avoid adding redundant tick loops.
+
+- **Commands (Brigadier)**
+  - Define literals/arguments in `LobotomizeCommand`; register in `LifecycleEvents.COMMANDS` from the main plugin class.
+  - Gate execution via permission checks and provide clear user feedback.
+
+- **Persistent Data**
+  - Store villager state via PDC keys with `NamespacedKey(plugin, key)`. Keep keys stable; avoid renaming without migration.
+
+- **Registries and sounds**
+  - Resolve sounds via Paper `RegistryAccess` and `RegistryKey.SOUND_EVENT`; accept vanilla keys without the `minecraft:` prefix.
+
+- **Chunks and entities**
+  - Check `chunk.isLoaded()` before work; skip or defer otherwise.
+  - Use `Chunk#getEntities()` when processing per-chunk and keep iteration efficient.
+
+- **Config-driven behavior**
+  - Read toggles and intervals from [config.yml](mdc:src/main/resources/config.yml). Expose debug flags and reduce log noise unless `debug` or `chunk-debug` are enabled.
+
+- **Shutdown and cleanup**
+  - Ensure `onDisable` restores villager awareness and unregisters teams to avoid lingering side effects across reloads.

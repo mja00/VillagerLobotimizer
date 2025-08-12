@@ -1,0 +1,44 @@
+---
+description: Gradle build, run, and publish guidance for the Paper plugin
+globs: build.gradle.kts,settings.gradle.kts,gradle.properties
+---
+## Build and run
+
+- Use the Gradle wrapper.
+
+```bash
+./gradlew build
+```
+
+- Start a dev server with the plugin installed:
+
+```bash
+./gradlew runServer
+```
+
+- The run task uses Paper `1.21.8` and depends on the shaded jar. Artifacts are reobfuscated for production during `build`.
+
+### Dependencies and shading
+
+- Dependencies are declared in [build.gradle.kts](mdc:build.gradle.kts). Shadow is configured to:
+  - minimize the jar
+  - relocate `org.bstats` to `dev.mja00.villagerLobotomizer.bstats`
+- If adding libraries that must ship in the jar, include them under `shadowJar { dependencies { include(...) } }` and relocate as needed.
+
+### Java toolchain
+
+- Target Java 21; toolchain is auto-configured. Avoid APIs above 21.
+
+### Publishing (Hangar)
+
+- Publish with:
+
+```bash
+./gradlew publishPluginPublicationToHangar
+```
+
+- Requires `HANGAR_API_KEY` env var. Tagged commits matching `version` publish as Release; otherwise Snapshot with short commit hash.
+
+### Version coordination
+
+- Keep [src/main/resources/plugin.yml](mdc:src/main/resources/plugin.yml) `version` aligned with Gradle `version`. Resource filtering is configured; prefer replacing hardcoded versions with `${version}`.

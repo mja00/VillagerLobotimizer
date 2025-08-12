@@ -1,0 +1,34 @@
+---
+globs: src/main/java/**/*.java
+description: Java code style and API usage guidance for this repository (Paper plugin, JDK 21)
+---
+## Java style and API usage
+
+- **Language level**: Target JDK 21. Use var sparingly; prefer explicit types in public APIs and complex locals.
+- **Naming**: Use descriptive names; avoid abbreviations. Classes are nouns, methods are verbs. Constants are `UPPER_SNAKE_CASE`.
+- **No NMS/CraftBukkit**: Do not depend on `net.minecraft.*` or `org.bukkit.craftbukkit.*` (including reflection into them). Stick to Paper/Bukkit and Adventure APIs to ease Minecraft version upgrades.
+- **Nullability**: Use JetBrains annotations (`@NotNull`, `@Nullable`) for parameters and returns when helpful.
+- **Collections**: Prefer interface types (e.g., `Set`, `Map`) for fields and parameters. Use `Collections.newSetFromMap(new ConcurrentHashMap<>())` when concurrent.
+- **Concurrency**: Paper/Bukkit is single-threaded. Only perform non-blocking, thread-safe operations off the main thread; return to main thread for entity/world interactions.
+- **Early returns**: Guard clauses for invalid/edge cases to reduce nesting.
+- **Logging**: Use `plugin.getLogger()`; gate noisy logs behind `debug` flags from config.
+- **Exceptions**: Do not swallow exceptions silently. Log warnings and continue where safe.
+- **PDC usage**: Use `NamespacedKey(plugin, key)`; read with defaults; write back after mutation.
+- **Registries**: Resolve sounds via Paper `RegistryAccess` with `NamespacedKey.MINECRAFT` for vanilla keys.
+
+### Paper/Bukkit specifics
+
+- Run network or long-running tasks asynchronously via `Bukkit.getScheduler().runTaskAsynchronously(plugin, ...)`.
+- Interact with entities, chunks, or world state only on the main thread.
+- Use Brigadier for commands; perform permission checks and helpful messages.
+- When scheduling repeating tasks, prefer `runTaskTimer(plugin, delay, period)` and store minimal state in task closures.
+
+### Code formatting
+
+- UTF-8 encoding; wrap long lines; keep imports explicit; avoid wildcard imports.
+- Place short, high-value comments above complex logic blocks; do not narrate trivial code.
+
+### Testing and safety
+
+- Validate config values (e.g., non-negative intervals); provide sensible defaults via `get*` overloads.
+- For new features, gate behind config flags and add to [config.yml](mdc:src/main/resources/config.yml) with comments.
