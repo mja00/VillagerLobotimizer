@@ -9,6 +9,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.MultiLineChart;
+import org.bstats.charts.SimplePie;
 import org.bstats.charts.SingleLineChart;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
@@ -178,6 +179,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
         metrics.addCustomChart(new SingleLineChart("active_villagers", () -> getStorage().getActive().size()));
         metrics.addCustomChart(new SingleLineChart("inactive_villagers", () -> getStorage().getLobotomized().size()));
         metrics.addCustomChart(new SingleLineChart("total_villagers", () -> getStorage().getActive().size() + getStorage().getLobotomized().size()));
+        metrics.addCustomChart(new SimplePie("is_folia", () -> this.isFolia ? "yes" : "no"));
     }
 
     @Override
