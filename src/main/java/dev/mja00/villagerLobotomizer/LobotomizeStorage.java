@@ -578,7 +578,9 @@ public class LobotomizeStorage {
 
         // Is our feet in water? (No idea if #isSwimming() works when lobotomized)
         Block feetBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ());
-        if (feetBlock.getType() == Material.WATER) {
+        Block headBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 1, villagerLoc.getBlockZ());
+        if (feetBlock.getType() == Material.WATER || headBlock.getType() == Material.WATER) {
+            // If the feet or head block is water, we can consider the villager active
             return true;
         }
 
