@@ -1,7 +1,6 @@
 package dev.mja00.villagerLobotomizer;
 
 import com.google.gson.Gson;
-import com.tcoded.folialib.FoliaLib;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
@@ -11,6 +10,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.MultiLineChart;
 import org.bstats.charts.SingleLineChart;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.plugin.Plugin;
@@ -35,7 +35,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
-    private FoliaLib foliaLib;
+    private boolean isFolia;
     static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
     static final HttpClient client = HttpClient.newHttpClient();
     static final Gson gson = new Gson();
@@ -55,8 +55,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
         } else {
             this.getLogger().info("Update checker is disabled. You will not be notified of new versions.");
         }
-        this.foliaLib = new FoliaLib(this);
-        if (this.foliaLib.isFolia()) {
+        // Detect if we're running on Folia
+        this.isFolia = this.detectFolia();
+        if (this.isFolia) {
             this.getLogger().info("Folia detected, using per-entity schedulers.");
         }
         this.checkForUpdates();
@@ -137,7 +138,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     private void createDebuggingTeams() {
         // Folia doesn't support scoreboard teams (global state that can't be regionized)
-        if (this.foliaLib.isFolia()) {
+        if (this.isFolia) {
             this.getLogger().warning("Debug teams are not supported on Folia - scoreboard operations are not available.");
             this.getLogger().warning("Debug mode will still work, but villagers will not glow or be added to teams.");
             return;
@@ -186,11 +187,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
         if (this.storage != null) {
             this.storage.flush();
         }
-        if (this.foliaLib != null) {
-            this.foliaLib.getScheduler().cancelAllTasks();
-        }
+        // No need to cancel tasks manually - Paper handles this automatically on disable
         // If either of the teams are not null, we need to remove them (only on non-Folia servers)
-        if (!this.foliaLib.isFolia()) {
+        if (!this.isFolia) {
             Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
             clearTeam(activeTeam);
             Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
@@ -226,7 +225,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
         this.debugging = debugging;
 
         // Skip team operations on Folia
-        if (!this.foliaLib.isFolia()) {
+        if (!this.isFolia) {
             // If debugging is being set to false, we need to clean up the teams
             if (!debugging) {
                 Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
@@ -261,9 +260,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
         return this.storage;
     }
 
-    public FoliaLib getFoliaLib() {
-        return this.foliaLib;
-    }
 
     private void checkForUpdates() {
         // We need to GET the url. It returns an array of objects for each version
@@ -271,7 +267,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
         String currentVersion = this.getPluginMeta().getVersion();
         this.getLogger().info("Checking for updates...");
         VillagerLobotomizer plugin = this;
-        this.foliaLib.getScheduler().runAsync(task -> {
+        Bukkit.getAsyncScheduler().runNow(this, (task) -> {
             String responseBody = null;
             CompletableFuture<HttpResponse<String>> response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
             try {
@@ -321,6 +317,22 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public Team getInactiveVillagersTeam() {
         return this.inactiveVillagersTeam;
+    }
+
+    public boolean isFolia() {
+        return this.isFolia;
+    }
+
+    /**
+     * Detects if the server is running Folia
+     */
+    private boolean detectFolia() {
+        try {
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     public boolean isDisableChunkVillagerUpdate() {

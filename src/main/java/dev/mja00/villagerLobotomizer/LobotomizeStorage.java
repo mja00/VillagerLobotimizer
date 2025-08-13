@@ -4,6 +4,7 @@ import dev.mja00.villagerLobotomizer.utils.StringUtils;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
@@ -114,8 +115,8 @@ public class LobotomizeStorage {
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     // Used to track what chunks we need to trigger updates for
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
-    // Track villagers that have scheduled tasks (FoliaLib handles task management internally)
-    private final Set<UUID> scheduledVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    // Track per-villager scheduled tasks using Paper's native schedulers
+    private final Map<UUID, ScheduledTask> villagerTasks = new ConcurrentHashMap<>();
     private final Set<String> exemptNames;
     private final long checkInterval;
     private final long inactiveCheckInterval;
@@ -199,8 +200,8 @@ public class LobotomizeStorage {
 
         this.key = new NamespacedKey(plugin, "lastRestock");
         this.chunkKey = new NamespacedKey(plugin, "reloadProfessions");
-        // Only keep the chunk processing timer as it doesn't modify entities directly
-        plugin.getFoliaLib().getScheduler().runTimer(task -> this.processChunks(), 5L, 5L);
+        // Use Paper's GlobalRegionScheduler for chunk processing (doesn't access entities directly)
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, (task) -> this.processChunks(), 5L, 5L);
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -219,13 +220,16 @@ public class LobotomizeStorage {
         
         this.activeVillagers.add(villager);
         
-        // Schedule per-villager task for Folia compatibility
+        // Schedule per-villager task using Paper's EntityScheduler
         try {
-            this.plugin.getFoliaLib().getScheduler().runAtEntity(villager, (task) -> {
-                this.scheduleVillagerTimer(villager);
-            });
+            ScheduledTask task = villager.getScheduler().runAtFixedRate(this.plugin, 
+                (scheduledTask) -> this.processVillagerSafely(villager), 
+                null, // No initial delay
+                this.checkInterval, 
+                this.checkInterval
+            );
             
-            this.scheduledVillagers.add(villager.getUniqueId());
+            this.villagerTasks.put(villager.getUniqueId(), task);
         } catch (IllegalPluginAccessException e) {
             // Plugin disabled during scheduling, remove from active
             this.activeVillagers.remove(villager);
@@ -240,8 +244,11 @@ public class LobotomizeStorage {
         boolean removed = false;
         boolean active = false;
         
-        // Remove from scheduled villagers tracking
-        this.scheduledVillagers.remove(villager.getUniqueId());
+        // Cancel the per-villager task
+        ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+        if (task != null && !task.isCancelled()) {
+            task.cancel();
+        }
         
         if (this.activeVillagers.remove(villager)) {
             removed = true;
@@ -250,10 +257,10 @@ public class LobotomizeStorage {
 
         if (this.inactiveVillagers.remove(villager)) {
             removed = true;
-            // Use entity scheduler for thread safety
-            this.plugin.getFoliaLib().getScheduler().runAtEntity(villager, (task) -> {
+            // Use Paper's EntityScheduler for thread safety
+            villager.getScheduler().run(this.plugin, (scheduledTask) -> {
                 villager.setAware(true);
-            });
+            }, null);
         }
 
         if (this.plugin.isDebugging()) {
@@ -269,8 +276,13 @@ public class LobotomizeStorage {
         // Set shutdown flag to prevent new tasks from being scheduled
         this.shuttingDown = true;
         
-        // Clear scheduled villagers tracking
-        this.scheduledVillagers.clear();
+        // Cancel all per-villager tasks
+        for (ScheduledTask task : this.villagerTasks.values()) {
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
+            }
+        }
+        this.villagerTasks.clear();
         
         // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
         this.inactiveVillagers.removeIf((villager) -> {
@@ -282,83 +294,6 @@ public class LobotomizeStorage {
         });
     }
     
-    /**
-     * Sets up a recurring timer for a specific villager using entity scheduling
-     */
-    private void scheduleVillagerTimer(@NotNull Villager villager) {
-        // Check if plugin is shutting down
-        if (this.shuttingDown || !this.plugin.isEnabled()) {
-            return;
-        }
-        
-        // Check if this villager should still be scheduled
-        if (!this.scheduledVillagers.contains(villager.getUniqueId())) {
-            return;
-        }
-        
-        // Process the villager
-        this.processVillagerSafely(villager);
-        
-        // Schedule next check if villager is still valid and tracked
-        if (!this.shuttingDown && this.plugin.isEnabled() && 
-            villager.isValid() && !villager.isDead() && 
-            this.scheduledVillagers.contains(villager.getUniqueId())) {
-            
-            // Use appropriate interval based on current state
-            boolean isActive = this.activeVillagers.contains(villager);
-            long delay = isActive ? this.checkInterval : this.inactiveCheckInterval;
-            
-            // Schedule the next check after the appropriate delay  
-            this.scheduleDelayedVillagerCheck(villager, delay);
-        } else {
-            // Remove from scheduled tracking if villager is no longer valid
-            this.scheduledVillagers.remove(villager.getUniqueId());
-        }
-    }
-    
-    /**
-     * Schedules a delayed check for a villager using async timer for delay, then entity scheduling for execution
-     */
-    private void scheduleDelayedVillagerCheck(@NotNull Villager villager, long delayTicks) {
-        // Check if plugin is shutting down
-        if (this.shuttingDown || !this.plugin.isEnabled()) {
-            return;
-        }
-        
-        if (delayTicks <= 1) {
-            // No delay needed, schedule immediately
-            try {
-                this.plugin.getFoliaLib().getScheduler().runAtEntity(villager, (task) -> {
-                    this.scheduleVillagerTimer(villager);
-                });
-            } catch (IllegalPluginAccessException e) {
-                // Plugin disabled during scheduling, ignore
-            }
-        } else {
-            // Use async timer for delay, then switch to entity scheduling for execution
-            this.plugin.getFoliaLib().getScheduler().runAsync((task) -> {
-                try {
-                    Thread.sleep(delayTicks * 50); // Convert ticks to milliseconds
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                
-                // Check again if plugin is still enabled after the delay
-                if (!LobotomizeStorage.this.shuttingDown && LobotomizeStorage.this.plugin.isEnabled() && 
-                    villager.isValid() && !villager.isDead()) {
-                    
-                    try {
-                        LobotomizeStorage.this.plugin.getFoliaLib().getScheduler().runAtEntity(villager, (innerTask) -> {
-                            LobotomizeStorage.this.scheduleVillagerTimer(villager);
-                        });
-                    } catch (IllegalPluginAccessException e) {
-                        // Plugin was disabled during scheduling, ignore
-                    }
-                }
-            });
-        }
-    }
     
     /**
      * Thread-safe wrapper for processing villagers using entity scheduling
@@ -369,7 +304,11 @@ public class LobotomizeStorage {
         
         // Skip if villager is not tracked
         if (!isActive && !isInactive) {
-            this.scheduledVillagers.remove(villager.getUniqueId());
+            // Cancel the task since villager is no longer tracked
+            ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
+            }
             return;
         }
         
@@ -414,7 +353,7 @@ public class LobotomizeStorage {
                 }
                 return true; // Remove from inactive list
             }
-            if (this.plugin.isDebugging() && !this.plugin.getFoliaLib().isFolia() && this.plugin.getActiveVillagersTeam() != null) {
+            if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getActiveVillagersTeam() != null) {
                 this.plugin.getActiveVillagersTeam().addEntity(villager);
                 villager.setGlowing(true);
             }
@@ -432,7 +371,7 @@ public class LobotomizeStorage {
                 }
                 return true; // Remove from active
             }
-            if (this.plugin.isDebugging() && !this.plugin.getFoliaLib().isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
+            if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
                 this.plugin.getInactiveVillagersTeam().addEntity(villager);
                 villager.setGlowing(true);
             }
@@ -681,16 +620,16 @@ public class LobotomizeStorage {
             if (entity instanceof Villager villager) {
                 // Check if this villager is tracked by us
                 if (inactiveVillagers.contains(villager) || activeVillagers.contains(villager)) {
-                    // Schedule processing on the villager's region thread
+                    // Schedule processing on the villager's region thread using Paper's EntityScheduler
                     try {
-                        this.plugin.getFoliaLib().getScheduler().runAtEntity(villager, (task) -> {
+                        villager.getScheduler().run(this.plugin, (scheduledTask) -> {
                             boolean isActive = this.activeVillagers.contains(villager);
                             if (this.processVillager(villager, isActive)) {
                                 if (this.plugin.isDebugging()) {
                                     this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
                                 }
                             }
-                        });
+                        }, null);
                     } catch (IllegalPluginAccessException e) {
                         // Plugin disabled, ignore
                     }
