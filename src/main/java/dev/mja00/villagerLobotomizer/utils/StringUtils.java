@@ -11,6 +11,11 @@ public class StringUtils {
      * @return -1 if version1 < version2, 0 if equal, 1 if version1 > version2
      */
     public static int compareSemVer(@NotNull String version1, @NotNull String version2) {
+        // If either version string does not match semantic versioning (e.g., "1.2.3"), return 0
+        if (!version1.matches("\\d+\\.\\d+\\.\\d+") || !version2.matches("\\d+\\.\\d+\\.\\d+")) {
+            return 0;
+        }
+
         String[] v1Parts = version1.split("\\.");
         String[] v2Parts = version2.split("\\.");
         int length = Math.max(v1Parts.length, v2Parts.length);
