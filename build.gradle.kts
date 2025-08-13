@@ -4,6 +4,7 @@ plugins {
     id("xyz.jpenilla.run-paper") version "2.3.1"
     id("io.papermc.hangar-publish-plugin") version "0.1.2"
     id("com.gradleup.shadow") version "9.0.0-beta13"
+    id("com.modrinth.minotaur") version "2.+"
 }
 
 group = "dev.mja00"
@@ -88,6 +89,9 @@ tasks {
 // Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
 val supportedVersions = listOf("1.21.6-1.21.8")
 
+// Modrinth requires discrete game versions rather than a range
+val modrinthGameVersions = listOf("1.21.6", "1.21.7", "1.21.8")
+
 hangarPublish {
     publications.register("plugin") {
         val currentCommitHash = getCurrentCommitHash().get()
@@ -122,9 +126,51 @@ hangarPublish {
     }
 }
 
+modrinth {
+    val currentCommitHash = getCurrentCommitHash().get()
+    println("Current commit hash: $currentCommitHash")
+    val isTagged = isThisCommitTagged().get()
+    println("Is this commit tagged? $isTagged")
+    val tag = if (isTagged) getCommitTag().get() else null
+    if (tag != null) {
+        println("Tag: $tag")
+    }
+
+    // Set your Modrinth project slug/ID via gradle.properties (modrinth.projectId) or keep default
+    projectId.set(providers.gradleProperty("modrinth.projectId").orElse("villagerlobotomy"))
+    token.set(System.getenv("MODRINTH_TOKEN"))
+
+    if (tag != null && tag.replace("v", "") == project.version.toString()) {
+        println("Tagged and tag matches version, doing a release publish (Modrinth)")
+        versionNumber.set(project.version.toString())
+        versionType.set("release")
+    } else {
+        println("Not tagged or tag does not match version, doing a snapshot publish (Modrinth)")
+        versionNumber.set(project.version.toString() + "-snapshot-" + currentCommitHash)
+        versionType.set("beta")
+    }
+
+    versionName.set("VillagerLobotimizer " + versionNumber.get())
+    changelog.set(fetchLastCommitMessage())
+
+    uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
+    gameVersions.set(modrinthGameVersions)
+    loaders.set(listOf("paper", "purpur"))
+}
+
 // Add explicit dependency for the publish task
 tasks.named("publishPluginPublicationToHangar") {
     dependsOn(tasks.shadowJar)
+}
+
+// Ensure the Modrinth publish uses the shaded artifact
+tasks.named("modrinth") {
+    dependsOn(tasks.shadowJar)
+}
+
+// Aggregate task to publish everywhere
+tasks.register("publishAll") {
+    dependsOn("publishPluginPublicationToHangar", "modrinth")
 }
 
 // Thanks emily :)

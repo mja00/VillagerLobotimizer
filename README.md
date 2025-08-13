@@ -139,15 +139,35 @@ This will download a Paper server for Minecraft 1.21.5 and start it with the plu
 
 ### Publishing
 
-The project uses Hangar for publishing:
+You can publish to Hangar and Modrinth using the same shaded artifact built by `shadowJar`.
 
-```bash
-./gradlew publishPluginPublicationToHangar
-```
+- **Hangar**:
 
-This requires the `HANGAR_API_KEY` environment variable to be set. The plugin will be published as:
-- A release version if the current commit is tagged with a version matching the project version
-- A snapshot version if there's no matching tag
+  ```bash
+  ./gradlew publishPluginPublicationToHangar
+  ```
+
+  Requires `HANGAR_API_KEY` in the environment. The task auto-detects whether the current commit is tagged to decide Release vs Snapshot.
+
+- **Modrinth**:
+
+  ```bash
+  ./gradlew modrinth
+  ```
+
+  Requires `MODRINTH_TOKEN` in the environment. Optionally set the project id/slug via Gradle property:
+
+  ```bash
+  ./gradlew modrinth -Pmodrinth.projectId=villagerlobotomy
+  ```
+
+  Game versions are published for `1.21.6`, `1.21.7`, and `1.21.8`. Tagged commits publish a Release; otherwise a Snapshot-like Beta with a short git hash suffix.
+
+- **Publish everywhere**:
+
+  ```bash
+  ./gradlew publishAll
+  ```
 
 ## Support
 

@@ -1,4 +1,4 @@
-name: Publish snapshot to Hangar
+name: Publish to Hangar and Modrinth
 # Run this on pushes to main and if there's a tag
 on:
   push:
@@ -33,9 +33,10 @@ jobs:
         id: publish
         env:
           HANGAR_API_KEY: ${{ secrets.HANGAR_API_TOKEN }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           IS_TAGGED_RUN: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: |
-          output=$(./gradlew build publishPluginPublicationToHangar --stacktrace)
+          output=$(./gradlew build publishAll --stacktrace)
           echo "$output"
           echo "output<<EOF" >> $GITHUB_OUTPUT
           echo "$output" >> $GITHUB_OUTPUT
@@ -43,8 +44,8 @@ jobs:
       - name: Parse publish result
         id: parse-publish-result
         run: |
-          version=$(echo "${{ steps.publish.outputs.output }}" | grep "Successfully published VillagerLobotimizer version" | sed -E 's/.*version ([^ ]+) to.*/\1/')
-          url=$(echo "${{ steps.publish.outputs.output }}" | grep "Successfully published VillagerLobotimizer version version" | sed -E 's/.*Hangar: ([^ ]+).*/\1/')
+          version=$(echo "${{ steps.publish.outputs.output }}" | grep -E "Successfully published .* version" | sed -E 's/.*version ([^ ]+) to.*/\1/')
+          url=$(echo "${{ steps.publish.outputs.output }}" | grep -E "Successfully published .* to Hangar:" | sed -E 's/.*to Hangar: ([^ ]+).*/\1/')
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "url=$url" >> $GITHUB_OUTPUT
       - name: Get current date in ISO 8601 format
@@ -63,6 +64,7 @@ jobs:
             
             ### Downloads
             - 📦 [Hangar](${{ steps.parse-publish-result.outputs.url }})
+            - 📦 [Modrinth](https://modrinth.com/plugin/villagerlobotomy)
             
             ### What's Changed
             Check the commits since the last release for detailed changes.
@@ -78,6 +80,6 @@ jobs:
           username: Villager Lobotomy
           avatar-url: https://cdn.modrinth.com/data/sQ1MQcd2/16cd6db5088b78b41c29cda8eda940f5390efa08.png
           embed-title: "New VillagerLobotimizer update!"
-          embed-description: "${{ steps.parse-publish-result.outputs.version }} is now available on Hangar! [Click here to download](${{ steps.parse-publish-result.outputs.url }})"
+          embed-description: "${{ steps.parse-publish-result.outputs.version }} is now available on Hangar and Modrinth! [Hangar](${{ steps.parse-publish-result.outputs.url }}) | [Modrinth](https://modrinth.com/plugin/villagerlobotomy)"
           embed-thumbnail-url: https://hangarcdn.papermc.io/avatars/project/3678.webp?v=1
           embed-timestamp: "${{ steps.date.outputs.date }}"
