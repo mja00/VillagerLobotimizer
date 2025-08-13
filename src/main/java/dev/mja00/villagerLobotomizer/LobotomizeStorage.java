@@ -569,6 +569,19 @@ public class LobotomizeStorage {
             return true;
         }
 
+        // Villagers who are lobotomized will just sink
+
+        // Are we currently swimming?
+        if (villager.isSwimming()) {
+            return true; // Let them keep swimming
+        }
+
+        // Is our feet in water? (No idea if #isSwimming() works when lobotomized)
+        Block feetBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ());
+        if (feetBlock.getType() == Material.WATER) {
+            return true;
+        }
+
         // Is the villager currently sleeping? (A sleeping villager doesn't do anything really anyways)
         if (villager.isSleeping()) {
             return true;
