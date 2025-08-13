@@ -45,7 +45,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
     @Override
     public void onEnable() {
         this.saveDefaultConfig();
-        this.checkForUpdates();
+        boolean disableUpdateCheck = this.getConfig().getBoolean("disable-update-checker", false);
+        if (!disableUpdateCheck) {
+            this.checkForUpdates();
+        } else {
+            this.getLogger().info("Update checker is disabled. You will not be notified of new versions.");
+        }
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);

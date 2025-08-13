@@ -45,3 +45,6 @@ check-roof: true
 
 #Create teams for debugging purposes. This will create colored teams for inactive and active villagers. We use this to color their glowing effect.
 create-debug-teams: false
+
+#Disable the update checker. You can disable this if you don't want to be notified about updates.
+disable-update-checker: false
