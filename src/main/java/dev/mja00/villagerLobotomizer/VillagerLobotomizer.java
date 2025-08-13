@@ -212,13 +212,21 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 this.getLogger().warning("Failed to check for updates: No response from the server");
                 return;
             }
-            // Parse our response into json
-            List<Modrinth.ModrinthVersion> versions =  Modrinth.fromJson(responseBody);
+            // Parse our response into json and filter to only release versions (ignore beta/alpha)
+            List<Modrinth.ModrinthVersion> versions = Modrinth.fromJson(responseBody);
             if (versions == null || versions.isEmpty()) {
                 this.getLogger().warning("Failed to check for updates: No versions found");
                 return;
             }
-            Modrinth.ModrinthVersion latestVersion = versions.getFirst();
+            // Only consider versions where version_type is "release"
+            Modrinth.ModrinthVersion latestVersion = versions.stream()
+                    .filter(v -> "release".equalsIgnoreCase(v.getVersionType()))
+                    .findFirst()
+                    .orElse(null);
+            if (latestVersion == null) {
+                this.getLogger().warning("Failed to check for updates: No release versions found");
+                return;
+            }
 
 
             // Compare versions using proper semantic versioning
