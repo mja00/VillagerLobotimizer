@@ -46,8 +46,10 @@ jobs:
         run: |
           version=$(echo "${{ steps.publish.outputs.output }}" | grep -E "Successfully published .* version" | sed -E 's/.*version ([^ ]+) to.*/\1/')
           url=$(echo "${{ steps.publish.outputs.output }}" | grep -E "Successfully published .* to Hangar:" | sed -E 's/.*to Hangar: ([^ ]+).*/\1/')
+          modrinth_url=$(echo "${{ steps.publish.outputs.output }}" | grep -Eo 'https://modrinth.com/(project|plugin)/[^ ]+/version/[^ ]+')
           echo "version=$version" >> $GITHUB_OUTPUT
           echo "url=$url" >> $GITHUB_OUTPUT
+          echo "modrinth_url=$modrinth_url" >> $GITHUB_OUTPUT
       - name: Get current date in ISO 8601 format
         id: date
         run: echo "date=$(date +'%Y-%m-%dT%H:%M:%S')" >> $GITHUB_OUTPUT
@@ -64,7 +66,7 @@ jobs:
             
             ### Downloads
             - 📦 [Hangar](${{ steps.parse-publish-result.outputs.url }})
-            - 📦 [Modrinth](https://modrinth.com/plugin/villagerlobotomy)
+            - 📦 [Modrinth](${{ steps.parse-publish-result.outputs.modrinth_url }})
             
             ### What's Changed
             Check the commits since the last release for detailed changes.
@@ -80,6 +82,6 @@ jobs:
           username: Villager Lobotomy
           avatar-url: https://cdn.modrinth.com/data/sQ1MQcd2/16cd6db5088b78b41c29cda8eda940f5390efa08.png
           embed-title: "New VillagerLobotimizer update!"
-          embed-description: "${{ steps.parse-publish-result.outputs.version }} is now available on Hangar and Modrinth! [Hangar](${{ steps.parse-publish-result.outputs.url }}) | [Modrinth](https://modrinth.com/plugin/villagerlobotomy)"
+          embed-description: "${{ steps.parse-publish-result.outputs.version }} is now available on Hangar and Modrinth! [Hangar](${{ steps.parse-publish-result.outputs.url }}) | [Modrinth](${{ steps.parse-publish-result.outputs.modrinth_url }})"
           embed-thumbnail-url: https://hangarcdn.papermc.io/avatars/project/3678.webp?v=1
           embed-timestamp: "${{ steps.date.outputs.date }}"
