@@ -272,6 +272,9 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Flushes all villagers from storage and stops their tasks. Attempts to un-lobotomize them if possible.
+     */
     public final void flush() {
         // Set shutdown flag to prevent new tasks from being scheduled
         this.shuttingDown = true;
@@ -285,13 +288,36 @@ public class LobotomizeStorage {
         this.villagerTasks.clear();
         
         // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
-        this.inactiveVillagers.removeIf((villager) -> {
+        // During shutdown, we need to handle this carefully since we can't schedule new tasks
+        List<Villager> toFlush = new ArrayList<>(this.inactiveVillagers);
+        this.inactiveVillagers.clear();
+        
+        for (Villager villager : toFlush) {
             if (this.plugin.isDebugging()) {
                 this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
             }
-            villager.setAware(true);
-            return true;
-        });
+
+            if (plugin.isFolia()) {
+                this.logger.info("Some Villagers may remain lobotomized after shutdown. If you remove the plugin they will be lobotomized forever.");
+            }
+            
+            try {
+                // During shutdown, try setting directly first since scheduler might not work
+                villager.setAware(true);
+            } catch (IllegalStateException e) {
+                // If we get a thread violation, try using entity scheduler as last resort
+                try {
+                    villager.getScheduler().run(this.plugin, (task) -> {
+                        villager.setAware(true);
+                    }, null);
+                } catch (Exception schedulerException) {
+                    // If both fail, log warning but don't crash the shutdown
+                    this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
+                }
+            } catch (Exception e) {
+                this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
+            }
+        }
     }
     
     
