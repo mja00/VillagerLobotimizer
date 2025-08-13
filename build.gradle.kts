@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.10.6"
+version = "1.11.0"
 
 repositories {
     mavenCentral()
@@ -20,6 +20,10 @@ repositories {
         name = "sonatype"
         url = uri("https://oss.sonatype.org/content/groups/public/")
     }
+    maven {
+        name = "tcoded-releases"
+        url = uri("https://repo.tcoded.com/releases")
+    }
     gradlePluginPortal()
 }
 
@@ -27,6 +31,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation(group = "org.bstats", name = "bstats-bukkit", version = "3.1.0")
+    implementation("com.tcoded:FoliaLib:0.5.1")
 }
 
 val targetJavaVersion = 21
@@ -72,7 +77,9 @@ tasks {
     }
 
     shadowJar {
-        minimize()
+        minimize {
+            exclude(dependency("com.tcoded:FoliaLib:.*"))
+        }
 
         archiveClassifier = null
         archiveVersion = project.version.toString()
@@ -80,9 +87,11 @@ tasks {
         dependencies {
             include(dependency("org.bstats:bstats-bukkit"))
             include(dependency("org.bstats:bstats-base"))
+            include(dependency("com.tcoded:FoliaLib"))
         }
 
         relocate("org.bstats", "dev.mja00.villagerLobotomizer.bstats")
+        relocate("com.tcoded.folialib", "dev.mja00.villagerLobotomizer.lib.folialib")
     }
 }
 
@@ -155,7 +164,7 @@ modrinth {
 
     uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
     gameVersions.set(modrinthGameVersions)
-    loaders.set(listOf("paper", "purpur"))
+    loaders.set(listOf("paper", "purpur", "folia"))
 }
 
 // Add explicit dependency for the publish task
