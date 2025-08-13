@@ -110,7 +110,6 @@ public class LobotomizeStorage {
 
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
-    private final NamespacedKey chunkKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     // Used to track what chunks we need to trigger updates for
@@ -149,10 +148,10 @@ public class LobotomizeStorage {
         levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
 
         // If either sound starts with "minecraft:" we can remove that part as we handle it
-        if (soundName != null && soundName.startsWith("minecraft:")) {
+        if (soundName.startsWith("minecraft:")) {
             soundName = soundName.replace("minecraft:", "");
         }
-        if (levelUpSoundName != null && levelUpSoundName.startsWith("minecraft:")) {
+        if (levelUpSoundName.startsWith("minecraft:")) {
             levelUpSoundName = levelUpSoundName.replace("minecraft:", "");
         }
 
@@ -169,7 +168,7 @@ public class LobotomizeStorage {
         Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
 
         try {
-            if (soundName != null && !soundName.isEmpty()) {
+            if (!soundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, soundName);
                 this.restockSound = soundRegistry.getOrThrow(key);
             } else {
@@ -184,7 +183,7 @@ public class LobotomizeStorage {
 
 
         try {
-            if (levelUpSoundName != null && !levelUpSoundName.isEmpty()) {
+            if (!levelUpSoundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, levelUpSoundName);
                 // If the sound is not found, it will throw an exception
                 this.levelUpSound = soundRegistry.getOrThrow(key);
@@ -199,7 +198,6 @@ public class LobotomizeStorage {
         }
 
         this.key = new NamespacedKey(plugin, "lastRestock");
-        this.chunkKey = new NamespacedKey(plugin, "reloadProfessions");
         // Use Paper's GlobalRegionScheduler for chunk processing (doesn't access entities directly)
         Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, (task) -> this.processChunks(), 5L, 5L);
     }
@@ -345,7 +343,7 @@ public class LobotomizeStorage {
                 this.activeVillagers.remove(villager);
                 // Don't cancel the task here as it will be reused for inactive state
             }
-        } else if (isInactive) {
+        } else {
             boolean shouldRemove = this.processVillager(villager, false);
             if (shouldRemove) {
                 this.inactiveVillagers.remove(villager);
@@ -383,7 +381,6 @@ public class LobotomizeStorage {
                 this.plugin.getActiveVillagersTeam().addEntity(villager);
                 villager.setGlowing(true);
             }
-            return false; // Already active
         } else {
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
@@ -401,8 +398,8 @@ public class LobotomizeStorage {
                 this.plugin.getInactiveVillagersTeam().addEntity(villager);
                 villager.setGlowing(true);
             }
-            return false;
         }
+        return false; // Don't mutate anything
     }
 
     private boolean shouldRestock(@NotNull Villager villager) {
@@ -558,18 +555,6 @@ public class LobotomizeStorage {
         // Put our chunk in the list
         chunksToProcess.add(chunk);
 
-        // Check if our block is a profession block
-//        boolean isProfessionBlock = false;
-//        for (Material material : PROFESSION_BLOCKS) {
-//            if (block.getType() == material) {
-//                isProfessionBlock = true;
-//                break;
-//            }
-//        }
-//        if (isProfessionBlock) {
-//            logger.info("[Debug] Block " + block.getType() + " is a profession block, so we need to process the chunk");
-//        }
-
         // We also want to do neighbors if needed
         int blockInChunkX = block.getX() & 0xF;
         int blockInChunkZ = block.getZ() & 0xF;
@@ -594,10 +579,6 @@ public class LobotomizeStorage {
             chunksToProcess.add(neighbor);
         }
         for (Chunk c : chunksToProcess) {
-//            if (isProfessionBlock) {
-//                PersistentDataContainer pdc = c.getPersistentDataContainer();
-//                pdc.set(this.chunkKey, PersistentDataType.BOOLEAN, true);
-//            }
             changedChunks.put(c, System.currentTimeMillis());
         }
     }
