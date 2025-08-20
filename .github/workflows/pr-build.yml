@@ -62,7 +62,7 @@ jobs:
           const artifact = artifacts.data.artifacts.find(a => a.name === 'build-artifacts');
           
           if (artifact) {
-            const comment = `Build successful! 🎉\n\nYou can download the build artifacts [here](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${artifact.id}).`;
+            const comment = `Build successful! 🎉\n\nYou can download the build artifacts [here](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}/artifacts/${artifact.id}).\n\nBuilt on: ${new Date().toLocaleString()}`;
             
             // Find existing comment from this workflow
             const comments = await github.rest.issues.listComments({

@@ -41,6 +41,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
     public Team inactiveVillagersTeam;
     private final String activeVillagersTeamName = "lobotomy_active_villagers";
     private final String inactiveVillagersTeamName = "lobotomy_inactive_villagers";
+    private boolean disableChunkVillagerUpdate;
 
     @Override
     public void onEnable() {
@@ -60,6 +61,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
         // Set our debugs based on the config
         this.debugging = this.getConfig().getBoolean("debug");
         this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
+        this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
         boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
 
         Metrics metrics = new Metrics(this, 25704);
@@ -69,12 +71,20 @@ public final class VillagerLobotomizer extends JavaPlugin {
         // Check to see if plugman (or its fork Plugmanx) is installed. If so send a warning.
         PluginManager pluginManager = this.getServer().getPluginManager();
         for (Plugin plugin : pluginManager.getPlugins()) {
-            if (plugin.getName().toLowerCase().contains("plugman")) {
-                this.getLogger().warning("------------------------------");
-                this.getLogger().warning("Plugman is installed. While this plugin will not fully break with it installed, commands will stop working after a reload.");
-                this.getLogger().warning("This is due to the way commands are registered for Brigadier. Plugman does not support plugins that use Brigadier commands.");
-                this.getLogger().warning("A workaround is running \"/minecraft:reload\" after reloading this plugin, however this may break other plugins.");
-                this.getLogger().warning("-------------------------------");
+            String pluginName = plugin.getName().toLowerCase();
+            String pluginVersion = plugin.getPluginMeta().getVersion();
+            if (pluginName.contains("plugman")) {
+                int pluginMajor = pluginVersion.split("\\.")[0].matches("\\d+") ? Integer.parseInt(pluginVersion.split("\\.")[0]) : 0;
+                if (pluginMajor < 2) {
+                    this.getLogger().warning("------------------------------");
+                    this.getLogger().warning("Plugman is installed. While this plugin will not fully break with it installed, commands will stop working after a reload.");
+                    this.getLogger().warning("This is due to the way commands are registered for Brigadier. Plugman does not support plugins that use Brigadier commands.");
+                    this.getLogger().warning("A workaround is running \"/minecraft:reload\" after reloading this plugin, however this may break other plugins.");
+                    this.getLogger().warning("-------------------------------");
+                } else {
+                    // They're running a version that doesn't break Brig but still put a little warning in
+                    this.getLogger().warning("Plugman is installed, things may act weirdly. If you experience any issues, try restarting your server entirely.");
+                }
                 break;
             }
         }
@@ -254,5 +264,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public Team getInactiveVillagersTeam() {
         return this.inactiveVillagersTeam;
+    }
+
+    public boolean isDisableChunkVillagerUpdate() {
+        return this.disableChunkVillagerUpdate;
     }
 }

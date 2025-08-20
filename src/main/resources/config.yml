@@ -48,3 +48,6 @@ create-debug-teams: false
 
 #Disable the update checker. You can disable this if you don't want to be notified about updates.
 disable-update-checker: false
+
+#Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
+disable-chunk-villager-updates: false

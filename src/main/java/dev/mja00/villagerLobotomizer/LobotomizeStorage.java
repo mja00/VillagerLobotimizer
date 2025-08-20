@@ -440,6 +440,9 @@ public class LobotomizeStorage {
 
 
     public void handleBlockChange(Block block) {
+        if (this.plugin.isDisableChunkVillagerUpdate()) {
+            return;
+        }
         // Create a list of chunks we'll add to
         List<Chunk> chunksToProcess = new ArrayList<>();
         // Get our chunk
