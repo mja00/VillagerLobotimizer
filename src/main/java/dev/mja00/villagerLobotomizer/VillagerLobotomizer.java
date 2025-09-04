@@ -3,6 +3,7 @@ package dev.mja00.villagerLobotomizer;
 import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
+import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -87,6 +88,31 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 }
                 break;
             }
+        }
+
+        switch (VersionUtils.getServerSupportStatus()) {
+            case NMS_CLEANROOM:
+                this.getLogger().severe("You are running a server that does not properly support Bukkit plugins that rely on internal Mojang code.");
+                break;
+            case DANGEROUS_FORK:
+                this.getLogger().severe("You are running a server fork that is known to be extremely dangerous and lead to data loss. It is strongly recommended you switch to a more stable server software like Paper.");
+                break;
+            case STUPID_PLUGIN:
+                this.getLogger().severe("You are using plugins known to cause severe issues with VillagerLobotomy and other plugins.");
+                break;
+            case UNSTABLE:
+                this.getLogger().severe("You are running a server that does not properly support Bukkit plugins. Bukkit plugins should not be used with Forge/Fabric mods!");
+                break;
+            case OUTDATED:
+                this.getLogger().severe("You are running an unsupported server version!");
+                break;
+            case LIMITED:
+                this.getLogger().info("You are running a server with limited API functionality. Some features may become unavailable.");
+                break;
+        }
+
+        if (VersionUtils.getSupportStatusClass() != null) {
+            this.getLogger().info(String.format("Status determining class: %s", VersionUtils.getSupportStatusClass()));
         }
 
         // Plugin startup logic
