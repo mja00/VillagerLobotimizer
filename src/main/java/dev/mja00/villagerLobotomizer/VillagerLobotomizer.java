@@ -9,7 +9,9 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bstats.bukkit.Metrics;
 import org.bstats.charts.MultiLineChart;
+import org.bstats.charts.SimplePie;
 import org.bstats.charts.SingleLineChart;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.plugin.Plugin;
@@ -34,6 +36,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
+    private boolean isFolia;
     static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
     static final HttpClient client = HttpClient.newHttpClient();
     static final Gson gson = new Gson();
@@ -53,6 +56,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
         } else {
             this.getLogger().info("Update checker is disabled. You will not be notified of new versions.");
         }
+        // Detect if we're running on Folia
+        this.isFolia = this.detectFolia();
+        if (this.isFolia) {
+            this.getLogger().info("Folia detected, using per-entity schedulers.");
+        }
+        this.checkForUpdates();
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);
@@ -129,6 +138,13 @@ public final class VillagerLobotomizer extends JavaPlugin {
     }
 
     private void createDebuggingTeams() {
+        // Folia doesn't support scoreboard teams (global state that can't be regionized)
+        if (this.isFolia) {
+            this.getLogger().warning("Debug teams are not supported on Folia - scoreboard operations are not available.");
+            this.getLogger().warning("Debug mode will still work, but villagers will not glow or be added to teams.");
+            return;
+        }
+
         ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
         Team activeTeam = scoreboardManager.getMainScoreboard().getTeam(this.activeVillagersTeamName);
         if (activeTeam == null) {
@@ -163,6 +179,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
         metrics.addCustomChart(new SingleLineChart("active_villagers", () -> getStorage().getActive().size()));
         metrics.addCustomChart(new SingleLineChart("inactive_villagers", () -> getStorage().getLobotomized().size()));
         metrics.addCustomChart(new SingleLineChart("total_villagers", () -> getStorage().getActive().size() + getStorage().getLobotomized().size()));
+        metrics.addCustomChart(new SimplePie("is_folia", () -> this.isFolia ? "yes" : "no"));
     }
 
     @Override
@@ -172,11 +189,14 @@ public final class VillagerLobotomizer extends JavaPlugin {
         if (this.storage != null) {
             this.storage.flush();
         }
-        // If either of the teams are not null, we need to remove them
-        Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
-        clearTeam(activeTeam);
-        Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
-        clearTeam(inactiveTeam);
+        // No need to cancel tasks manually - Paper handles this automatically on disable
+        // If either of the teams are not null, we need to remove them (only on non-Folia servers)
+        if (!this.isFolia) {
+            Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
+            clearTeam(activeTeam);
+            Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
+            clearTeam(inactiveTeam);
+        }
     }
 
     private void clearTeam(Team team) {
@@ -205,16 +225,23 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public void setDebugging(boolean debugging) {
         this.debugging = debugging;
-        // If debugging is being set to false, we need to clean up the teams
-        if (!debugging) {
-            Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
-            clearTeam(activeTeam);
-            Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
-            clearTeam(inactiveTeam);
-        } else {
-            // Create them again
-            createDebuggingTeams();
+
+        // Skip team operations on Folia
+        if (!this.isFolia) {
+            // If debugging is being set to false, we need to clean up the teams
+            if (!debugging) {
+                Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
+                clearTeam(activeTeam);
+                Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
+                clearTeam(inactiveTeam);
+            } else {
+                // Create them again
+                createDebuggingTeams();
+            }
+        } else if (debugging) {
+            this.getLogger().info("Debug mode enabled. Note: Villager teams/glowing are not available on Folia.");
         }
+
         // Update the config
         this.getConfig().set("debug", this.debugging);
         this.saveConfig();
@@ -235,28 +262,30 @@ public final class VillagerLobotomizer extends JavaPlugin {
         return this.storage;
     }
 
+
     private void checkForUpdates() {
         // We need to GET the url. It returns an array of objects for each version
         // This'll be scheduled off thread so no need to worry here
         String currentVersion = this.getPluginMeta().getVersion();
         this.getLogger().info("Checking for updates...");
-        this.getServer().getScheduler().runTaskAsynchronously(this, () -> {
+        VillagerLobotomizer plugin = this;
+        Bukkit.getAsyncScheduler().runNow(this, (task) -> {
             String responseBody = null;
             CompletableFuture<HttpResponse<String>> response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
             try {
                 responseBody = response.thenApply(HttpResponse::body).get(5, TimeUnit.SECONDS);
             } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
-                this.getLogger().warning("Failed to check for updates: " + e.getMessage());
+                plugin.getLogger().warning("Failed to check for updates: " + e.getMessage());
                 return;
             }
             if (responseBody == null || responseBody.isEmpty()) {
-                this.getLogger().warning("Failed to check for updates: No response from the server");
+                plugin.getLogger().warning("Failed to check for updates: No response from the server");
                 return;
             }
             // Parse our response into json and filter to only release versions (ignore beta/alpha)
             List<Modrinth.ModrinthVersion> versions = Modrinth.fromJson(responseBody);
             if (versions == null || versions.isEmpty()) {
-                this.getLogger().warning("Failed to check for updates: No versions found");
+                plugin.getLogger().warning("Failed to check for updates: No versions found");
                 return;
             }
             // Only consider versions where version_type is "release"
@@ -265,7 +294,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
                     .findFirst()
                     .orElse(null);
             if (latestVersion == null) {
-                this.getLogger().warning("Failed to check for updates: No release versions found");
+                plugin.getLogger().warning("Failed to check for updates: No release versions found");
                 return;
             }
 
@@ -273,13 +302,13 @@ public final class VillagerLobotomizer extends JavaPlugin {
             // Compare versions using proper semantic versioning
             int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.getVersionNumber());
             if (comparison < 0) {
-                this.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
-                this.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
-                this.needsUpdate = true;
+                plugin.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
+                plugin.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
+                plugin.needsUpdate = true;
             } else if (comparison > 0) {
-                this.getLogger().info("Hey! How'd you get this build?");
+                plugin.getLogger().info("Hey! How'd you get this build?");
             } else {
-                this.getLogger().info("You are running the latest version of VillagerLobotomizer.");
+                plugin.getLogger().info("You are running the latest version of VillagerLobotomizer.");
             }
         });
     }
@@ -290,6 +319,22 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public Team getInactiveVillagersTeam() {
         return this.inactiveVillagersTeam;
+    }
+
+    public boolean isFolia() {
+        return this.isFolia;
+    }
+
+    /**
+     * Detects if the server is running Folia
+     */
+    private boolean detectFolia() {
+        try {
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     public boolean isDisableChunkVillagerUpdate() {

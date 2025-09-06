@@ -4,6 +4,7 @@ import dev.mja00.villagerLobotomizer.utils.StringUtils;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import io.papermc.paper.registry.RegistryAccess;
 import io.papermc.paper.registry.RegistryKey;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.*;
@@ -18,6 +19,7 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -108,11 +110,12 @@ public class LobotomizeStorage {
 
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
-    private final NamespacedKey chunkKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     // Used to track what chunks we need to trigger updates for
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
+    // Track per-villager scheduled tasks using Paper's native schedulers
+    private final Map<UUID, ScheduledTask> villagerTasks = new ConcurrentHashMap<>();
     private final Set<String> exemptNames;
     private final long checkInterval;
     private final long inactiveCheckInterval;
@@ -125,6 +128,7 @@ public class LobotomizeStorage {
     private Sound levelUpSound;
     private final Logger logger;
     private final Random random = new Random();
+    private volatile boolean shuttingDown = false;
 
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
@@ -144,10 +148,10 @@ public class LobotomizeStorage {
         levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
 
         // If either sound starts with "minecraft:" we can remove that part as we handle it
-        if (soundName != null && soundName.startsWith("minecraft:")) {
+        if (soundName.startsWith("minecraft:")) {
             soundName = soundName.replace("minecraft:", "");
         }
-        if (levelUpSoundName != null && levelUpSoundName.startsWith("minecraft:")) {
+        if (levelUpSoundName.startsWith("minecraft:")) {
             levelUpSoundName = levelUpSoundName.replace("minecraft:", "");
         }
 
@@ -164,7 +168,7 @@ public class LobotomizeStorage {
         Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
 
         try {
-            if (soundName != null && !soundName.isEmpty()) {
+            if (!soundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, soundName);
                 this.restockSound = soundRegistry.getOrThrow(key);
             } else {
@@ -179,7 +183,7 @@ public class LobotomizeStorage {
 
 
         try {
-            if (levelUpSoundName != null && !levelUpSoundName.isEmpty()) {
+            if (!levelUpSoundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, levelUpSoundName);
                 // If the sound is not found, it will throw an exception
                 this.levelUpSound = soundRegistry.getOrThrow(key);
@@ -194,10 +198,8 @@ public class LobotomizeStorage {
         }
 
         this.key = new NamespacedKey(plugin, "lastRestock");
-        this.chunkKey = new NamespacedKey(plugin, "reloadProfessions");
-        Bukkit.getScheduler().runTaskTimer(plugin, new DeactivatorTask(), this.checkInterval, this.checkInterval);
-        Bukkit.getScheduler().runTaskTimer(plugin, new ActivatorTask(), this.inactiveCheckInterval, this.inactiveCheckInterval);
-        Bukkit.getScheduler().runTaskTimer(plugin, this::processChunks, 5L, 5L);
+        // Use Paper's GlobalRegionScheduler for chunk processing (doesn't access entities directly)
+        Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, (task) -> this.processChunks(), 5L, 5L);
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -209,15 +211,43 @@ public class LobotomizeStorage {
     }
 
     public final void addVillager(@NotNull Villager villager) {
+        // Don't add villagers if shutting down
+        if (this.shuttingDown || !this.plugin.isEnabled()) {
+            return;
+        }
+        
         this.activeVillagers.add(villager);
+        
+        // Schedule per-villager task using Paper's EntityScheduler
+        try {
+            ScheduledTask task = villager.getScheduler().runAtFixedRate(this.plugin, 
+                (scheduledTask) -> this.processVillagerSafely(villager), 
+                null, // No initial delay
+                this.checkInterval, 
+                this.checkInterval
+            );
+            
+            this.villagerTasks.put(villager.getUniqueId(), task);
+        } catch (IllegalPluginAccessException e) {
+            // Plugin disabled during scheduling, remove from active
+            this.activeVillagers.remove(villager);
+        }
+        
         if (this.plugin.isDebugging()) {
-            this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ")");
+            this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") with per-entity scheduler");
         }
     }
 
     public final void removeVillager(@NotNull Villager villager) {
         boolean removed = false;
         boolean active = false;
+        
+        // Cancel the per-villager task
+        ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+        if (task != null && !task.isCancelled()) {
+            task.cancel();
+        }
+        
         if (this.activeVillagers.remove(villager)) {
             removed = true;
             active = true;
@@ -225,27 +255,101 @@ public class LobotomizeStorage {
 
         if (this.inactiveVillagers.remove(villager)) {
             removed = true;
-            villager.setAware(true);
+            // Use Paper's EntityScheduler for thread safety
+            villager.getScheduler().run(this.plugin, (scheduledTask) -> {
+                villager.setAware(true);
+            }, null);
         }
 
         if (this.plugin.isDebugging()) {
             if (removed) {
-                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + active);
+                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + active + ", cancelled scheduler");
             } else {
                 this.logger.info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId() + "), but it was not tracked");
             }
         }
     }
 
+    /**
+     * Flushes all villagers from storage and stops their tasks. Attempts to un-lobotomize them if possible.
+     */
     public final void flush() {
+        // Set shutdown flag to prevent new tasks from being scheduled
+        this.shuttingDown = true;
+        
+        // Cancel all per-villager tasks
+        for (ScheduledTask task : this.villagerTasks.values()) {
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
+            }
+        }
+        this.villagerTasks.clear();
+        
         // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
-        this.inactiveVillagers.removeIf((villager) -> {
+        // During shutdown, we need to handle this carefully since we can't schedule new tasks
+        List<Villager> toFlush = new ArrayList<>(this.inactiveVillagers);
+        this.inactiveVillagers.clear();
+        
+        for (Villager villager : toFlush) {
             if (this.plugin.isDebugging()) {
                 this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
             }
-            villager.setAware(true);
-            return true;
-        });
+
+            if (plugin.isFolia()) {
+                this.logger.info("Some Villagers may remain lobotomized after shutdown. If you remove the plugin they will be lobotomized forever.");
+            }
+            
+            try {
+                // During shutdown, try setting directly first since scheduler might not work
+                villager.setAware(true);
+            } catch (IllegalStateException e) {
+                // If we get a thread violation, try using entity scheduler as last resort
+                try {
+                    villager.getScheduler().run(this.plugin, (task) -> {
+                        villager.setAware(true);
+                    }, null);
+                } catch (Exception schedulerException) {
+                    // If both fail, log warning but don't crash the shutdown
+                    this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
+                }
+            } catch (Exception e) {
+                this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
+            }
+        }
+    }
+    
+    
+    /**
+     * Thread-safe wrapper for processing villagers using entity scheduling
+     */
+    private void processVillagerSafely(@NotNull Villager villager) {
+        boolean isActive = this.activeVillagers.contains(villager);
+        boolean isInactive = this.inactiveVillagers.contains(villager);
+        
+        // Skip if villager is not tracked
+        if (!isActive && !isInactive) {
+            // Cancel the task since villager is no longer tracked
+            ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
+            }
+            return;
+        }
+        
+        // Process the villager and handle state changes
+        if (isActive) {
+            boolean shouldRemove = this.processVillager(villager, true);
+            if (shouldRemove) {
+                this.activeVillagers.remove(villager);
+                // Don't cancel the task here as it will be reused for inactive state
+            }
+        } else {
+            boolean shouldRemove = this.processVillager(villager, false);
+            if (shouldRemove) {
+                this.inactiveVillagers.remove(villager);
+                // Don't cancel the task here as it will be reused for active state
+            }
+        }
     }
 
     private boolean processVillager(@NotNull Villager villager, boolean active) {
@@ -265,6 +369,7 @@ public class LobotomizeStorage {
 
         if (shouldBeActive) {
             if (!active) {
+                // Already running on entity thread, safe to modify villager
                 villager.setAware(true);
                 this.activeVillagers.add(villager);
                 if (this.plugin.isDebugging()) {
@@ -272,16 +377,16 @@ public class LobotomizeStorage {
                 }
                 return true; // Remove from inactive list
             }
-            if (this.plugin.isDebugging() && this.plugin.getActiveVillagersTeam() != null) {
+            if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getActiveVillagersTeam() != null) {
                 this.plugin.getActiveVillagersTeam().addEntity(villager);
                 villager.setGlowing(true);
             }
-            return false; // Already active
         } else {
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
 
             if (active) {
+                // Already running on entity thread, safe to modify villager
                 villager.setAware(false);
                 this.inactiveVillagers.add(villager);
                 if (this.plugin.isDebugging()) {
@@ -289,12 +394,12 @@ public class LobotomizeStorage {
                 }
                 return true; // Remove from active
             }
-            if (this.plugin.isDebugging() && this.plugin.getInactiveVillagersTeam() != null) {
+            if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
                 this.plugin.getInactiveVillagersTeam().addEntity(villager);
                 villager.setGlowing(true);
             }
-            return false;
         }
+        return false; // Don't mutate anything
     }
 
     private boolean shouldRestock(@NotNull Villager villager) {
@@ -450,18 +555,6 @@ public class LobotomizeStorage {
         // Put our chunk in the list
         chunksToProcess.add(chunk);
 
-        // Check if our block is a profession block
-//        boolean isProfessionBlock = false;
-//        for (Material material : PROFESSION_BLOCKS) {
-//            if (block.getType() == material) {
-//                isProfessionBlock = true;
-//                break;
-//            }
-//        }
-//        if (isProfessionBlock) {
-//            logger.info("[Debug] Block " + block.getType() + " is a profession block, so we need to process the chunk");
-//        }
-
         // We also want to do neighbors if needed
         int blockInChunkX = block.getX() & 0xF;
         int blockInChunkZ = block.getZ() & 0xF;
@@ -486,10 +579,6 @@ public class LobotomizeStorage {
             chunksToProcess.add(neighbor);
         }
         for (Chunk c : chunksToProcess) {
-//            if (isProfessionBlock) {
-//                PersistentDataContainer pdc = c.getPersistentDataContainer();
-//                pdc.set(this.chunkKey, PersistentDataType.BOOLEAN, true);
-//            }
             changedChunks.put(c, System.currentTimeMillis());
         }
     }
@@ -515,20 +604,20 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Processing chunk " + chunk.getX() + ", " + chunk.getZ() + " for villagers");
             }
 
-            // And now process the rest
-            for (Map.Entry<Chunk, Long> iEntry : new HashMap<>(changedChunks).entrySet()) {
-                Chunk iChunk = iEntry.getKey();
-                if (iChunk.isLoaded()) {
-                    processVillagersInChunk(iChunk);
-                }
+            // Schedule villager processing for this chunk on the appropriate region
+            if (chunk.isLoaded()) {
+                this.scheduleChunkVillagerProcessing(chunk);
             }
 
             // Keep tracked
             return false;
         });
     }
-
-    private void processVillagersInChunk(Chunk chunk) {
+    
+    /**
+     * Schedules villager processing for a chunk using region-appropriate scheduling
+     */
+    private void scheduleChunkVillagerProcessing(Chunk chunk) {
         if (!chunk.isLoaded()) {
             return;
         }
@@ -536,22 +625,26 @@ public class LobotomizeStorage {
         Entity[] entities = chunk.getEntities();
         for (Entity entity : entities) {
             if (entity instanceof Villager villager) {
-                if (inactiveVillagers.contains(villager)) {
-                    if (processVillager(villager, false)) {
-                        if (plugin.isDebugging()) {
-                            logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
-                        }
-                    }
-                } else if (activeVillagers.contains(villager)) {
-                    if (processVillager(villager, true)) {
-                        if (plugin.isDebugging()) {
-                            logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
-                        }
+                // Check if this villager is tracked by us
+                if (inactiveVillagers.contains(villager) || activeVillagers.contains(villager)) {
+                    // Schedule processing on the villager's region thread using Paper's EntityScheduler
+                    try {
+                        villager.getScheduler().run(this.plugin, (scheduledTask) -> {
+                            boolean isActive = this.activeVillagers.contains(villager);
+                            if (this.processVillager(villager, isActive)) {
+                                if (this.plugin.isDebugging()) {
+                                    this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
+                                }
+                            }
+                        }, null);
+                    } catch (IllegalPluginAccessException e) {
+                        // Plugin disabled, ignore
                     }
                 }
             }
         }
     }
+
 
     /**
      * Determines if a villager should be considered "active" based on name, vehicle, profession, and movement.
@@ -625,33 +718,5 @@ public class LobotomizeStorage {
         return converted;
     }
 
-    public final class ActivatorTask implements Runnable {
-        public ActivatorTask() {
-        }
-
-        public void run() {
-            Set<Villager> toRemove = new HashSet<>();
-            for (Villager villager : inactiveVillagers) {
-                if (processVillager(villager, false)) {
-                    toRemove.add(villager);
-                }
-            }
-            inactiveVillagers.removeAll(toRemove);
-        }
-    }
-
-    public final class DeactivatorTask implements Runnable {
-        public DeactivatorTask() {
-        }
-
-        public void run() {
-            Set<Villager> toRemove = new HashSet<>();
-            for (Villager villager : activeVillagers) {
-                if (processVillager(villager, true)) {
-                    toRemove.add(villager);
-                }
-            }
-            activeVillagers.removeAll(toRemove);
-        }
-    }
+    // Removed ActivatorTask and DeactivatorTask classes - replaced with per-villager entity scheduling
 }

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.10.6"
+version = "1.11.0"
 
 repositories {
     mavenCentral()
@@ -155,7 +155,7 @@ modrinth {
 
     uploadFile.set(tasks.shadowJar.flatMap { it.archiveFile })
     gameVersions.set(modrinthGameVersions)
-    loaders.set(listOf("paper", "purpur"))
+    loaders.set(listOf("paper", "purpur", "folia"))
 }
 
 // Add explicit dependency for the publish task
