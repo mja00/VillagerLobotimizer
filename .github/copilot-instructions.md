@@ -15,7 +15,6 @@ VillagerLobotimizer is a Minecraft Paper plugin written in Java 21 that optimize
   ```
 - Make Gradle wrapper executable: `chmod +x ./gradlew`
 - Verify Gradle setup: `./gradlew --version`
-- Always use Conventional Commits formatting
 
 ### Building the Plugin
 - **CRITICAL**: Build takes 2-10 minutes on first run due to dependency downloads. NEVER CANCEL. Set timeout to 30+ minutes.
@@ -122,9 +121,6 @@ After making changes, ALWAYS run through these validation steps:
 - **Build failure (network restricted)**: 5-10 seconds with "No address associated with hostname" error
 
 ### Common Issues and Workarounds
-- **"repo.papermc.io" blocked**: Expected in restricted environments. Build cannot complete without PaperMC repository access.
-  - **Error**: `repo.papermc.io: No address associated with hostname`
-  - **Solution**: Work in environment with unrestricted network access or use pre-built artifacts
 - **Java version mismatch**: Ensure Java 21 is active with `java -version`
 - **Permission denied on gradlew**: Run `chmod +x ./gradlew`
 - **Long build times**: This is normal for Paper plugins. Be patient and never cancel.
@@ -159,6 +155,8 @@ curl -I https://repo.papermc.io/repository/maven-public/
 - **Performance Critical**: This plugin modifies entity AI - test thoroughly with real villagers
 - **Version Compatibility**: Plugin targets Paper 1.21.6+ - verify compatibility when updating dependencies
 - **Folia Support**: Code must be compatible with Folia's regionized threading model
+- Always use Conventional Commits formatting
+- Always bump the plugin's version. If minor, bump the patch version, if major, bump the minor version. 
 
 ### Code Structure Guidelines
 - **Main Plugin Class**: `VillagerLobotomizer.java` - handles plugin lifecycle
