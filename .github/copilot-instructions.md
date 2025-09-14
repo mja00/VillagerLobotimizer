@@ -15,6 +15,7 @@ VillagerLobotimizer is a Minecraft Paper plugin written in Java 21 that optimize
   ```
 - Make Gradle wrapper executable: `chmod +x ./gradlew`
 - Verify Gradle setup: `./gradlew --version`
+- Always use Conventional Commits formatting
 
 ### Building the Plugin
 - **CRITICAL**: Build takes 2-10 minutes on first run due to dependency downloads. NEVER CANCEL. Set timeout to 30+ minutes.
