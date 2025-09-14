@@ -105,7 +105,7 @@ After making changes, ALWAYS run through these validation steps:
   - `com.modrinth.minotaur` -- Modrinth publishing
 
 ### Dependencies and Versions
-- **Minecraft**: 1.21.6-1.21.8 (Paper API)
+- **Minecraft**: 1.21.6, 1.21.7, 1.21.8 (Paper API)
 - **Java**: 21 (required)
 - **Gradle**: 8.14.3
 - **Paper Dev Bundle**: 1.21.6-R0.1-SNAPSHOT
