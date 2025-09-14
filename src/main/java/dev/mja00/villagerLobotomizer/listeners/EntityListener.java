@@ -103,10 +103,17 @@ public class EntityListener implements Listener {
         Villager villager = (Villager) event.getRightClicked();
         Player player = event.getPlayer();
 
-        // Check if the villager is in the active (unlobotomized) list
-        boolean isUnlobotomized = this.plugin.getStorage().getActive().contains(villager);
+        // Check if the villager is tracked by the plugin
+        boolean isTrackedActive = this.plugin.getStorage().getActive().contains(villager);
+        boolean isTrackedInactive = this.plugin.getStorage().getLobotomized().contains(villager);
         
-        if (isUnlobotomized) {
+        // If the villager is not tracked at all, allow trading (default behavior)
+        if (!isTrackedActive && !isTrackedInactive) {
+            return;
+        }
+        
+        // Block trades only with unlobotomized (active) villagers
+        if (isTrackedActive) {
             // Cancel the trading event
             event.setCancelled(true);
             
