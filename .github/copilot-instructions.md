@@ -108,7 +108,7 @@ After making changes, ALWAYS run through these validation steps:
 - **Minecraft**: 1.21.6, 1.21.7, 1.21.8 (Paper API)
 - **Java**: 21 (required)
 - **Gradle**: 8.14.3
-- **Paper Dev Bundle**: 1.21.6-R0.1-SNAPSHOT
+- **Paper Dev Bundle**: 1.21.6-R0.1-SNAPSHOT (used for development; plugin is compatible with Paper 1.21.6–1.21.8 at runtime. For development against other patch versions, use the corresponding Paper Dev Bundle, e.g., 1.21.7-R0.1-SNAPSHOT or 1.21.8-R0.1-SNAPSHOT.)
 - **Key Libraries**:
   - `org.bstats:bstats-bukkit:3.1.0` (metrics)
   - `net.kyori:adventure-text-serializer-plain:4.22.0` (text handling)
