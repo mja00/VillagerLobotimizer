@@ -13,8 +13,12 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.entity.Player;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 public class EntityListener implements Listener {
     private final VillagerLobotomizer plugin;
@@ -82,5 +86,41 @@ public class EntityListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public final void onBlockPlace(BlockPlaceEvent event) {
         this.plugin.getStorage().handleBlockChange(event.getBlock());
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    public final void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
+        // Check if the feature is enabled in config
+        if (!this.plugin.getConfig().getBoolean("prevent-trading-with-unlobotomized-villagers", false)) {
+            return;
+        }
+
+        // Only handle villager interactions
+        if (!(event.getRightClicked() instanceof Villager)) {
+            return;
+        }
+
+        Villager villager = (Villager) event.getRightClicked();
+        Player player = event.getPlayer();
+
+        // Check if the villager is in the active (unlobotomized) list
+        boolean isUnlobotomized = this.plugin.getStorage().getActive().contains(villager);
+        
+        if (isUnlobotomized) {
+            // Cancel the trading event
+            event.setCancelled(true);
+            
+            // Send a message to the player explaining why the trade was blocked
+            Component message = Component.text("You cannot trade with unlobotomized villagers! ")
+                    .color(NamedTextColor.RED)
+                    .append(Component.text("This villager needs to be lobotomized first.")
+                            .color(NamedTextColor.YELLOW));
+            player.sendMessage(message);
+            
+            if (this.plugin.isDebugging()) {
+                this.plugin.getLogger().info("[Debug] Blocked trade with unlobotomized villager " + 
+                    villager.getUniqueId() + " by player " + player.getName());
+            }
+        }
     }
 }
