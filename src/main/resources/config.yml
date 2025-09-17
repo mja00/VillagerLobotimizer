@@ -51,3 +51,6 @@ disable-update-checker: false
 
 #Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
 disable-chunk-villager-updates: false
+
+#Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.
+prevent-trading-with-unlobotomized-villagers: false
