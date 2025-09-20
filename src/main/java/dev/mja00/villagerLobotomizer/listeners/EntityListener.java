@@ -96,11 +96,10 @@ public class EntityListener implements Listener {
         }
 
         // Only handle villager interactions
-        if (!(event.getRightClicked() instanceof Villager)) {
+        if (!(event.getRightClicked() instanceof Villager villager)) {
             return;
         }
 
-        Villager villager = (Villager) event.getRightClicked();
         Player player = event.getPlayer();
 
         // Check if the villager is tracked by the plugin
