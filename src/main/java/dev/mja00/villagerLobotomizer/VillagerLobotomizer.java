@@ -24,10 +24,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -61,7 +58,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
         if (this.isFolia) {
             this.getLogger().info("Folia detected, using per-entity schedulers.");
         }
-        this.checkForUpdates();
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);
