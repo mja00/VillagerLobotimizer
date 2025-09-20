@@ -88,7 +88,7 @@ public class EntityListener implements Listener {
         this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public final void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
         // Check if the feature is enabled in config
         if (!this.plugin.getConfig().getBoolean("prevent-trading-with-unlobotomized-villagers", false)) {
