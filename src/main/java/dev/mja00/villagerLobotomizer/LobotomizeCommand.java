@@ -237,37 +237,24 @@ public class LobotomizeCommand {
                 }
                 boolean boolValue = Boolean.parseBoolean(value);
                 this.plugin.getConfig().set(key, boolValue);
-
             } else if (currentValue instanceof Number) {
-                // Numeric values (int, long, double)
-                try {
-                    if (currentValue instanceof Long) {
-                        long longValue = Long.parseLong(value);
-                        this.plugin.getConfig().set(key, longValue);
-                    } else if (currentValue instanceof Integer) {
-                        int intValue = Integer.parseInt(value);
-                        this.plugin.getConfig().set(key, intValue);
-                    } else if (currentValue instanceof Double) {
-                        double doubleValue = Double.parseDouble(value);
-                        this.plugin.getConfig().set(key, doubleValue);
-                    } else if (currentValue instanceof Float) {
-                        float floatValue = Float.parseFloat(value);
-                        this.plugin.getConfig().set(key, floatValue);
-                    }
-                } catch (NumberFormatException e) {
-                    source.getSender().sendMessage(Component.text("'" + key + "' expects a numeric value, but got: " + value).color(NamedTextColor.RED));
-                    return 0;
+                Number parsed = switch (currentValue) {
+                    case Long l -> Long.valueOf(value);
+                    case Integer i -> Integer.valueOf(value);
+                    case Double d -> Double.valueOf(value);
+                    case Float f -> Float.valueOf(value);
+                    default -> null;
+                };
+                if (parsed != null) {
+                    this.plugin.getConfig().set(key, parsed);
                 }
-
             } else if (currentValue instanceof String) {
                 // String values
                 this.plugin.getConfig().set(key, value);
-
             } else if (currentValue instanceof List) {
                 // List values - for now, we'll treat this as adding to the list
                 source.getSender().sendMessage(Component.text("Setting list values is not supported yet. Use the config file directly.").color(NamedTextColor.YELLOW));
                 return 0;
-
             } else {
                 // Unknown type
                 source.getSender().sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.").color(NamedTextColor.RED));
