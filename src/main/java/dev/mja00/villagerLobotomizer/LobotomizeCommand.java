@@ -1,14 +1,9 @@
 package dev.mja00.villagerLobotomizer;
 
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.tree.LiteralCommandNode;
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
-import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.command.CommandSender;
@@ -18,7 +13,20 @@ import org.bukkit.entity.Villager;
 import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.List;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mojang.brigadier.tree.LiteralCommandNode;
+
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
+import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 public class LobotomizeCommand {
     private final VillagerLobotomizer plugin;
@@ -35,6 +43,16 @@ public class LobotomizeCommand {
                         .then(Commands.literal("toggle").executes((command) -> toggleDebugCommand(command.getSource()))))
                 .then(Commands.literal("wake").executes((command) -> wakeCommand(command.getSource())))
                 .then(Commands.literal("reload").executes((command) -> reloadCommand(command.getSource())))
+                .then(Commands.literal("config")
+                        .then(Commands.argument("key", StringArgumentType.string()).suggests(LobotomizeCommand::getConfigKeySuggestions)
+                        .then(Commands.literal("get")
+                            .executes(
+                                (command) -> getConfigCommand(command.getSource(), command.getArgument("key", String.class))
+                                )
+                            )
+                        .then(Commands.literal("set").then(Commands.argument("value", StringArgumentType.string()).executes((command) -> setConfigCommand(command.getSource(), command.getArgument("key", String.class), command.getArgument("value", String.class)))))
+                    )
+                )
                 .build();
     }
 
@@ -167,6 +185,96 @@ public class LobotomizeCommand {
                 .append(Component.text(this.plugin.isDebugging() ? "enabled" : "disabled"))
                 .append(Component.text(". Messages about villager tracking will now be printed to your console.")));
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static CompletableFuture<Suggestions> getConfigKeySuggestions(final CommandContext<CommandSourceStack> ctx, final SuggestionsBuilder builder) {
+        CommandSourceStack source = ctx.getSource();
+        if (!(source.getExecutor() instanceof Player)) {
+            return builder.buildFuture();
+        }
+
+        VillagerLobotomizer plugin = (VillagerLobotomizer) Bukkit.getPluginManager().getPlugin("VillagerLobotimizer");
+        if (plugin == null) {
+            return builder.buildFuture();
+        }
+
+        // Get all config keys dynamically from the config
+        Set<String> configKeys = plugin.getConfig().getKeys(true);
+
+        String remaining = builder.getRemaining().toLowerCase();
+
+        // Filter and suggest keys that match the input
+        configKeys.stream()
+                .filter(key -> key.toLowerCase().startsWith(remaining))
+                .forEach(builder::suggest);
+
+        return builder.buildFuture();
+    }
+
+    private int getConfigCommand(CommandSourceStack source, String key) throws CommandSyntaxException {
+        String value = this.plugin.getConfig().getString(key);
+        source.getSender().sendMessage(Component.text("The value of " + key + " is " + value));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int setConfigCommand(CommandSourceStack source, String key, String value) throws CommandSyntaxException {
+        // Check if the key exists in the config
+        if (!this.plugin.getConfig().contains(key)) {
+            source.getSender().sendMessage(Component.text("Config key '" + key + "' does not exist.").color(NamedTextColor.RED));
+            return 0;
+        }
+
+        // Get the current value to determine the expected type
+        Object currentValue = this.plugin.getConfig().get(key);
+
+        try {
+            // Determine the type and set the value accordingly
+            if (currentValue instanceof Boolean) {
+                // Boolean values
+                if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                    source.getSender().sendMessage(Component.text("'" + key + "' expects a boolean value (true/false), but got: " + value).color(NamedTextColor.RED));
+                    return 0;
+                }
+                boolean boolValue = Boolean.parseBoolean(value);
+                this.plugin.getConfig().set(key, boolValue);
+            } else if (currentValue instanceof Number) {
+                Number parsed = switch (currentValue) {
+                    case Long l -> Long.valueOf(value);
+                    case Integer i -> Integer.valueOf(value);
+                    case Double d -> Double.valueOf(value);
+                    case Float f -> Float.valueOf(value);
+                    default -> null;
+                };
+                if (parsed != null) {
+                    this.plugin.getConfig().set(key, parsed);
+                }
+            } else if (currentValue instanceof String) {
+                // String values
+                this.plugin.getConfig().set(key, value);
+            } else if (currentValue instanceof List) {
+                // List values - for now, we'll treat this as adding to the list
+                source.getSender().sendMessage(Component.text("Setting list values is not supported yet. Use the config file directly.").color(NamedTextColor.YELLOW));
+                return 0;
+            } else {
+                // Unknown type
+                source.getSender().sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.").color(NamedTextColor.RED));
+                return 0;
+            }
+
+            // Save the config
+            this.plugin.saveConfig();
+            this.plugin.reloadConfig();
+
+            // Send success message
+            source.getSender().sendMessage(Component.text("Successfully set '" + key + "' to '" + value + "'").color(NamedTextColor.GREEN));
+            source.getSender().sendMessage(Component.text("Note: You may need to run '/lobotomy reload' for changes to take effect.").color(NamedTextColor.YELLOW));
+
+            return Command.SINGLE_SUCCESS;
+
+        } catch (Exception e) {
+            source.getSender().sendMessage(Component.text("Failed to set config value: " + e.getMessage()).color(NamedTextColor.RED));
+            return 0;
+        }
     }
 
 }
