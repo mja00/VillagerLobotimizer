@@ -241,12 +241,18 @@ public class LobotomizeCommand {
             } else if (currentValue instanceof Number) {
                 // Numeric values (int, long, double)
                 try {
-                    if (currentValue instanceof Long || currentValue instanceof Integer) {
+                    if (currentValue instanceof Long) {
                         long longValue = Long.parseLong(value);
                         this.plugin.getConfig().set(key, longValue);
-                    } else if (currentValue instanceof Double || currentValue instanceof Float) {
+                    } else if (currentValue instanceof Integer) {
+                        int intValue = Integer.parseInt(value);
+                        this.plugin.getConfig().set(key, intValue);
+                    } else if (currentValue instanceof Double) {
                         double doubleValue = Double.parseDouble(value);
                         this.plugin.getConfig().set(key, doubleValue);
+                    } else if (currentValue instanceof Float) {
+                        float floatValue = Float.parseFloat(value);
+                        this.plugin.getConfig().set(key, floatValue);
                     }
                 } catch (NumberFormatException e) {
                     source.getSender().sendMessage(Component.text("'" + key + "' expects a numeric value, but got: " + value).color(NamedTextColor.RED));
