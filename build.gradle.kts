@@ -12,6 +12,11 @@ version = "1.11.2"
 
 repositories {
     mavenCentral()
+    // Prefer to proxy through my maven repo
+    maven {
+        name = "martRepo"
+        url = uri("https://mvn.mart.fyi/releases")
+    }
     maven {
         name = "papermc-repo"
         url = uri("https://repo.papermc.io/repository/maven-public/")
