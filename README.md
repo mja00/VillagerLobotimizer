@@ -33,6 +33,9 @@ A Minecraft Paper plugin that improves server performance by turning off village
 ## Configuration
 
 ```yaml
+#Configuration version - DO NOT MODIFY MANUALLY
+config-version: 1
+
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
   - "alwaysbrain"
@@ -81,6 +84,14 @@ check-roof: true
 #Create teams for debugging purposes. This will create colored teams for inactive and active villagers. We use this to color their glowing effect.
 create-debug-teams: false
 
+#Disable the update checker. You can disable this if you don't want to be notified about updates.
+disable-update-checker: false
+
+#Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
+disable-chunk-villager-updates: false
+
+#Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.
+prevent-trading-with-unlobotomized-villagers: false
 ```
 
 ## Special Villager Names

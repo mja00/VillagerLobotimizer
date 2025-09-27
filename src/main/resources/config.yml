@@ -1,3 +1,6 @@
+#Configuration version - DO NOT MODIFY MANUALLY
+config-version: 1
+
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
   - "alwaysbrain"

@@ -3,6 +3,7 @@ package dev.mja00.villagerLobotomizer;
 import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
+import dev.mja00.villagerLobotomizer.utils.ConfigMigrator;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.kyori.adventure.text.Component;
@@ -46,7 +47,8 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        this.saveDefaultConfig();
+        ConfigMigrator migrator = new ConfigMigrator(this);
+        migrator.migrateConfig();
         boolean disableUpdateCheck = this.getConfig().getBoolean("disable-update-checker", false);
         if (!disableUpdateCheck) {
             this.checkForUpdates();

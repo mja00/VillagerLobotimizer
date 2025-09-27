@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.11.3"
+version = "1.12.0"
 
 repositories {
     mavenCentral()
@@ -32,6 +32,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation(group = "org.bstats", name = "bstats-bukkit", version = "3.1.0")
+    implementation("org.yaml:snakeyaml:2.2")
 }
 
 val targetJavaVersion = 21
