@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.11.2"
+version = "1.11.3"
 
 repositories {
     mavenCentral()
@@ -64,7 +64,7 @@ tasks {
 
     runServer {
         dependsOn(shadowJar)
-        minecraftVersion("1.21.8")
+        minecraftVersion("1.21.10")
     }
 
     build {
@@ -92,10 +92,10 @@ tasks {
 }
 
 // Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
-val supportedVersions = listOf("1.21.6-1.21.8")
+val supportedVersions = listOf("1.21.6-1.21.10")
 
 // Modrinth requires discrete game versions rather than a range
-val modrinthGameVersions = listOf("1.21.6", "1.21.7", "1.21.8")
+val modrinthGameVersions = listOf("1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10")
 
 hangarPublish {
     publications.register("plugin") {

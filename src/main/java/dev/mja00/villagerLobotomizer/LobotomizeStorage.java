@@ -62,11 +62,8 @@ public class LobotomizeStorage {
         IMPASSABLE_FLOOR = EnumSet.noneOf(Material.class);
         IMPASSABLE_TALL = EnumSet.noneOf(Material.class);
         DOOR_BLOCKS = EnumSet.noneOf(Material.class);
-        for (Material m : Material.values()) {
+        for (Material m : Registry.MATERIAL) {
             if (m.isOccluding()) {
-                if (m.name().contains("_CARPET")) {
-                    System.out.println("Adding " + m + " to IMPASSABLE_REGULAR");
-                }
                 IMPASSABLE_REGULAR.add(m);
             }
 
