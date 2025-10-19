@@ -4,7 +4,9 @@
 
 A Minecraft Paper plugin that improves server performance by turning off villagers' AI when they're confined to trading halls.
 
-![](https://img.shields.io/bstats/players/25704?color=green?label=Players) ![](https://img.shields.io/bstats/servers/25704?color=green?label=Servers)
+<a href="https://modrinth.com/plugin/villagerlobotomy" target="_blank" rel="noopener noreferrer"><img alt="modrinth" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg"></a> <a href="https://hangar.papermc.io/mja00/VillagerLobotimizer"><img alt="hangar" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/hangar_vector.svg"></a>
+
+![](https://img.shields.io/bstats/players/25704?color=green?label=Players) ![](https://img.shields.io/bstats/servers/25704?color=green?label=Servers) ![](https://modrinth.roughness.technology/full_villagerlobotomy_downloads.svg)
 
 ## Features
 
