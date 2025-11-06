@@ -121,6 +121,8 @@ public class LobotomizeStorage {
     private final boolean onlyProfessions;
     private final boolean lobotomizePassengers;
     private final boolean checkRoof;
+    private final boolean lobotomizeCrowdedInWater;
+    private final int crowdedThreshold;
     private Sound restockSound;
     private Sound levelUpSound;
     private final Logger logger;
@@ -137,6 +139,8 @@ public class LobotomizeStorage {
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
+        this.lobotomizeCrowdedInWater = plugin.getConfig().getBoolean("lobotomize-crowded-in-water");
+        this.crowdedThreshold = plugin.getConfig().getInt("crowded-threshold");
         String soundName = plugin.getConfig().getString("restock-sound");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound");
 
@@ -662,18 +666,39 @@ public class LobotomizeStorage {
             return true;
         }
 
-        // Villagers who are lobotomized will just sink
+        // Villagers who are lobotomized will just sink (unless crowded in water feature is enabled)
 
         // Are we currently swimming?
-        if (villager.isSwimming()) {
-            return true; // Let them keep swimming
-        }
+        boolean isSwimming = villager.isSwimming();
 
         // Is our feet in water? (No idea if #isSwimming() works when lobotomized)
         Block feetBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ());
         Block headBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 1, villagerLoc.getBlockZ());
-        if (feetBlock.getType() == Material.WATER || headBlock.getType() == Material.WATER) {
-            // If the feet or head block is water, we can consider the villager active
+        boolean isInWater = (feetBlock.getType() == Material.WATER || headBlock.getType() == Material.WATER);
+
+        // Check if villager is in water
+        if (isSwimming || isInWater) {
+            // If the crowded-in-water feature is enabled, check if this villager is crowded
+            if (this.lobotomizeCrowdedInWater) {
+                // Count nearby villagers within 3 blocks
+                int nearbyVillagerCount = 0;
+                for (Entity entity : villager.getNearbyEntities(3.0, 3.0, 3.0)) {
+                    if (entity instanceof Villager) {
+                        nearbyVillagerCount++;
+                    }
+                }
+
+                // If we have enough nearby villagers, allow lobotomy (swimming preserved by physics)
+                if (nearbyVillagerCount >= this.crowdedThreshold) {
+                    if (this.plugin.isDebugging()) {
+                        this.logger.info("[Debug] Villager " + villager.getUniqueId() + " is crowded in water with " + nearbyVillagerCount + " nearby villagers (threshold: " + this.crowdedThreshold + ")");
+                    }
+                    // Allow lobotomy - physics will preserve swimming
+                    return false;
+                }
+            }
+
+            // Not crowded or feature disabled - keep active to prevent sinking
             return true;
         }
 

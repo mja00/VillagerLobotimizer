@@ -43,6 +43,12 @@ ignore-non-solid-blocks: false
 #To check if there is a roof above a villager before lobotomizing, set this to true
 check-roof: true
 
+#Lobotomize villagers that are crowded together in water. This preserves swimming ability while reducing lag from breeding farms.
+lobotomize-crowded-in-water: true
+
+#Number of nearby villagers (within 3 blocks) required to consider a villager "crowded" in water. Set to 4+ to avoid affecting iron farms.
+crowded-threshold: 4
+
 #Create teams for debugging purposes. This will create colored teams for inactive and active villagers. We use this to color their glowing effect.
 create-debug-teams: false
 
