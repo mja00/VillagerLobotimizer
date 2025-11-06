@@ -23,6 +23,9 @@ only-lobotomize-villagers-with-professions: false
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
 
+#Whether to make lobotomized villagers silent. When enabled, villagers will be muted when their AI is disabled.
+silent-lobotomized-villagers: false
+
 #The sound to play when a villager restocks. Leave empty ("") for default sounds.
 #A list of sounds can be found at https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html
 #Use the name found in the description column, e.g. "entity.villager.celebrate" for the sound played when a villager restocks.
