@@ -121,6 +121,7 @@ public class LobotomizeStorage {
     private final boolean onlyProfessions;
     private final boolean lobotomizePassengers;
     private final boolean checkRoof;
+    private final boolean silentLobotomizedVillagers;
     private Sound restockSound;
     private Sound levelUpSound;
     private final Logger logger;
@@ -137,6 +138,7 @@ public class LobotomizeStorage {
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
+        this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
         String soundName = plugin.getConfig().getString("restock-sound");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound");
 
@@ -255,6 +257,9 @@ public class LobotomizeStorage {
             // Use Paper's EntityScheduler for thread safety
             villager.getScheduler().run(this.plugin, (scheduledTask) -> {
                 villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
             }, null);
         }
 
@@ -299,11 +304,17 @@ public class LobotomizeStorage {
             try {
                 // During shutdown, try setting directly first since scheduler might not work
                 villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
             } catch (IllegalStateException e) {
                 // If we get a thread violation, try using entity scheduler as last resort
                 try {
                     villager.getScheduler().run(this.plugin, (task) -> {
                         villager.setAware(true);
+                        if (this.silentLobotomizedVillagers) {
+                            villager.setSilent(false);
+                        }
                     }, null);
                 } catch (Exception schedulerException) {
                     // If both fail, log warning but don't crash the shutdown
@@ -368,6 +379,9 @@ public class LobotomizeStorage {
             if (!active) {
                 // Already running on entity thread, safe to modify villager
                 villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
                 this.activeVillagers.add(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");
@@ -385,6 +399,9 @@ public class LobotomizeStorage {
             if (active) {
                 // Already running on entity thread, safe to modify villager
                 villager.setAware(false);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(true);
+                }
                 this.inactiveVillagers.add(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now inactive");

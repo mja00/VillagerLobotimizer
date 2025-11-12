@@ -20,7 +20,7 @@ import java.util.logging.Logger;
 public class ConfigMigrator {
     private final JavaPlugin plugin;
     private final Logger logger;
-    private static final int CURRENT_CONFIG_VERSION = 1; // Increment whenever you update the config.yml
+    private static final int CURRENT_CONFIG_VERSION = 2; // Increment whenever you update the config.yml
 
     public ConfigMigrator(JavaPlugin plugin) {
         this.plugin = plugin;
