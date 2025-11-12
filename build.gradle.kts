@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.11.3"
+version = "1.12.0"
 
 repositories {
     mavenCentral()
@@ -32,6 +32,8 @@ dependencies {
     paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation(group = "org.bstats", name = "bstats-bukkit", version = "3.1.0")
+    implementation("org.yaml:snakeyaml:2.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
 }
 
 val targetJavaVersion = 21
@@ -70,6 +72,10 @@ tasks {
     build {
         paperweight.reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
         dependsOn(shadowJar)
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     jar {
