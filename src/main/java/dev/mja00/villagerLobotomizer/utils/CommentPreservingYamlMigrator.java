@@ -142,7 +142,8 @@ public class CommentPreservingYamlMigrator {
         List<String> pendingComments = new ArrayList<>();
         boolean foundFirstKey = false;
 
-        for (String line : lines) {
+        for (int lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+            String line = lines[lineIndex];
             Matcher commentMatcher = COMMENT_PATTERN.matcher(line);
 
             if (commentMatcher.matches()) {
@@ -157,11 +158,16 @@ public class CommentPreservingYamlMigrator {
                 foundFirstKey = true;
 
                 // This is a key line, associate pending comments with it
-                String key = extractKey(line);
-                if (key != null && !pendingComments.isEmpty()) {
+                if (!pendingComments.isEmpty()) {
+                    String keyPath = extractKeyPath(lines, lineIndex);
+                    if (keyPath == null || keyPath.isEmpty()) {
+                        keyPath = extractKey(line);
+                    }
                     // Combine all pending comments
                     String combinedComment = String.join(" ", pendingComments);
-                    comments.put(key, combinedComment);
+                    if (keyPath != null && !keyPath.isEmpty()) {
+                        comments.put(keyPath, combinedComment);
+                    }
                     pendingComments.clear();
                 }
             } else if (line.trim().isEmpty()) {
