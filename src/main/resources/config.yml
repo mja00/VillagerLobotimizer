@@ -1,5 +1,5 @@
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 2
+config-version: 3
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -60,3 +60,7 @@ disable-chunk-villager-updates: false
 
 #Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.
 prevent-trading-with-unlobotomized-villagers: false
+
+#Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
+#This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
+persist-lobotomized-state: true
