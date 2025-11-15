@@ -105,7 +105,7 @@ public class LobotomizeStorage {
         PROFESSION_BLOCKS.add(Material.GRINDSTONE);
     }
 
-    private final VillagerLobotimizer plugin;
+    private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
     private final NamespacedKey lobotomizedKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
