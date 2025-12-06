@@ -335,43 +335,49 @@ public class LobotomizeStorage {
      * Thread-safe wrapper for processing villagers using entity scheduling
      */
     private void processVillagerSafely(@NotNull Villager villager) {
-        if (!villager.isValid() || villager.isDead()) {
-            ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
-            this.villagerTaskIntervals.remove(villager.getUniqueId());
-            if (task != null && !task.isCancelled()) {
-                task.cancel();
-            }
-            this.activeVillagers.remove(villager);
-            this.inactiveVillagers.remove(villager);
-            return;
-        }
-
-        boolean isActive = this.activeVillagers.contains(villager);
-        boolean isInactive = this.inactiveVillagers.contains(villager);
-        
-        // Skip if villager is not tracked
-        if (!isActive && !isInactive) {
-            // Cancel the task since villager is no longer tracked
-            ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
-            this.villagerTaskIntervals.remove(villager.getUniqueId());
-            if (task != null && !task.isCancelled()) {
-                task.cancel();
-            }
-            return;
-        }
-        
-        // Process the villager and handle state changes
-        if (isActive) {
-            boolean shouldRemove = this.processVillager(villager, true);
-            if (shouldRemove) {
+        try {
+            if (!villager.isValid() || villager.isDead()) {
+                ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+                this.villagerTaskIntervals.remove(villager.getUniqueId());
+                if (task != null && !task.isCancelled()) {
+                    task.cancel();
+                }
                 this.activeVillagers.remove(villager);
-                this.rescheduleVillagerTask(villager, this.inactiveCheckInterval);
-            }
-        } else {
-            boolean shouldRemove = this.processVillager(villager, false);
-            if (shouldRemove) {
                 this.inactiveVillagers.remove(villager);
-                this.rescheduleVillagerTask(villager, this.checkInterval);
+                return;
+            }
+
+            boolean isActive = this.activeVillagers.contains(villager);
+            boolean isInactive = this.inactiveVillagers.contains(villager);
+            
+            // Skip if villager is not tracked
+            if (!isActive && !isInactive) {
+                // Cancel the task since villager is no longer tracked
+                ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+                this.villagerTaskIntervals.remove(villager.getUniqueId());
+                if (task != null && !task.isCancelled()) {
+                    task.cancel();
+                }
+                return;
+            }
+            
+            // Process the villager and handle state changes
+            if (isActive) {
+                boolean shouldRemove = this.processVillager(villager, true);
+                if (shouldRemove) {
+                    this.activeVillagers.remove(villager);
+                    this.rescheduleVillagerTask(villager, this.inactiveCheckInterval);
+                }
+            } else {
+                boolean shouldRemove = this.processVillager(villager, false);
+                if (shouldRemove) {
+                    this.inactiveVillagers.remove(villager);
+                    this.rescheduleVillagerTask(villager, this.checkInterval);
+                }
+            }
+        } catch (IllegalStateException e) {
+            if (this.plugin.isDebugging()) {
+                this.logger.warning("Skipping villager processing for " + villager.getUniqueId() + " due to state change: " + e.getMessage());
             }
         }
     }
@@ -665,6 +671,9 @@ public class LobotomizeStorage {
                         }, null);
                     } catch (IllegalPluginAccessException e) {
                         // Plugin disabled, ignore
+                        if (this.plugin.isDebugging()) {
+                            this.logger.fine("Skipped chunk villager processing; plugin disabled or stopping.");
+                        }
                     }
                 }
             }

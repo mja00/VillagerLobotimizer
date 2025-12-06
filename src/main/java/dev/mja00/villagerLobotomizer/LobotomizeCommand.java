@@ -61,7 +61,7 @@ public class LobotomizeCommand {
         int total = active + inactive;
         CommandSender sender = source.getSender();
         if (total == 0) {
-            sender.sendMessage(Component.text("No villagers are currently tracked.").color(NamedTextColor.YELLOW));
+            sender.sendMessage(Component.text("No villagers are currently tracked. Villagers are tracked when chunks load.").color(NamedTextColor.YELLOW));
             return Command.SINGLE_SUCCESS;
         }
         Component message = Component.text("There are ")
