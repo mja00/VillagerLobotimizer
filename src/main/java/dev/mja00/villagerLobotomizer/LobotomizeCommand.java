@@ -5,7 +5,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import org.bukkit.Bukkit;
-import org.bukkit.World;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -61,6 +60,10 @@ public class LobotomizeCommand {
         int inactive = this.plugin.getStorage().getLobotomized().size();
         int total = active + inactive;
         CommandSender sender = source.getSender();
+        if (total == 0) {
+            sender.sendMessage(Component.text("No villagers are currently tracked.").color(NamedTextColor.YELLOW));
+            return Command.SINGLE_SUCCESS;
+        }
         Component message = Component.text("There are ")
                 .append(Component.text(String.valueOf(total)).color(NamedTextColor.GREEN))
                 .append(Component.text(" known villagers on the server."));
@@ -160,17 +163,10 @@ public class LobotomizeCommand {
     }
 
     private int reloadCommand(CommandSourceStack source) throws CommandSyntaxException {
-        // Reload our config
-        this.plugin.reloadConfig();
-        // Now we reload all villagers
-        int villagers = 0;
-        for (World world : Bukkit.getWorlds()) {
-            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
-                this.plugin.getStorage().removeVillager(villager);
-                // Add it back
-                this.plugin.getStorage().addVillager(villager);
-                ++villagers;
-            }
+        int villagers = this.plugin.reloadPluginState();
+        if (villagers < 0) {
+            source.getSender().sendMessage(Component.text("Failed to reload storage; keeping existing state. Check console for details.").color(NamedTextColor.RED));
+            return 0;
         }
         Component message = Component.text("Reloaded ")
                 .append(Component.text(String.valueOf(villagers)).color(NamedTextColor.GREEN))

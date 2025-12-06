@@ -18,6 +18,7 @@ import org.bukkit.entity.Villager;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.World;
 import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.scoreboard.Team;
 
@@ -116,6 +117,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
             case LIMITED:
                 this.getLogger().info("You are running a server with limited API functionality. Some features may become unavailable.");
                 break;
+            case FULL:
+                // Fully supported, no warning needed
+                break;
         }
 
         if (VersionUtils.getSupportStatusClass() != null) {
@@ -144,6 +148,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
         }
 
         ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
+        if (scoreboardManager == null) {
+            this.getLogger().warning("Scoreboard manager is not available. Skipping debug team creation.");
+            this.activeVillagersTeam = null;
+            this.inactiveVillagersTeam = null;
+            return;
+        }
         Team activeTeam = scoreboardManager.getMainScoreboard().getTeam(this.activeVillagersTeamName);
         if (activeTeam == null) {
             activeTeam = scoreboardManager.getMainScoreboard().registerNewTeam(this.activeVillagersTeamName);
@@ -190,10 +200,15 @@ public final class VillagerLobotomizer extends JavaPlugin {
         // No need to cancel tasks manually - Paper handles this automatically on disable
         // If either of the teams are not null, we need to remove them (only on non-Folia servers)
         if (!this.isFolia) {
-            Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
-            clearTeam(activeTeam);
-            Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
-            clearTeam(inactiveTeam);
+            ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
+            if (scoreboardManager != null) {
+                Team activeTeam = scoreboardManager.getMainScoreboard().getTeam(this.activeVillagersTeamName);
+                clearTeam(activeTeam);
+                Team inactiveTeam = scoreboardManager.getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
+                clearTeam(inactiveTeam);
+            } else {
+                this.getLogger().warning("Scoreboard manager unavailable during shutdown; debug teams cannot be cleaned up.");
+            }
         }
     }
 
@@ -228,10 +243,17 @@ public final class VillagerLobotomizer extends JavaPlugin {
         if (!this.isFolia) {
             // If debugging is being set to false, we need to clean up the teams
             if (!debugging) {
-                Team activeTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.activeVillagersTeamName);
-                clearTeam(activeTeam);
-                Team inactiveTeam = this.getServer().getScoreboardManager().getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
-                clearTeam(inactiveTeam);
+                ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
+                if (scoreboardManager != null) {
+                    Team activeTeam = scoreboardManager.getMainScoreboard().getTeam(this.activeVillagersTeamName);
+                    clearTeam(activeTeam);
+                    Team inactiveTeam = scoreboardManager.getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
+                    clearTeam(inactiveTeam);
+                } else {
+                    this.getLogger().warning("Scoreboard manager is unavailable; skipping debug team cleanup.");
+                }
+                this.activeVillagersTeam = null;
+                this.inactiveVillagersTeam = null;
             } else {
                 // Create them again
                 createDebuggingTeams();
@@ -337,5 +359,66 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public boolean isDisableChunkVillagerUpdate() {
         return this.disableChunkVillagerUpdate;
+    }
+
+    /**
+     * Reloads plugin configuration, storage, and debug flags.
+     *
+     * @return number of villagers reloaded into storage
+     */
+    public int reloadPluginState() {
+        this.reloadConfig();
+        this.debugging = this.getConfig().getBoolean("debug");
+        this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
+        this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
+        boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
+
+        LobotomizeStorage previousStorage = this.storage;
+        LobotomizeStorage newStorage;
+        try {
+            newStorage = new LobotomizeStorage(this);
+        } catch (Exception e) {
+            this.getLogger().severe("Failed to reload storage; keeping previous storage instance. Error: " + e.getMessage());
+            if (this.isDebugging()) {
+                this.getLogger().log(java.util.logging.Level.SEVERE, "Storage reload stack trace", e);
+            }
+            // Preserve existing storage to avoid leaving it in shutdown state
+            return -1;
+        }
+
+        if (previousStorage != null) {
+            previousStorage.flush();
+        }
+        this.storage = newStorage;
+
+        // Reset or recreate debug teams based on current configuration
+        if (!this.isFolia) {
+            ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
+            if (scoreboardManager != null) {
+                Team activeTeam = scoreboardManager.getMainScoreboard().getTeam(this.activeVillagersTeamName);
+                Team inactiveTeam = scoreboardManager.getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
+                if (!this.debugging || !createDebuggingTeams) {
+                    clearTeam(activeTeam);
+                    clearTeam(inactiveTeam);
+                    this.activeVillagersTeam = null;
+                    this.inactiveVillagersTeam = null;
+                }
+            } else if (this.debugging && createDebuggingTeams) {
+                this.getLogger().warning("Scoreboard manager is unavailable; debug teams cannot be recreated.");
+            }
+        }
+
+        if (this.debugging && createDebuggingTeams) {
+            createDebuggingTeams();
+        }
+
+        int villagers = 0;
+        for (World world : Bukkit.getWorlds()) {
+            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+                this.storage.addVillager(villager);
+                villagers++;
+            }
+        }
+        return villagers;
     }
 }
