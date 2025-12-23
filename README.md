@@ -34,7 +34,7 @@ A Minecraft Paper plugin that improves server performance by turning off village
 
 ```yaml
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 1
+config-version: 3
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -57,6 +57,9 @@ only-lobotomize-villagers-with-professions: false
 
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
+
+#Whether to make lobotomized villagers silent. When enabled, villagers will be muted when their AI is disabled.
+silent-lobotomized-villagers: false
 
 #The sound to play when a villager restocks. Leave empty ("") for default sounds.
 #A list of sounds can be found at https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html
@@ -92,6 +95,10 @@ disable-chunk-villager-updates: false
 
 #Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.
 prevent-trading-with-unlobotomized-villagers: false
+
+#Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
+#This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
+persist-lobotomized-state: true
 ```
 
 ## Special Villager Names
