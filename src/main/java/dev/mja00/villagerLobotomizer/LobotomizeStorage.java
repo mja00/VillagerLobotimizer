@@ -257,21 +257,9 @@ public class LobotomizeStorage {
             }
         }
 
-        // Schedule per-villager task using Paper's EntityScheduler
-        try {
-            ScheduledTask task = villager.getScheduler().runAtFixedRate(this.plugin,
-                (scheduledTask) -> this.processVillagerSafely(villager),
-                null, // No initial delay
-                this.checkInterval,
-                this.checkInterval
-            );
-
-            this.villagerTasks.put(villager.getUniqueId(), task);
-        } catch (IllegalPluginAccessException e) {
-            // Plugin disabled during scheduling, remove from whichever set it was added to
-            this.activeVillagers.remove(villager);
-            this.inactiveVillagers.remove(villager);
-        }
+        // Schedule per-villager task with appropriate interval
+        long interval = wasLobotomized ? this.inactiveCheckInterval : this.checkInterval;
+        this.scheduleVillagerTask(villager, interval);
     }
 
     public final void removeVillager(@NotNull Villager villager) {
@@ -306,6 +294,24 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + active + ", cancelled scheduler");
             } else {
                 this.logger.info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId() + "), but it was not tracked");
+            }
+        }
+    }
+
+    /**
+     * Clears the persistent lobotomized marker from a villager.
+     * Used by the wake command to prevent re-lobotomization on chunk reload.
+     *
+     * @param villager The villager to clear the marker from
+     */
+    public void clearLobotomizedMarker(@NotNull Villager villager) {
+        if (this.persistLobotomizedState) {
+            PersistentDataContainer pdc = villager.getPersistentDataContainer();
+            if (pdc.has(this.lobotomizedKey, PersistentDataType.BYTE)) {
+                pdc.remove(this.lobotomizedKey);
+                if (this.plugin.isDebugging()) {
+                    this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
+                }
             }
         }
     }
@@ -454,6 +460,9 @@ public class LobotomizeStorage {
                 // Remove persistent lobotomized marker
                 if (this.persistLobotomizedState) {
                     villager.getPersistentDataContainer().remove(this.lobotomizedKey);
+                    if (this.plugin.isDebugging()) {
+                        this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
+                    }
                 }
                 this.activeVillagers.add(villager);
                 if (this.plugin.isDebugging()) {
@@ -478,6 +487,9 @@ public class LobotomizeStorage {
                 // Set persistent lobotomized marker
                 if (this.persistLobotomizedState) {
                     villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                    if (this.plugin.isDebugging()) {
+                        this.logger.info("[Debug] Set persistent lobotomized marker for " + villager.getUniqueId());
+                    }
                 }
                 this.inactiveVillagers.add(villager);
                 if (this.plugin.isDebugging()) {

@@ -158,6 +158,7 @@ public class LobotomizeCommand {
         if (target == null) return 0;
         Villager villager = (Villager) target;
         this.plugin.getStorage().removeVillager(villager);
+        this.plugin.getStorage().clearLobotomizedMarker(villager);
         source.getSender().sendMessage(Component.text("This villager will now be unaffected by the plugin until the chunk is reloaded."));
         return Command.SINGLE_SUCCESS;
     }
