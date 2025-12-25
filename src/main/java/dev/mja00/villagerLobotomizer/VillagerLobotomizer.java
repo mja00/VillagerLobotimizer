@@ -68,10 +68,14 @@ public final class VillagerLobotomizer extends JavaPlugin {
         // Initialize Sentry if enabled
         boolean enableSentry = this.getConfig().getBoolean("enable-sentry", true);
         if (enableSentry) {
+            // Detect if we're running in dev mode (runServer task)
+            boolean isDev = Boolean.getBoolean("villagerlobotimizer.dev");
+            String environment = isDev ? "development" : "production";
+
             try {
                 Sentry.init(options -> {
                     options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
-                    options.setEnvironment("production");
+                    options.setEnvironment(environment);
                     options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
 
                     // Set context tags
@@ -100,7 +104,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
                     options.setSendDefaultPii(false);
                 });
                 this.sentryEnabled = true;
-                this.getLogger().info("Sentry error tracking enabled");
+                this.getLogger().info("Sentry error tracking enabled (environment: " + environment + ")");
             } catch (Exception e) {
                 this.getLogger().warning("Failed to initialize Sentry: " + e.getMessage());
                 this.sentryEnabled = false;

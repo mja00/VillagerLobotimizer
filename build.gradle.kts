@@ -69,6 +69,9 @@ tasks {
     runServer {
         dependsOn(shadowJar)
         minecraftVersion("1.21.11")
+
+        // Set system property to mark this as a development environment for Sentry
+        systemProperty("villagerlobotimizer.dev", "true")
     }
 
     build {
