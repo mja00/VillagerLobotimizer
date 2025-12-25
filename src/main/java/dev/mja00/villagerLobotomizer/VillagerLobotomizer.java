@@ -75,12 +75,16 @@ public final class VillagerLobotomizer extends JavaPlugin {
                     options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
 
                     // Set context tags
-                    options.setTag("server.brand", SentryContextProvider.getServerBrand());
-                    options.setTag("server.version", SentryContextProvider.getServerVersion());
-                    options.setTag("minecraft.version", SentryContextProvider.getMinecraftVersion());
-                    options.setTag("bukkit.version", SentryContextProvider.getBukkitVersion());
-                    options.setTag("java.version", SentryContextProvider.getJavaVersion());
-                    options.setTag("folia.enabled", String.valueOf(this.isFolia));
+                    try {
+                        options.setTag("server.brand", SentryContextProvider.getServerBrand());
+                        options.setTag("server.version", SentryContextProvider.getServerVersion());
+                        options.setTag("minecraft.version", SentryContextProvider.getMinecraftVersion());
+                        options.setTag("bukkit.version", SentryContextProvider.getBukkitVersion());
+                        options.setTag("java.version", SentryContextProvider.getJavaVersion());
+                        options.setTag("folia.enabled", String.valueOf(this.isFolia));
+                    } catch (Exception e) {
+                        this.getLogger().warning("Failed to set Sentry context tags: " + e.getMessage());
+                    }
 
                     // Enable source context and stack traces
                     options.setAttachStacktrace(true); // Attach stack traces to all events
