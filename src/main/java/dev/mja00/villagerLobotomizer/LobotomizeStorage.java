@@ -1,5 +1,6 @@
 package dev.mja00.villagerLobotomizer;
 
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import dev.mja00.villagerLobotomizer.utils.StringUtils;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import io.papermc.paper.registry.RegistryAccess;
@@ -214,7 +215,12 @@ public class LobotomizeStorage {
         this.key = new NamespacedKey(plugin, "lastRestock");
         this.lobotomizedKey = new NamespacedKey(plugin, "isLobotomized");
         // Use Paper's GlobalRegionScheduler for chunk processing (doesn't access entities directly)
-        this.chunkProcessingTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(plugin, (task) -> this.processChunks(), 5L, 5L);
+        this.chunkProcessingTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
+                plugin,
+                SentryTaskWrapper.wrap((task) -> this.processChunks()),
+                5L,
+                5L
+        );
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -281,12 +287,12 @@ public class LobotomizeStorage {
         if (this.inactiveVillagers.remove(villager)) {
             removed = true;
             // Use Paper's EntityScheduler for thread safety
-            villager.getScheduler().run(this.plugin, (scheduledTask) -> {
+            villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((scheduledTask) -> {
                 villager.setAware(true);
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(false);
                 }
-            }, null);
+            }), null);
         }
 
         if (this.plugin.isDebugging()) {
@@ -363,7 +369,7 @@ public class LobotomizeStorage {
             } catch (IllegalStateException e) {
                 // If we get a thread violation, try using entity scheduler as last resort
                 try {
-                    villager.getScheduler().run(this.plugin, (task) -> {
+                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> {
                         villager.setAware(true);
                         if (this.silentLobotomizedVillagers) {
                             villager.setSilent(false);
@@ -372,7 +378,7 @@ public class LobotomizeStorage {
                         if (this.persistLobotomizedState) {
                             villager.getPersistentDataContainer().remove(this.lobotomizedKey);
                         }
-                    }, null);
+                    }), null);
                 } catch (Exception schedulerException) {
                     // If both fail, log warning but don't crash the shutdown
                     this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
@@ -728,14 +734,14 @@ public class LobotomizeStorage {
                 if (inactiveVillagers.contains(villager) || activeVillagers.contains(villager)) {
                     // Schedule processing on the villager's region thread using Paper's EntityScheduler
                     try {
-                        villager.getScheduler().run(this.plugin, (scheduledTask) -> {
+                        villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((scheduledTask) -> {
                             boolean isActive = this.activeVillagers.contains(villager);
                             if (this.processVillager(villager, isActive)) {
                                 if (this.plugin.isDebugging()) {
                                     this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
                                 }
                             }
-                        }, null);
+                        }), null);
                     } catch (IllegalPluginAccessException e) {
                         // Plugin disabled, ignore
                         if (this.plugin.isDebugging()) {
@@ -840,7 +846,7 @@ public class LobotomizeStorage {
         try {
             ScheduledTask task = villager.getScheduler().runAtFixedRate(
                     this.plugin,
-                    (scheduledTask) -> this.processVillagerSafely(villager),
+                    SentryTaskWrapper.wrap((scheduledTask) -> this.processVillagerSafely(villager)),
                     null,
                     interval,
                     interval

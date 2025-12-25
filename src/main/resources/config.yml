@@ -1,5 +1,5 @@
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 3
+config-version: 4
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -64,3 +64,7 @@ prevent-trading-with-unlobotomized-villagers: false
 #Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
 #This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
 persist-lobotomized-state: true
+
+#Enable Sentry error tracking. When enabled, exceptions will be sent to Sentry for debugging.
+#This helps the developers identify and fix issues. Set to false to disable.
+enable-sentry: true

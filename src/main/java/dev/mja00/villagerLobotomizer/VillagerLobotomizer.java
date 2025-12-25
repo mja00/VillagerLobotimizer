@@ -4,8 +4,10 @@ import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
 import dev.mja00.villagerLobotomizer.utils.ConfigMigrator;
+import dev.mja00.villagerLobotomizer.utils.SentryContextProvider;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
+import io.sentry.Sentry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bstats.bukkit.Metrics;
@@ -45,6 +47,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
     private final String activeVillagersTeamName = "lobotomy_active_villagers";
     private final String inactiveVillagersTeamName = "lobotomy_inactive_villagers";
     private boolean disableChunkVillagerUpdate;
+    private boolean sentryEnabled = false;
 
     @Override
     public void onEnable() {
@@ -61,6 +64,40 @@ public final class VillagerLobotomizer extends JavaPlugin {
         if (this.isFolia) {
             this.getLogger().info("Folia detected, using per-entity schedulers.");
         }
+
+        // Initialize Sentry if enabled
+        boolean enableSentry = this.getConfig().getBoolean("enable-sentry", true);
+        if (enableSentry) {
+            try {
+                Sentry.init(options -> {
+                    options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+                    options.setEnvironment("production");
+                    options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
+
+                    // Set context tags
+                    options.setTag("server.brand", SentryContextProvider.getServerBrand());
+                    options.setTag("server.version", SentryContextProvider.getServerVersion());
+                    options.setTag("minecraft.version", SentryContextProvider.getMinecraftVersion());
+                    options.setTag("bukkit.version", SentryContextProvider.getBukkitVersion());
+                    options.setTag("java.version", SentryContextProvider.getJavaVersion());
+                    options.setTag("folia.enabled", String.valueOf(this.isFolia));
+
+                    // Performance monitoring
+                    options.setTracesSampleRate(0.1); // 10% sampling
+
+                    // Privacy: disable PII
+                    options.setSendDefaultPii(false);
+                });
+                this.sentryEnabled = true;
+                this.getLogger().info("Sentry error tracking enabled");
+            } catch (Exception e) {
+                this.getLogger().warning("Failed to initialize Sentry: " + e.getMessage());
+                this.sentryEnabled = false;
+            }
+        } else {
+            this.getLogger().info("Sentry error tracking is disabled in config");
+        }
+
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);
@@ -208,6 +245,16 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 clearTeam(inactiveTeam);
             } else {
                 this.getLogger().warning("Scoreboard manager unavailable during shutdown; debug teams cannot be cleaned up.");
+            }
+        }
+
+        // Flush and close Sentry
+        if (this.sentryEnabled) {
+            try {
+                Sentry.close();
+                this.getLogger().info("Sentry shutdown complete");
+            } catch (Exception e) {
+                this.getLogger().warning("Error during Sentry shutdown: " + e.getMessage());
             }
         }
     }
@@ -359,6 +406,10 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public boolean isDisableChunkVillagerUpdate() {
         return this.disableChunkVillagerUpdate;
+    }
+
+    public boolean isSentryEnabled() {
+        return this.sentryEnabled;
     }
 
     /**

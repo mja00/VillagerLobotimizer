@@ -32,6 +32,7 @@ dependencies {
     paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation("org.bstats:bstats-bukkit:3.1.0")
+    implementation("io.sentry:sentry:8.28.0")
     implementation("org.yaml:snakeyaml:2.2")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -92,9 +93,11 @@ tasks {
         dependencies {
             include(dependency("org.bstats:bstats-bukkit"))
             include(dependency("org.bstats:bstats-base"))
+            include(dependency("io.sentry:sentry"))
         }
 
         relocate("org.bstats", "dev.mja00.villagerLobotomizer.bstats")
+        relocate("io.sentry", "dev.mja00.villagerLobotomizer.sentry")
     }
 }
 
