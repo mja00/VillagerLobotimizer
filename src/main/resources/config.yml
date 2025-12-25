@@ -65,6 +65,32 @@ prevent-trading-with-unlobotomized-villagers: false
 #This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
 persist-lobotomized-state: true
 
-#Enable Sentry error tracking. When enabled, exceptions will be sent to Sentry for debugging.
-#This helps the developers identify and fix issues. Set to false to disable.
+# ===== SENTRY ERROR TRACKING =====
+# Sentry is an error monitoring service that helps developers identify and fix bugs proactively.
+# When enabled, the plugin will automatically report crashes and exceptions to the developers.
+#
+# WHAT DATA IS COLLECTED:
+#   - Exception stack traces and error messages
+#   - Server type and version (Paper, Purpur, Folia, etc.)
+#   - Minecraft version and Bukkit API version
+#   - Java version
+#   - Plugin version
+#   - Thread information and task scheduling context
+#
+# WHAT DATA IS NOT COLLECTED:
+#   - Player names, UUIDs, or any player-identifiable information
+#   - Chat messages or commands
+#   - World data, coordinates, or block information
+#   - Server IP address or hostname
+#   - Server configuration (beyond this plugin's settings)
+#
+# WHY KEEP THIS ENABLED:
+#   - Helps developers discover and fix bugs you might not even report
+#   - Provides context to fix issues specific to your server setup (Folia vs Paper, Java version, etc.)
+#   - Errors are sent automatically - no need to manually report bugs
+#   - All data is anonymized and used solely for debugging purposes
+#
+# PRIVACY: No personally identifiable information (PII) is collected. Only technical error data is sent.
+#
+# Set to false if you prefer not to share error reports with developers.
 enable-sentry: true

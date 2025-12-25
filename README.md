@@ -34,7 +34,7 @@ A Minecraft Paper plugin that improves server performance by turning off village
 
 ```yaml
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 3
+config-version: 4
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -99,6 +99,9 @@ prevent-trading-with-unlobotomized-villagers: false
 #Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
 #This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
 persist-lobotomized-state: true
+
+#Enable Sentry error tracking to help developers identify and fix bugs. See "Privacy & Telemetry" section below for details.
+enable-sentry: true
 ```
 
 ## Special Villager Names
@@ -113,6 +116,44 @@ The plugin features an enhanced sound system:
 - **Customizable sounds**: You can override the default sounds by specifying a custom sound in the configuration
 - **Sound reference**: A complete list of available sounds can be found in the [Paper API documentation](https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html)
 - **Level-up celebrations**: Villagers play celebration sounds when they level up their trades
+
+## Privacy & Telemetry
+
+This plugin uses two services to help improve quality and fix bugs:
+
+### bStats (Usage Analytics)
+
+The plugin uses [bStats](https://bstats.org/) to collect anonymous usage statistics, including:
+- Number of servers using the plugin
+- Number of players on those servers
+- Server software (Paper, Purpur, etc.)
+- Plugin version distribution
+
+This data helps us understand how the plugin is used and prioritize development efforts. All data is anonymous and publicly viewable at [bStats Plugin Page](https://bstats.org/plugin/bukkit/VillagerLobotimizer/25704).
+
+**Opt-out:** You can disable bStats globally in `plugins/bStats/config.yml` by setting `enabled: false`.
+
+### Sentry (Error Tracking)
+
+The plugin uses [Sentry](https://sentry.io/) to automatically report errors and exceptions, helping developers identify and fix bugs proactively.
+
+**What data is collected:**
+- Exception stack traces and error messages
+- Server type and version (Paper, Purpur, Folia, etc.)
+- Minecraft version, Bukkit API version, and Java version
+- Plugin version
+- Thread information and task scheduling context
+
+**What data is NOT collected:**
+- Player names, UUIDs, or any player-identifiable information
+- Chat messages or commands
+- World data, coordinates, or block information
+- Server IP address or hostname
+- Any personally identifiable information (PII)
+
+All error data is anonymized and used solely for debugging purposes.
+
+**Opt-out:** Set `enable-sentry: false` in `config.yml` to disable error reporting.
 
 ## Requirements
 
