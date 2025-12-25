@@ -1,5 +1,7 @@
 VillagerLobotimizer is a Minecraft Paper plugin (Java 21) that disables villager AI when trapped in trading halls. Folia-compatible.
 
+Note: The project is misspelled on purpose. You'll need to use VillagerLobotomizer and not VillagerLobotimizer.
+
 ## Commands
 - Build: `./gradlew build`
 - Test Server: `./gradlew runServer`
