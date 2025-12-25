@@ -98,6 +98,12 @@ tasks {
 
         relocate("org.bstats", "dev.mja00.villagerLobotomizer.bstats")
         relocate("io.sentry", "dev.mja00.villagerLobotomizer.sentry")
+
+        // Optionally include sources for better Sentry source context
+        // Set -PincludeSources=true to enable (increases JAR size)
+        if (project.hasProperty("includeSources") && project.property("includeSources") == "true") {
+            from(sourceSets.main.get().allSource)
+        }
     }
 }
 

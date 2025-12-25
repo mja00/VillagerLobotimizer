@@ -82,6 +82,13 @@ public final class VillagerLobotomizer extends JavaPlugin {
                     options.setTag("java.version", SentryContextProvider.getJavaVersion());
                     options.setTag("folia.enabled", String.valueOf(this.isFolia));
 
+                    // Enable source context and stack traces
+                    options.setAttachStacktrace(true); // Attach stack traces to all events
+                    options.setAttachThreads(true); // Attach thread information
+
+                    // Mark our package as in-app for better source highlighting
+                    options.addInAppInclude("dev.mja00.villagerLobotimizer");
+
                     // Performance monitoring
                     options.setTracesSampleRate(0.1); // 10% sampling
 

@@ -16,7 +16,10 @@ public class SentryTaskWrapper {
             try {
                 task.accept(scheduledTask);
             } catch (Exception e) {
-                Sentry.captureException(e);
+                // Only capture if Sentry is initialized
+                if (Sentry.isEnabled()) {
+                    Sentry.captureException(e);
+                }
                 throw e; // Re-throw to maintain existing behavior
             }
         };
