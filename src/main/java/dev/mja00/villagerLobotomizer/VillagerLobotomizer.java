@@ -87,7 +87,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
                         options.setTag("java.version", SentryContextProvider.getJavaVersion());
                         options.setTag("folia.enabled", String.valueOf(this.isFolia));
                     } catch (Exception e) {
-                        this.getLogger().warning("Failed to set Sentry context tags: " + e.getMessage());
+                        this.getLogger().log(java.util.logging.Level.WARNING, "Failed to set Sentry context tags: " + e.getMessage(), e);
                     }
 
                     // Enable source context and stack traces
@@ -106,7 +106,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 this.sentryEnabled = true;
                 this.getLogger().info("Sentry error tracking enabled (environment: " + environment + ")");
             } catch (Exception e) {
-                this.getLogger().warning("Failed to initialize Sentry: " + e.getMessage());
+                this.getLogger().log(java.util.logging.Level.WARNING, "Failed to initialize Sentry: " + e.getMessage(), e);
                 this.sentryEnabled = false;
             }
         } else {
@@ -267,9 +267,11 @@ public final class VillagerLobotomizer extends JavaPlugin {
         if (this.sentryEnabled) {
             try {
                 Sentry.close();
-                this.getLogger().info("Sentry shutdown complete");
+                if (this.isDebugging()) {
+                    this.getLogger().info("Sentry shutdown complete");
+                }
             } catch (Exception e) {
-                this.getLogger().warning("Error during Sentry shutdown: " + e.getMessage());
+                this.getLogger().log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
             }
         }
     }

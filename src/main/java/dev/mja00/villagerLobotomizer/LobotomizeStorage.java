@@ -381,10 +381,10 @@ public class LobotomizeStorage {
                     }), null);
                 } catch (Exception schedulerException) {
                     // If both fail, log warning but don't crash the shutdown
-                    this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
+                    this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
                 }
             } catch (Exception e) {
-                this.logger.warning("Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage());
+                this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
             }
         }
     }
