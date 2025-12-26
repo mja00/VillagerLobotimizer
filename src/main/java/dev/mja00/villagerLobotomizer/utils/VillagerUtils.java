@@ -164,7 +164,9 @@ public class VillagerUtils {
     public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockGameTimeKey) {
         int numberOfRestocksToday = villager.getRestocksToday();
         Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        return numberOfRestocksToday == 0 || numberOfRestocksToday > 2 && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
+        // Allow up to 2 restocks per day, but require a cooldown between them (2400 ticks = 2 minutes)
+        // Also allow if somehow restocks > 2 (legacy support/bug handling) but still enforce cooldown
+        return (numberOfRestocksToday < 2 || numberOfRestocksToday > 2) && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
     }
 
     /**
@@ -172,27 +174,29 @@ public class VillagerUtils {
      */
     public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockGameTimeKey, NamespacedKey lastRestockCheckDayTimeKey) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestockGameTime = pdc.getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        long gameTime = villager.getWorld().getGameTime();
-        boolean gameTimeOverRestockTime = gameTime > lastRestockGameTime;
-        long dayTime = villager.getWorld().getTime();
-
+        long fullTime = villager.getWorld().getFullTime();
+        
+        // Check for new day using Full Time (absolute ticks) to avoid wrapping issues
         if (lastRestockCheckDayTime > 0L) {
-            long time = lastRestockCheckDayTime / 24000L;
-            long dayTimeOverRestockTime = dayTime / 24000L;
-            gameTimeOverRestockTime |= dayTimeOverRestockTime > time;
+            long lastDay = lastRestockCheckDayTime / 24000L;
+            long currentDay = fullTime / 24000L;
+            if (currentDay > lastDay) {
+                villager.setRestocksToday(0);
+            }
         }
+        
+        // Update the last check time to current full time
+        pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        lastRestockCheckDayTime = dayTime;
-        if (gameTimeOverRestockTime) {
-            lastRestockGameTime = gameTime;
-            villager.setRestocksToday(0);
+        boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
+        
+        if (allowed) {
+            // Update last restock game time to now, so the cooldown works for the next check
+            long gameTime = villager.getWorld().getGameTime();
+            pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, gameTime);
         }
-
-        // Store our PDC values
-        pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, lastRestockGameTime);
-        pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, lastRestockCheckDayTime);
-        return allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
+        
+        return allowed;
     }
 }
