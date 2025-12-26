@@ -183,6 +183,7 @@ public class VillagerUtils {
             long currentDay = fullTime / 24000L;
             if (currentDay > lastDay) {
                 villager.setRestocksToday(0);
+                pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
             }
         }
         
