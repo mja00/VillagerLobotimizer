@@ -1,15 +1,20 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.bukkit.*;
-import org.bukkit.entity.Villager;
-import org.bukkit.inventory.MerchantRecipe;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.util.BoundingBox;
-
 import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.World;
+import org.bukkit.entity.Villager;
+import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.util.BoundingBox;
 
 public class VillagerUtils {
     public static final Map<Villager.Profession, Material> PROFESSION_TO_STATION;
@@ -161,12 +166,13 @@ public class VillagerUtils {
     /**
      * Checks if a villager is allowed to restock based on restocks today and last restock game time.
      */
-    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockGameTimeKey) {
+    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
+        Long lastRestockFullTime = villager.getPersistentDataContainer().getOrDefault(lastRestockFullTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         // Allow up to 2 restocks per day, but require a cooldown between them (2400 ticks = 2 minutes)
         // Also allow if somehow restocks > 2 (legacy support/bug handling) but still enforce cooldown
-        return (numberOfRestocksToday < 2 || numberOfRestocksToday > 2) && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
+        // Using getFullTime() instead of getGameTime() because getGameTime() can reset on server restart
+        return (numberOfRestocksToday != 2) && villager.getWorld().getFullTime() > lastRestockFullTime + 2400L;
     }
 
     /**
@@ -193,9 +199,9 @@ public class VillagerUtils {
         boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
         
         if (allowed) {
-            // Update last restock game time to now, so the cooldown works for the next check
-            long gameTime = villager.getWorld().getGameTime();
-            pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, gameTime);
+            // Update last restock time to now, so the cooldown works for the next check
+            // Using getFullTime() (persistent) instead of getGameTime() (can reset)
+            pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
         }
         
         return allowed;
