@@ -72,25 +72,22 @@ public class VillagerUtils {
      */
     public static boolean isJobSiteNearby(Villager villager) {
         Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
-
         if (jobSite == Material.AIR) {
             return false;
         }
 
-        Location location = villager.getLocation();
-        int[] yOffsets = {-1, 0, 1}; // below feet, feet, and body levels
-        for (int yOffset : yOffsets) {
-            int checkY = location.getBlockY() + yOffset;
-            for (int x = -1; x <= 1; x++) {
-                for (int z = -1; z <= 1; z++) {
-                    if (x == 0 && z == 0) {
-                        continue;
-                    }
+        Location loc = villager.getLocation();
+        World world = loc.getWorld();
+        int baseX = loc.getBlockX();
+        int baseY = loc.getBlockY();
+        int baseZ = loc.getBlockZ();
 
-                    int checkX = location.getBlockX() + x;
-                    int checkZ = location.getBlockZ() + z;
-
-                    if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    // Don't check the center of the villager, a block won't be there
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    if (world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz).getType() == jobSite) {
                         return true;
                     }
                 }
