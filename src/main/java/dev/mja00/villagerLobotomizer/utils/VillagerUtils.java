@@ -165,11 +165,10 @@ public class VillagerUtils {
      */
     public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        Long lastRestockFullTime = villager.getPersistentDataContainer().getOrDefault(lastRestockFullTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        // Allow up to 2 restocks per day, but require a cooldown between them (2400 ticks = 2 minutes)
-        // Also allow if somehow restocks > 2 (legacy support/bug handling) but still enforce cooldown
-        // Using getFullTime() instead of getGameTime() because getGameTime() can reset on server restart
-        return (numberOfRestocksToday != 2) && villager.getWorld().getFullTime() > lastRestockFullTime + 2400L;
+        // Allow up to 2 restocks per day (vanilla behavior)
+        // The cooldown between restocks is handled by the config's restock-interval (wall-clock based)
+        // rather than a hardcoded game-time check, which is problematic when doDaylightCycle is disabled
+        return numberOfRestocksToday != 2;
     }
 
     /**

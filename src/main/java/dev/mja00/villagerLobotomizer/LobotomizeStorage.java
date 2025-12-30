@@ -530,11 +530,27 @@ public class LobotomizeStorage {
     }
 
     private boolean shouldRestock(@NotNull Villager villager) {
-        return VillagerUtils.shouldRestock(
-                villager,
-                new NamespacedKey(this.plugin, "lastRestockGameTime"),
-                new NamespacedKey(this.plugin, "lastRestockCheckDayTime")
-        );
+        NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
+        NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
+        
+        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey);
+        
+        // if (this.plugin.isDebugging() && !result) {
+        //     // Log why shouldRestock returned false
+        //     long fullTime = villager.getWorld().getFullTime();
+        //     long lastRestockFullTime = villager.getPersistentDataContainer().getOrDefault(lastRestockGameTimeKey, PersistentDataType.LONG, 0L);
+        //     int restocksToday = villager.getRestocksToday();
+        //     boolean cooldownPassed = fullTime > lastRestockFullTime + 2400L;
+        //     boolean needsRestock = VillagerUtils.needsToRestock(villager);
+            
+        //     this.logger.info("[Debug] shouldRestock=false for " + villager.getUniqueId() + 
+        //             ": restocksToday=" + restocksToday + " (need !=2)" +
+        //             ", fullTime=" + fullTime + ", lastRestockFullTime=" + lastRestockFullTime +
+        //             ", cooldownPassed=" + cooldownPassed + " (need >2400 ticks)" +
+        //             ", needsToRestock=" + needsRestock);
+        // }
+        
+        return result;
     }
 
     private void refreshTrades(@NotNull Villager villager) {
