@@ -65,7 +65,7 @@ public class VillagerUtils {
 
     /**
      * Check for a job site in a 1 block adjacent radius (including diagonals)
-     * This checks in a 2 block height box, for a total of 3x2x3 box
+     * This checks in a 3 block height box, for a total of 3x3x3 box
      *
      * @param villager Villager entity the check is centered around
      * @return
@@ -78,7 +78,7 @@ public class VillagerUtils {
         }
 
         Location location = villager.getLocation();
-        int[] yOffsets = {0, 1}; // feet and body levels
+        int[] yOffsets = {-1, 0, 1}; // below feet, feet, and body levels
         for (int yOffset : yOffsets) {
             int checkY = location.getBlockY() + yOffset;
             for (int x = -1; x <= 1; x++) {
