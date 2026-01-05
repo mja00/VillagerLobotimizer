@@ -35,25 +35,51 @@ public class LobotomizeCommand {
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand(final String commandName) {
-        return Commands.literal(commandName).requires((command) -> command.getSender().hasPermission("lobotomy.command"))
-                .then(Commands.literal("info").executes((command) -> infoCommand(command.getSource())))
-                .then(Commands.literal("debug").executes((command) -> debugCommand(command.getSource()))
-                        .then(Commands.argument("villager", ArgumentTypes.entity()).executes((command) -> debugCommandSpecific(command.getSource(), command.getArgument("villager", EntitySelectorArgumentResolver.class))))
-                        .then(Commands.literal("toggle").executes((command) -> toggleDebugCommand(command.getSource()))))
-                .then(Commands.literal("wake").executes((command) -> wakeCommand(command.getSource())))
-                .then(Commands.literal("reload").executes((command) -> reloadCommand(command.getSource())))
-                .then(Commands.literal("config")
-                        .then(Commands.argument("key", StringArgumentType.string()).suggests(LobotomizeCommand::getConfigKeySuggestions)
-                        .then(Commands.literal("get")
-                            .executes(
-                                (command) -> getConfigCommand(command.getSource(), command.getArgument("key", String.class))
-                                )
-                            )
-                        .then(Commands.literal("set").then(Commands.argument("value", StringArgumentType.string()).executes((command) -> setConfigCommand(command.getSource(), command.getArgument("key", String.class), command.getArgument("value", String.class)))))
+        return Commands.literal(commandName)
+            .requires((command) -> command.getSender().hasPermission("lobotomy.command"))
+            .then(Commands.literal("info")
+                .requires((command) -> command.getSender().hasPermission("lobotomy.command.info"))
+                .executes((command) -> infoCommand(command.getSource()))
+            )
+            .then(Commands.literal("debug")
+                .requires((command) -> command.getSender().hasPermission("lobotomy.command.debug"))
+                .executes((command) -> debugCommand(command.getSource()))
+                
+                .then(Commands.argument("villager", ArgumentTypes.entity())
+                    .requires((command) -> command.getSender().hasPermission("lobotomy.command.debug.villager"))
+                    .executes((command) -> debugCommandSpecific(command.getSource(), command.getArgument("villager", EntitySelectorArgumentResolver.class)))
+                )
+                
+                .then(Commands.literal("toggle")
+                    .requires((command) -> command.getSender().hasPermission("lobotomy.command.debug.toggle"))
+                    .executes((command) -> toggleDebugCommand(command.getSource()))
+                )
+            )
+            .then(Commands.literal("wake")
+                .requires((command) -> command.getSender().hasPermission("lobotomy.command.wake"))
+                .executes((command) -> wakeCommand(command.getSource()))
+            )
+            .then(Commands.literal("reload")
+                .requires((command) -> command.getSender().hasPermission("lobotomy.command.reload"))
+                .executes((command) -> reloadCommand(command.getSource()))
+            )
+            .then(Commands.literal("config")
+                .requires((command) -> command.getSender().hasPermission("lobotomy.command.config"))
+                .then(Commands.argument("key", StringArgumentType.string())
+                    .suggests(LobotomizeCommand::getConfigKeySuggestions)
+                    .then(Commands.literal("get")
+                        .executes((command) -> getConfigCommand(command.getSource(), command.getArgument("key", String.class)))
                     )
                 )
-                .build();
+                .then(Commands.literal("set")
+                    .then(Commands.argument("value", StringArgumentType.string())
+                        .executes((command) -> setConfigCommand(command.getSource(), command.getArgument("key", String.class), command.getArgument("value", String.class)))
+                    )
+                )
+            )
+            .build();
     }
+
 
     private int infoCommand(CommandSourceStack source) throws CommandSyntaxException {
         int active = this.plugin.getStorage().getActive().size();
