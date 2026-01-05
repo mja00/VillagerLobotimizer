@@ -10,3 +10,33 @@ permissions:
   lobotomy.command:
     description: "Allows the use of the lobotomy command"
     default: op
+    children:
+      lobotomy.command.info: true
+      lobotomy.command.debug: true
+      lobotomy.command.wake: true
+      lobotomy.command.reload: true
+      lobotomy.command.config: true
+  lobotomy.command.info:
+    description: "Allows /lobotomy info"
+    default: false
+  lobotomy.command.debug:
+    description: "Allows all debug commands"
+    default: false
+    children:
+      lobotomy.command.debug.villager: true
+      lobotomy.command.debug.toggle: true
+  lobotomy.command.debug.villager:
+    description: "Allows /lobotomy debug villager"
+    default: false
+  lobotomy.command.debug.toggle:
+    description: "Allows /lobotomy debug toggle"
+    default: false
+  lobotomy.command.wake:
+    description: "Allows /lobotomy wake"
+    default: false
+  lobotomy.command.reload:
+    description: "Allows /lobotomy reload"
+    default: false
+  lobotomy.command.config:
+    description: "Allows /lobotomy config"
+    default: false
