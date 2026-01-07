@@ -1,15 +1,20 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.bukkit.*;
-import org.bukkit.entity.Villager;
-import org.bukkit.inventory.MerchantRecipe;
-import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.util.BoundingBox;
-
 import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.World;
+import org.bukkit.entity.Villager;
+import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.persistence.PersistentDataContainer;
+import org.bukkit.util.BoundingBox;
 
 public class VillagerUtils {
     public static final Map<Villager.Profession, Material> PROFESSION_TO_STATION;
@@ -60,32 +65,29 @@ public class VillagerUtils {
 
     /**
      * Check for a job site in a 1 block adjacent radius (including diagonals)
-     * This checks in a 2 block height box, for a total of 3x2x3 box
+     * This checks in a 3 block height box, for a total of 3x3x3 box
      *
      * @param villager Villager entity the check is centered around
      * @return
      */
     public static boolean isJobSiteNearby(Villager villager) {
         Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
-
         if (jobSite == Material.AIR) {
             return false;
         }
 
-        Location location = villager.getLocation();
-        int[] yOffsets = {0, 1}; // feet and body levels
-        for (int yOffset : yOffsets) {
-            int checkY = location.getBlockY() + yOffset;
-            for (int x = -1; x <= 1; x++) {
-                for (int z = -1; z <= 1; z++) {
-                    if (x == 0 && z == 0) {
-                        continue;
-                    }
+        Location loc = villager.getLocation();
+        World world = loc.getWorld();
+        int baseX = loc.getBlockX();
+        int baseY = loc.getBlockY();
+        int baseZ = loc.getBlockZ();
 
-                    int checkX = location.getBlockX() + x;
-                    int checkZ = location.getBlockZ() + z;
-
-                    if (villager.getWorld().getBlockAt(checkX, checkY, checkZ).getType() == jobSite) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    // Don't check the center of the villager, a block won't be there
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+                    if (world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz).getType() == jobSite) {
                         return true;
                     }
                 }
@@ -161,10 +163,12 @@ public class VillagerUtils {
     /**
      * Checks if a villager is allowed to restock based on restocks today and last restock game time.
      */
-    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockGameTimeKey) {
+    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        Long lastRestockGameTime = villager.getPersistentDataContainer().getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        return numberOfRestocksToday == 0 || numberOfRestocksToday > 2 && villager.getWorld().getGameTime() > lastRestockGameTime + 2400L;
+        // Allow up to 2 restocks per day (vanilla behavior)
+        // The cooldown between restocks is handled by the config's restock-interval (wall-clock based)
+        // rather than a hardcoded game-time check, which is problematic when doDaylightCycle is disabled
+        return numberOfRestocksToday != 2;
     }
 
     /**
@@ -172,27 +176,30 @@ public class VillagerUtils {
      */
     public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockGameTimeKey, NamespacedKey lastRestockCheckDayTimeKey) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestockGameTime = pdc.getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        long gameTime = villager.getWorld().getGameTime();
-        boolean gameTimeOverRestockTime = gameTime > lastRestockGameTime;
-        long dayTime = villager.getWorld().getTime();
-
+        long fullTime = villager.getWorld().getFullTime();
+        
+        // Check for new day using Full Time (absolute ticks) to avoid wrapping issues
         if (lastRestockCheckDayTime > 0L) {
-            long time = lastRestockCheckDayTime / 24000L;
-            long dayTimeOverRestockTime = dayTime / 24000L;
-            gameTimeOverRestockTime |= dayTimeOverRestockTime > time;
+            long lastDay = lastRestockCheckDayTime / 24000L;
+            long currentDay = fullTime / 24000L;
+            if (currentDay > lastDay) {
+                villager.setRestocksToday(0);
+                pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
+            }
         }
+        
+        // Update the last check time to current full time
+        pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        lastRestockCheckDayTime = dayTime;
-        if (gameTimeOverRestockTime) {
-            lastRestockGameTime = gameTime;
-            villager.setRestocksToday(0);
+        boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
+        
+        if (allowed) {
+            // Update last restock time to now, so the cooldown works for the next check
+            // Using getFullTime() (persistent) instead of getGameTime() (can reset)
+            pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
         }
-
-        // Store our PDC values
-        pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, lastRestockGameTime);
-        pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, lastRestockCheckDayTime);
-        return allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
+        
+        return allowed;
     }
 }

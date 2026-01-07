@@ -1,14 +1,28 @@
 package dev.mja00.villagerLobotomizer;
 
-import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
-import dev.mja00.villagerLobotomizer.utils.StringUtils;
-import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
-import io.papermc.paper.registry.RegistryAccess;
-import io.papermc.paper.registry.RegistryKey;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
+import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
+import org.bukkit.Sound;
+import org.bukkit.SoundCategory;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.BlockData;
@@ -18,15 +32,19 @@ import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
-import org.bukkit.plugin.IllegalPluginAccessException;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
+import dev.mja00.villagerLobotomizer.utils.StringUtils;
+import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public class LobotomizeStorage {
     /**
@@ -512,21 +530,43 @@ public class LobotomizeStorage {
     }
 
     private boolean shouldRestock(@NotNull Villager villager) {
-        return VillagerUtils.shouldRestock(
-                villager,
-                new NamespacedKey(this.plugin, "lastRestockGameTime"),
-                new NamespacedKey(this.plugin, "lastRestockCheckDayTime")
-        );
+        NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
+        NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
+        
+        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey);
+        
+        // if (this.plugin.isDebugging() && !result) {
+        //     // Log why shouldRestock returned false
+        //     long fullTime = villager.getWorld().getFullTime();
+        //     long lastRestockFullTime = villager.getPersistentDataContainer().getOrDefault(lastRestockGameTimeKey, PersistentDataType.LONG, 0L);
+        //     int restocksToday = villager.getRestocksToday();
+        //     boolean cooldownPassed = fullTime > lastRestockFullTime + 2400L;
+        //     boolean needsRestock = VillagerUtils.needsToRestock(villager);
+            
+        //     this.logger.info("[Debug] shouldRestock=false for " + villager.getUniqueId() + 
+        //             ": restocksToday=" + restocksToday + " (need !=2)" +
+        //             ", fullTime=" + fullTime + ", lastRestockFullTime=" + lastRestockFullTime +
+        //             ", cooldownPassed=" + cooldownPassed + " (need >2400 ticks)" +
+        //             ", needsToRestock=" + needsRestock);
+        // }
+        
+        return result;
     }
 
     private void refreshTrades(@NotNull Villager villager) {
         if (villager.getWorld().getEnvironment() == World.Environment.NORMAL && !villager.getWorld().isDayTime()) {
             // It's night, do not refresh trades
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Skipping trade refresh for " + villager.getUniqueId() + " - it's night time in overworld");
+            }
             return;
         }
 
 
         if (!VillagerUtils.isJobSiteNearby(villager)) {
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Skipping trade refresh for " + villager.getUniqueId() + " - no job site nearby");
+            }
             return;
         }
 
@@ -534,7 +574,15 @@ public class LobotomizeStorage {
         long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
 
         long now = System.currentTimeMillis();
-        if (now - lastRestock > (this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0)) && shouldRestock(villager)) {
+        long timeSinceLastRestock = now - lastRestock;
+        long effectiveInterval = this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0);
+        
+        if (this.plugin.isDebugging()) {
+            this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() + 
+                    ": timeSinceLastRestock=" + timeSinceLastRestock + "ms, effectiveInterval=" + effectiveInterval + "ms, restocksToday=" + villager.getRestocksToday());
+        }
+        
+        if (timeSinceLastRestock > effectiveInterval && shouldRestock(villager)) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
@@ -547,6 +595,10 @@ public class LobotomizeStorage {
             villager.setRestocksToday(villager.getRestocksToday() + 1);
             // Tell the villager to update pricing of their trades
             villager.updateDemand();
+            
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: " + villager.getRestocksToday());
+            }
 
             if (this.restockSound != null) {
                 villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
@@ -555,6 +607,11 @@ public class LobotomizeStorage {
                         SoundCategory.NEUTRAL, 1.0F,
                         1.0F);
             }
+        } else if (this.plugin.isDebugging()) {
+            boolean intervalPassed = timeSinceLastRestock > effectiveInterval;
+            this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() + 
+                    ": intervalPassed=" + intervalPassed + " (needed " + effectiveInterval + "ms, had " + timeSinceLastRestock + "ms)" +
+                    (intervalPassed ? ", shouldRestock=false" : ""));
         }
 
         // Derek comment - Not sure if we want to split this level up check, to separate it from refresh trades. Might
