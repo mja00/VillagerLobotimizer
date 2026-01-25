@@ -8,5 +8,26 @@ website: https://github.com/mja00/VillagerLobotimizer
 folia-supported: true
 permissions:
   lobotomy.command:
-    description: "Allows the use of the lobotomy command"
+    description: "Allows the use of all lobotomy commands"
+    default: op
+    children:
+      lobotomy.command.info: true
+      lobotomy.command.debug: true
+      lobotomy.command.wake: true
+      lobotomy.command.reload: true
+      lobotomy.command.config: true
+  lobotomy.command.info:
+    description: "Allows viewing villager statistics"
+    default: op
+  lobotomy.command.debug:
+    description: "Allows debugging villagers and toggling debug mode"
+    default: op
+  lobotomy.command.wake:
+    description: "Allows waking up lobotomized villagers"
+    default: op
+  lobotomy.command.reload:
+    description: "Allows reloading the plugin configuration"
+    default: op
+  lobotomy.command.config:
+    description: "Allows viewing and modifying config values"
     default: op
