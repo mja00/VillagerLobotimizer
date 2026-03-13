@@ -863,7 +863,7 @@ public class LobotomizeStorage {
         }
 
         // Check experience
-        if (this.onlyWithExperience && villager.getVillagerExperience() > 0) {
+        if (this.onlyWithExperience && villager.getVillagerExperience() == 0) {
             return true;
         }
 
