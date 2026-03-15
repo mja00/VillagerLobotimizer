@@ -35,14 +35,23 @@ public class LobotomizeCommand {
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand(final String commandName) {
-        return Commands.literal(commandName).requires((command) -> command.getSender().hasPermission("lobotomy.command"))
-                .then(Commands.literal("info").executes((command) -> infoCommand(command.getSource())))
-                .then(Commands.literal("debug").executes((command) -> debugCommand(command.getSource()))
+        return Commands.literal(commandName).requires(this::hasAnySubcommandPermission)
+                .then(Commands.literal("info")
+                        .requires((command) -> command.getSender().hasPermission("lobotomy.command.info"))
+                        .executes((command) -> infoCommand(command.getSource())))
+                .then(Commands.literal("debug")
+                        .requires((command) -> command.getSender().hasPermission("lobotomy.command.debug"))
+                        .executes((command) -> debugCommand(command.getSource()))
                         .then(Commands.argument("villager", ArgumentTypes.entity()).executes((command) -> debugCommandSpecific(command.getSource(), command.getArgument("villager", EntitySelectorArgumentResolver.class))))
                         .then(Commands.literal("toggle").executes((command) -> toggleDebugCommand(command.getSource()))))
-                .then(Commands.literal("wake").executes((command) -> wakeCommand(command.getSource())))
-                .then(Commands.literal("reload").executes((command) -> reloadCommand(command.getSource())))
+                .then(Commands.literal("wake")
+                        .requires((command) -> command.getSender().hasPermission("lobotomy.command.wake"))
+                        .executes((command) -> wakeCommand(command.getSource())))
+                .then(Commands.literal("reload")
+                        .requires((command) -> command.getSender().hasPermission("lobotomy.command.reload"))
+                        .executes((command) -> reloadCommand(command.getSource())))
                 .then(Commands.literal("config")
+                        .requires((command) -> command.getSender().hasPermission("lobotomy.command.config"))
                         .then(Commands.argument("key", StringArgumentType.string()).suggests(LobotomizeCommand::getConfigKeySuggestions)
                         .then(Commands.literal("get")
                             .executes(
@@ -53,6 +62,15 @@ public class LobotomizeCommand {
                     )
                 )
                 .build();
+    }
+
+    private boolean hasAnySubcommandPermission(CommandSourceStack command) {
+        CommandSender sender = command.getSender();
+        return sender.hasPermission("lobotomy.command.info")
+                || sender.hasPermission("lobotomy.command.debug")
+                || sender.hasPermission("lobotomy.command.wake")
+                || sender.hasPermission("lobotomy.command.reload")
+                || sender.hasPermission("lobotomy.command.config");
     }
 
     private int infoCommand(CommandSourceStack source) throws CommandSyntaxException {
