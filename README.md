@@ -55,6 +55,9 @@ restock-random-range: 0
 #Whether to only lobotomize villagers with jobs
 only-lobotomize-villagers-with-professions: false
 
+#Whether to only lobotomize villagers that have been traded at least once
+only-lobotomize-villagers-with-experience: false
+
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
 

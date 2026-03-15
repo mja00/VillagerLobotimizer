@@ -141,6 +141,7 @@ public class LobotomizeStorage {
     private final long restockInterval;
     private final long restockRandomRange;
     private final boolean onlyProfessions;
+    private final boolean onlyWithExperience;
     private final boolean lobotomizePassengers;
     private final boolean checkRoof;
     private final boolean silentLobotomizedVillagers;
@@ -160,6 +161,7 @@ public class LobotomizeStorage {
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
+        this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
@@ -857,6 +859,11 @@ public class LobotomizeStorage {
 
         // Check profession
         if (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE) {
+            return true;
+        }
+
+        // Check experience
+        if (this.onlyWithExperience && villager.getVillagerExperience() == 0) {
             return true;
         }
 
