@@ -85,8 +85,6 @@ public class VillagerUtils {
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
-                    // Don't check the center of the villager, a block won't be there
-                    if (dx == 0 && dy == 0 && dz == 0) continue;
                     if (world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz).getType() == jobSite) {
                         return true;
                     }
