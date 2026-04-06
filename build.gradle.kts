@@ -1,6 +1,6 @@
 plugins {
     java
-    id("io.papermc.paperweight.userdev") version "2.0.0-beta.19"
+    id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
     id("xyz.jpenilla.run-paper") version "3.0.+"
     id("io.papermc.hangar-publish-plugin") version "0.1.+"
     id("com.gradleup.shadow") version "9.3.+"
@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.mja00"
-version = "1.14.1"
+version = "1.14.2"
 
 repositories {
     mavenCentral()
@@ -71,7 +71,7 @@ tasks {
 
     runServer {
         dependsOn(shadowJar)
-        minecraftVersion("1.21.11")
+        minecraftVersion("26.1.1")
 
         // Set system property to mark this as a development environment for Sentry
         systemProperty("villagerlobotimizer.dev", "true")
@@ -114,10 +114,10 @@ tasks {
 }
 
 // Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
-val supportedVersions = listOf("1.21.6-1.21.11")
+val supportedVersions = listOf("1.21.6-26.1.1")
 
 // Modrinth requires discrete game versions rather than a range
-val modrinthGameVersions = listOf("1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11")
+val modrinthGameVersions = listOf("1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11", "26.1", "26.1.1")
 
 hangarPublish {
     publications.register("plugin") {
