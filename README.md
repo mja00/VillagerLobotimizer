@@ -52,6 +52,18 @@ restock-interval: 540000
 #Range (in milliseconds) before restock-interval to start random restock checks. If set to 0, restocking is not randomized. If equal to or greater than restock-interval, restock will always occur.
 restock-random-range: 0
 
+#Restock timing mode. "default" uses restock-interval (milliseconds). "fixed-times" uses restock-fixed-times (ticks in day).
+restock-timing-mode: "default"
+
+#Fixed restock times (ticks in day, 0-23999). Only used when restock-timing-mode is "fixed-times".
+restock-fixed-times:
+  - 1000
+  - 6000
+  - 12000
+
+#Daily restock limit per villager. Set to -1 for unlimited restocks.
+restock-limit: 2
+
 #Whether to only lobotomize villagers with jobs
 only-lobotomize-villagers-with-professions: false
 
