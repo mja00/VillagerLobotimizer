@@ -140,6 +140,7 @@ public class LobotomizeStorage {
     private final long inactiveCheckInterval;
     private final long restockInterval;
     private final long restockRandomRange;
+    private final int restockLimit;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
     private final boolean lobotomizePassengers;
@@ -160,6 +161,7 @@ public class LobotomizeStorage {
         this.inactiveCheckInterval = plugin.getConfig().getLong("inactive-check-interval", this.checkInterval);
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
+        this.restockLimit = plugin.getConfig().getInt("restock-limit", 2);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -535,7 +537,7 @@ public class LobotomizeStorage {
         NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
         NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
         
-        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey);
+        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey, this.restockLimit);
         
         // if (this.plugin.isDebugging() && !result) {
         //     // Log why shouldRestock returned false

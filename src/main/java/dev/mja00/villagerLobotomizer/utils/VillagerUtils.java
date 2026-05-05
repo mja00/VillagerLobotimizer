@@ -161,18 +161,21 @@ public class VillagerUtils {
     /**
      * Checks if a villager is allowed to restock based on restocks today and last restock game time.
      */
-    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey) {
+    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey, int restockLimit) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        // Allow up to 2 restocks per day (vanilla behavior)
+        if (restockLimit < 0) {
+            return true;
+        }
+        // Allow up to restockLimit restocks per day (vanilla behavior is 2)
         // The cooldown between restocks is handled by the config's restock-interval (wall-clock based)
         // rather than a hardcoded game-time check, which is problematic when doDaylightCycle is disabled
-        return numberOfRestocksToday != 2;
+        return numberOfRestocksToday < restockLimit;
     }
 
     /**
      * Determines if a villager should restock, updating persistent data as needed.
      */
-    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockGameTimeKey, NamespacedKey lastRestockCheckDayTimeKey) {
+    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockGameTimeKey, NamespacedKey lastRestockCheckDayTimeKey, int restockLimit) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long fullTime = villager.getWorld().getFullTime();
@@ -190,7 +193,7 @@ public class VillagerUtils {
         // Update the last check time to current full time
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
+        boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey, restockLimit) && needsToRestock(villager);
         
         if (allowed) {
             // Update last restock time to now, so the cooldown works for the next check
