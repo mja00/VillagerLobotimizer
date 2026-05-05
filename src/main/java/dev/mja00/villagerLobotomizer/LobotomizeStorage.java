@@ -516,6 +516,9 @@ public class LobotomizeStorage {
                 villager.setGlowing(true);
             }
         } else {
+            if (active) {
+                this.registerRestockPdc(villager);
+            }
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
 
@@ -568,6 +571,25 @@ public class LobotomizeStorage {
         // }
         
         return result;
+    }
+
+    private void registerRestockPdc(@NotNull Villager villager) {
+        if (!VillagerUtils.needsToRestock(villager)) {
+            return;
+        }
+
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        long fullTime = villager.getWorld().getFullTime();
+        NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
+        NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
+
+        if (!pdc.has(lastRestockCheckDayTimeKey, PersistentDataType.LONG)) {
+            pdc.set(lastRestockCheckDayTimeKey, PersistentDataType.LONG, fullTime);
+        }
+
+        if (!pdc.has(lastRestockGameTimeKey, PersistentDataType.LONG)) {
+            pdc.set(lastRestockGameTimeKey, PersistentDataType.LONG, fullTime);
+        }
     }
 
     private boolean isFixedTimeRestockWindow(@NotNull Villager villager, @NotNull PersistentDataContainer pdc) {
