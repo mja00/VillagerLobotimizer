@@ -1,0 +1,51 @@
+name: Close Default-Branch PRs
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.fork == true && github.event.pull_request.head.ref == github.event.pull_request.head.repo.default_branch
+    steps:
+      - name: Close PR opened from fork's default branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const headBranch = pr.head.ref;
+            const headRepo = pr.head.repo.full_name;
+
+            const body = [
+              `Hi @${pr.user.login}, thanks for the contribution!`,
+              ``,
+              `This PR was opened from the **\`${headBranch}\`** branch of your fork (\`${headRepo}\`), which is your fork's default branch. Maintainers cannot push commits to a contributor's default branch, which makes review and follow-up changes difficult.`,
+              ``,
+              `Please re-open this PR from a feature branch:`,
+              ``,
+              `\`\`\`bash`,
+              `git checkout -b my-feature-branch`,
+              `git push origin my-feature-branch`,
+              `\`\`\``,
+              ``,
+              `Then open a new PR from \`my-feature-branch\`. Closing this one — no other action needed.`,
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body,
+            });
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              state: 'closed',
+            });
