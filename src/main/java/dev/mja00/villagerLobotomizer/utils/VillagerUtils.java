@@ -159,9 +159,9 @@ public class VillagerUtils {
     }
 
     /**
-     * Checks if a villager is allowed to restock based on restocks today and last restock game time.
+     * Checks if a villager is allowed to restock based on restocks today and the configured limit.
      */
-    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey, int restockLimit) {
+    public static boolean allowedToRestock(Villager villager, int restockLimit) {
         int numberOfRestocksToday = villager.getRestocksToday();
         if (restockLimit < 0) {
             return true;
@@ -193,7 +193,7 @@ public class VillagerUtils {
         // Update the last check time to current full time
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey, restockLimit) && needsToRestock(villager);
+        boolean allowed = allowedToRestock(villager, restockLimit) && needsToRestock(villager);
         
         if (allowed) {
             // Update last restock time to now, so the cooldown works for the next check
