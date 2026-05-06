@@ -599,17 +599,39 @@ public class LobotomizeStorage {
 
         long fullTime = villager.getWorld().getFullTime();
         int dayTime = (int) (fullTime % 24000L);
-        if (!this.restockFixedTimes.contains(dayTime)) {
-            return false;
-        }
+        long lastCheck = pdc.getOrDefault(this.lastRestockScheduleKey, PersistentDataType.LONG, -1L);
+        boolean crossed = false;
 
-        long lastSchedule = pdc.getOrDefault(this.lastRestockScheduleKey, PersistentDataType.LONG, -1L);
-        if (lastSchedule == fullTime) {
-            return false;
+        if (lastCheck < 0L) {
+            crossed = this.restockFixedTimes.contains(dayTime);
+        } else {
+            long lastDay = lastCheck / 24000L;
+            long currentDay = fullTime / 24000L;
+            int lastDayTime = (int) (lastCheck % 24000L);
+
+            if (currentDay == lastDay) {
+                for (int time : this.restockFixedTimes) {
+                    if (time > lastDayTime && time <= dayTime) {
+                        crossed = true;
+                        break;
+                    }
+                }
+            } else if (currentDay > lastDay) {
+                if (currentDay - lastDay > 1) {
+                    crossed = true;
+                } else {
+                    for (int time : this.restockFixedTimes) {
+                        if (time > lastDayTime || time <= dayTime) {
+                            crossed = true;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         pdc.set(this.lastRestockScheduleKey, PersistentDataType.LONG, fullTime);
-        return true;
+        return crossed;
     }
 
     private void refreshTrades(@NotNull Villager villager) {
