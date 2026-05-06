@@ -1,5 +1,5 @@
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 8
+config-version: 7
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
