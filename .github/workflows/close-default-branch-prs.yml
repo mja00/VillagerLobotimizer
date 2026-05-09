@@ -9,6 +9,9 @@ permissions:
 
 jobs:
   close:
+    # Stays on github-hosted: this is a pull_request_target workflow that
+    # any fork PR can trigger. Pure GitHub-API call (no checkout, no compile),
+    # so the cost of self-hosted is all DoS risk and zero benefit.
     runs-on: ubuntu-latest
     if: github.event.pull_request.head.repo.fork == true && github.event.pull_request.head.ref == github.event.pull_request.head.repo.default_branch
     steps:

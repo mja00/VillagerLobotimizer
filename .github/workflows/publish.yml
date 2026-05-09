@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: arc-villager
     if: github.event_name != 'push' || github.event.head_commit == null || (!contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]'))
     steps:
       - name: Checkout code
@@ -44,7 +44,7 @@ jobs:
           path: build/libs/
           retention-days: 7
   publish:
-    runs-on: ubuntu-24.04
+    runs-on: arc-villager
     if: ${{ !contains(github.event.head_commit.message, '[ci skip]') && !contains(github.event.head_commit.message, '[skip ci]') }}
     needs: test
     steps:
