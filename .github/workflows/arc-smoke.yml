@@ -1,0 +1,24 @@
+name: arc-smoke
+
+# Manual smoke test for the self-hosted ARC runner scale set (arc-villager).
+# Safe to delete once the runner is proven; not wired to push/PR.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: arc-villager
+    steps:
+      - name: Print runner identity
+        run: |
+          echo "Hostname: $(hostname)"
+          echo "Kernel:   $(uname -a)"
+          echo "User:     $(id)"
+          echo "Workdir:  $(pwd)"
+          echo "Disk:"
+          df -h /
+      - name: Confirm DinD sidecar reachable
+        run: |
+          docker info | head -20
+          docker run --rm hello-world
