@@ -634,7 +634,6 @@ public class LobotomizeStorage {
             }
         }
 
-        pdc.set(this.lastRestockScheduleKey, PersistentDataType.LONG, fullTime);
         return crossed;
     }
 
@@ -678,6 +677,10 @@ public class LobotomizeStorage {
 
         if (restockWindow && shouldRestock(villager)) {
             pdc.set(this.key, PersistentDataType.LONG, now);
+            if ("fixed-times".equals(this.restockTimingMode)) {
+                long fullTime = villager.getWorld().getFullTime();
+                pdc.set(this.lastRestockScheduleKey, PersistentDataType.LONG, fullTime);
+            }
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
 
             for (MerchantRecipe recipe : recipes) {
