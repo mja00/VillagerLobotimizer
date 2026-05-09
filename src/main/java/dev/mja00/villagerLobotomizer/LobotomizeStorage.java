@@ -590,6 +590,10 @@ public class LobotomizeStorage {
         if (!pdc.has(lastRestockGameTimeKey, PersistentDataType.LONG)) {
             pdc.set(lastRestockGameTimeKey, PersistentDataType.LONG, fullTime);
         }
+
+        if (!pdc.has(this.lastRestockScheduleKey, PersistentDataType.LONG)) {
+            pdc.set(this.lastRestockScheduleKey, PersistentDataType.LONG, fullTime);
+        }
     }
 
     private boolean isFixedTimeRestockWindow(@NotNull Villager villager, @NotNull PersistentDataContainer pdc) {
