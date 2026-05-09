@@ -165,15 +165,19 @@ public class LobotomizeStorage {
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
         String timingMode = plugin.getConfig().getString("restock-timing-mode", "default");
-        this.restockTimingMode = timingMode == null ? "default" : timingMode.trim().toLowerCase();
+        String normalizedTimingMode = timingMode == null ? "default" : timingMode.trim().toLowerCase();
         this.restockFixedTimes = plugin.getConfig().getIntegerList("restock-fixed-times").stream()
             .filter(Objects::nonNull)
             .filter(time -> time >= 0 && time <= 23999)
             .collect(Collectors.toSet());
         this.restockLimit = plugin.getConfig().getInt("restock-limit", 2);
-        if ("fixed-times".equals(this.restockTimingMode) && this.restockFixedTimes.isEmpty()) {
-            this.logger.warning("restock-timing-mode is set to fixed-times but restock-fixed-times is empty or invalid; restocks will never occur.");
+        
+        if ("fixed-times".equals(normalizedTimingMode) && this.restockFixedTimes.isEmpty()) {
+            this.logger.warning("restock-timing-mode is set to fixed-times but restock-fixed-times is empty or invalid; falling back to default.");
+            normalizedTimingMode = "default";
         }
+
+        this.restockTimingMode = normalizedTimingMode;
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
