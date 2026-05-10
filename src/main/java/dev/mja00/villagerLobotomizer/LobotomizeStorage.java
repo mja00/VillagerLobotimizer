@@ -486,7 +486,7 @@ public class LobotomizeStorage {
             }
 
             if (isActive && isInactive) {
-                this.logger.warning("[Watchdog] processVillagerSafely saw villager "
+                this.logger.info("[Watchdog] processVillagerSafely saw villager "
                         + villager.getUniqueId() + " in both sets; reconciling.");
                 reconcile(villager);
                 return;
@@ -576,10 +576,15 @@ public class LobotomizeStorage {
 
     private void runWatchdog() {
         if (this.shuttingDown) return;
-        List<Villager> dupes = new ArrayList<>();
-        for (Villager v : this.activeVillagers) {
-            if (this.inactiveVillagers.contains(v)) {
-                dupes.add(v);
+        // Snapshot under stateLock so the weakly-consistent iterator can't pair a stale
+        // active-set yield with a fresh inactive-set contains and report a false dupe.
+        List<Villager> dupes;
+        synchronized (this.stateLock) {
+            dupes = new ArrayList<>();
+            for (Villager v : this.activeVillagers) {
+                if (this.inactiveVillagers.contains(v)) {
+                    dupes.add(v);
+                }
             }
         }
         if (dupes.isEmpty()) return;
@@ -618,7 +623,7 @@ public class LobotomizeStorage {
                                 this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
                     }
                 }
-                this.logger.warning("[Watchdog] Reconciled villager " + v.getUniqueId()
+                this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()
                         + " to " + (shouldBeActive ? "active" : "inactive"));
             }), null);
         } catch (IllegalPluginAccessException e) {
