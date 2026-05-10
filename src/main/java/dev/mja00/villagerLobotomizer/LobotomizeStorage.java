@@ -152,6 +152,11 @@ public class LobotomizeStorage {
     private final Random random = new Random();
     private volatile boolean shuttingDown = false;
     private final ScheduledTask chunkProcessingTask;
+    private ScheduledTask watchdogTask;
+    private static final long WATCHDOG_INTERVAL_TICKS = 1200L;
+    // Guards compound mutations of activeVillagers/inactiveVillagers so a villager
+    // is never observable in both sets simultaneously.
+    private final Object stateLock = new Object();
 
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
@@ -241,6 +246,12 @@ public class LobotomizeStorage {
                 5L,
                 5L
         );
+        this.watchdogTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
+                plugin,
+                SentryTaskWrapper.wrap((task) -> this.runWatchdog()),
+                WATCHDOG_INTERVAL_TICKS,
+                WATCHDOG_INTERVAL_TICKS
+        );
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -249,6 +260,30 @@ public class LobotomizeStorage {
 
     public @NotNull Set<Villager> getActive() {
         return this.activeVillagers;
+    }
+
+    // Order is remove-then-add so the brief intermediate state is "in neither set"
+    // rather than "in both" — readers seeing a momentary gap simply skip a tick.
+    private void setActive(@NotNull Villager v) {
+        synchronized (this.stateLock) {
+            this.inactiveVillagers.remove(v);
+            this.activeVillagers.add(v);
+        }
+    }
+
+    private void setInactive(@NotNull Villager v) {
+        synchronized (this.stateLock) {
+            this.activeVillagers.remove(v);
+            this.inactiveVillagers.add(v);
+        }
+    }
+
+    private boolean untrack(@NotNull Villager v) {
+        synchronized (this.stateLock) {
+            boolean wasActive = this.activeVillagers.remove(v);
+            boolean wasInactive = this.inactiveVillagers.remove(v);
+            return wasActive || wasInactive;
+        }
     }
 
     public final void addVillager(@NotNull Villager villager) {
@@ -270,13 +305,13 @@ public class LobotomizeStorage {
             if (this.silentLobotomizedVillagers) {
                 villager.setSilent(true);
             }
-            this.inactiveVillagers.add(villager);
+            setInactive(villager);
 
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
             }
         } else {
-            this.activeVillagers.add(villager);
+            setActive(villager);
 
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
@@ -289,23 +324,22 @@ public class LobotomizeStorage {
     }
 
     public final void removeVillager(@NotNull Villager villager) {
-        boolean removed = false;
-        boolean active = false;
-        
         // Cancel the per-villager task
         ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
         this.villagerTaskIntervals.remove(villager.getUniqueId());
         if (task != null && !task.isCancelled()) {
             task.cancel();
         }
-        
-        if (this.activeVillagers.remove(villager)) {
-            removed = true;
-            active = true;
-        }
 
-        if (this.inactiveVillagers.remove(villager)) {
-            removed = true;
+        boolean wasInactive;
+        boolean wasActive;
+        synchronized (this.stateLock) {
+            wasActive = this.activeVillagers.remove(villager);
+            wasInactive = this.inactiveVillagers.remove(villager);
+        }
+        boolean removed = wasActive || wasInactive;
+
+        if (wasInactive) {
             // Use Paper's EntityScheduler for thread safety
             villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((scheduledTask) -> {
                 villager.setAware(true);
@@ -317,7 +351,7 @@ public class LobotomizeStorage {
 
         if (this.plugin.isDebugging()) {
             if (removed) {
-                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + active + ", cancelled scheduler");
+                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + wasActive + ", cancelled scheduler");
             } else {
                 this.logger.info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId() + "), but it was not tracked");
             }
@@ -361,11 +395,23 @@ public class LobotomizeStorage {
         if (this.chunkProcessingTask != null && !this.chunkProcessingTask.isCancelled()) {
             this.chunkProcessingTask.cancel();
         }
-        
+        if (this.watchdogTask != null && !this.watchdogTask.isCancelled()) {
+            this.watchdogTask.cancel();
+        }
+
         // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
-        // During shutdown, we need to handle this carefully since we can't schedule new tasks
-        List<Villager> toFlush = new ArrayList<>(this.inactiveVillagers);
-        this.inactiveVillagers.clear();
+        // During shutdown, we need to handle this carefully since we can't schedule new tasks.
+        // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
+        List<Villager> toFlush;
+        synchronized (this.stateLock) {
+            toFlush = new ArrayList<>(this.inactiveVillagers.size() + this.activeVillagers.size());
+            toFlush.addAll(this.inactiveVillagers);
+            for (Villager v : this.activeVillagers) {
+                if (!this.inactiveVillagers.contains(v)) toFlush.add(v);
+            }
+            this.inactiveVillagers.clear();
+            this.activeVillagers.clear();
+        }
         
         for (Villager villager : toFlush) {
             if (this.plugin.isDebugging()) {
@@ -421,14 +467,13 @@ public class LobotomizeStorage {
                 if (task != null && !task.isCancelled()) {
                     task.cancel();
                 }
-                this.activeVillagers.remove(villager);
-                this.inactiveVillagers.remove(villager);
+                untrack(villager);
                 return;
             }
 
             boolean isActive = this.activeVillagers.contains(villager);
             boolean isInactive = this.inactiveVillagers.contains(villager);
-            
+
             // Skip if villager is not tracked
             if (!isActive && !isInactive) {
                 // Cancel the task since villager is no longer tracked
@@ -439,20 +484,18 @@ public class LobotomizeStorage {
                 }
                 return;
             }
-            
-            // Process the villager and handle state changes
-            if (isActive) {
-                boolean shouldRemove = this.processVillager(villager, true);
-                if (shouldRemove) {
-                    this.activeVillagers.remove(villager);
-                    this.rescheduleVillagerTask(villager, this.inactiveCheckInterval);
-                }
-            } else {
-                boolean shouldRemove = this.processVillager(villager, false);
-                if (shouldRemove) {
-                    this.inactiveVillagers.remove(villager);
-                    this.rescheduleVillagerTask(villager, this.checkInterval);
-                }
+
+            if (isActive && isInactive) {
+                this.logger.info("[Watchdog] processVillagerSafely saw villager "
+                        + villager.getUniqueId() + " in both sets; reconciling.");
+                reconcile(villager);
+                return;
+            }
+
+            boolean transitioned = this.processVillager(villager, isActive);
+            if (transitioned) {
+                long nextInterval = isActive ? this.inactiveCheckInterval : this.checkInterval;
+                this.rescheduleVillagerTask(villager, nextInterval);
             }
         } catch (IllegalStateException e) {
             if (this.plugin.isDebugging()) {
@@ -490,11 +533,11 @@ public class LobotomizeStorage {
                         this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
                     }
                 }
-                this.activeVillagers.add(villager);
+                setActive(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");
                 }
-                return true; // Remove from inactive list
+                return true; // Transitioned: caller may want to reschedule at new interval
             }
             if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getActiveVillagersTeam() != null) {
                 this.plugin.getActiveVillagersTeam().addEntity(villager);
@@ -517,11 +560,11 @@ public class LobotomizeStorage {
                         this.logger.info("[Debug] Set persistent lobotomized marker for " + villager.getUniqueId());
                     }
                 }
-                this.inactiveVillagers.add(villager);
+                setInactive(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now inactive");
                 }
-                return true; // Remove from active
+                return true; // Transitioned: caller may want to reschedule at new interval
             }
             if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
                 this.plugin.getInactiveVillagersTeam().addEntity(villager);
@@ -529,6 +572,63 @@ public class LobotomizeStorage {
             }
         }
         return false; // Don't mutate anything
+    }
+
+    private void runWatchdog() {
+        if (this.shuttingDown) return;
+        // Snapshot under stateLock so the weakly-consistent iterator can't pair a stale
+        // active-set yield with a fresh inactive-set contains and report a false dupe.
+        List<Villager> dupes;
+        synchronized (this.stateLock) {
+            dupes = new ArrayList<>();
+            for (Villager v : this.activeVillagers) {
+                if (this.inactiveVillagers.contains(v)) {
+                    dupes.add(v);
+                }
+            }
+        }
+        if (dupes.isEmpty()) return;
+        this.logger.warning("[Watchdog] Found " + dupes.size()
+                + " villager(s) in both active and inactive sets; reconciling.");
+        for (Villager v : dupes) {
+            reconcile(v);
+        }
+    }
+
+    private void reconcile(@NotNull Villager v) {
+        try {
+            v.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((t) -> {
+                if (!v.isValid() || v.isDead()) {
+                    untrack(v);
+                    return;
+                }
+                boolean shouldBeActive = this.shouldBeActive(v);
+                if (shouldBeActive) {
+                    setActive(v);
+                    v.setAware(true);
+                    if (this.silentLobotomizedVillagers) {
+                        v.setSilent(false);
+                    }
+                    if (this.persistLobotomizedState) {
+                        v.getPersistentDataContainer().remove(this.lobotomizedKey);
+                    }
+                } else {
+                    setInactive(v);
+                    v.setAware(false);
+                    if (this.silentLobotomizedVillagers) {
+                        v.setSilent(true);
+                    }
+                    if (this.persistLobotomizedState) {
+                        v.getPersistentDataContainer().set(
+                                this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                    }
+                }
+                this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()
+                        + " to " + (shouldBeActive ? "active" : "inactive"));
+            }), null);
+        } catch (IllegalPluginAccessException e) {
+            // plugin disabling
+        }
     }
 
     private boolean shouldRestock(@NotNull Villager villager) {
@@ -918,8 +1018,7 @@ public class LobotomizeStorage {
             this.villagerTasks.put(id, task);
             this.villagerTaskIntervals.put(id, interval);
         } catch (IllegalPluginAccessException e) {
-            this.activeVillagers.remove(villager);
-            this.inactiveVillagers.remove(villager);
+            untrack(villager);
             this.villagerTaskIntervals.remove(id);
         }
     }
