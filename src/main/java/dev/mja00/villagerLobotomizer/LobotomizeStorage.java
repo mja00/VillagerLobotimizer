@@ -127,6 +127,7 @@ public class LobotomizeStorage {
 
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
+    private final NamespacedKey lastRestockScheduleKey;
     private final NamespacedKey lobotomizedKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
@@ -140,6 +141,9 @@ public class LobotomizeStorage {
     private final long inactiveCheckInterval;
     private final long restockInterval;
     private final long restockRandomRange;
+    private final String restockTimingMode;
+    private final Set<Integer> restockFixedTimes;
+    private final int restockLimit;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
     private final boolean lobotomizePassengers;
@@ -165,6 +169,20 @@ public class LobotomizeStorage {
         this.inactiveCheckInterval = plugin.getConfig().getLong("inactive-check-interval", this.checkInterval);
         this.restockInterval = plugin.getConfig().getLong("restock-interval");
         this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
+        String timingMode = plugin.getConfig().getString("restock-timing-mode", "default");
+        String normalizedTimingMode = timingMode == null ? "default" : timingMode.trim().toLowerCase();
+        this.restockFixedTimes = plugin.getConfig().getIntegerList("restock-fixed-times").stream()
+            .filter(Objects::nonNull)
+            .filter(time -> time >= 0 && time <= 23999)
+            .collect(Collectors.toSet());
+        this.restockLimit = plugin.getConfig().getInt("restock-limit", 2);
+        
+        if ("fixed-times".equals(normalizedTimingMode) && this.restockFixedTimes.isEmpty()) {
+            this.logger.warning("restock-timing-mode is set to fixed-times but restock-fixed-times is empty or invalid; falling back to default.");
+            normalizedTimingMode = "default";
+        }
+
+        this.restockTimingMode = normalizedTimingMode;
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -238,6 +256,7 @@ public class LobotomizeStorage {
         }
 
         this.key = new NamespacedKey(plugin, "lastRestock");
+        this.lastRestockScheduleKey = new NamespacedKey(plugin, "lastRestockScheduleFullTime");
         this.lobotomizedKey = new NamespacedKey(plugin, "isLobotomized");
         // Use Paper's GlobalRegionScheduler for chunk processing (doesn't access entities directly)
         this.chunkProcessingTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
@@ -544,6 +563,9 @@ public class LobotomizeStorage {
                 villager.setGlowing(true);
             }
         } else {
+            if (active) {
+                this.registerRestockPdc(villager);
+            }
             // Refresh any trades as this villager is inactive
             this.refreshTrades(villager);
 
@@ -635,7 +657,7 @@ public class LobotomizeStorage {
         NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
         NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
         
-        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey);
+        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey, this.restockLimit);
         
         // if (this.plugin.isDebugging() && !result) {
         //     // Log why shouldRestock returned false
@@ -653,6 +675,70 @@ public class LobotomizeStorage {
         // }
         
         return result;
+    }
+
+    private void registerRestockPdc(@NotNull Villager villager) {
+        if (!VillagerUtils.needsToRestock(villager)) {
+            return;
+        }
+
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        long fullTime = villager.getWorld().getFullTime();
+        NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
+        NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
+
+        if (!pdc.has(lastRestockCheckDayTimeKey, PersistentDataType.LONG)) {
+            pdc.set(lastRestockCheckDayTimeKey, PersistentDataType.LONG, fullTime);
+        }
+
+        if (!pdc.has(lastRestockGameTimeKey, PersistentDataType.LONG)) {
+            pdc.set(lastRestockGameTimeKey, PersistentDataType.LONG, fullTime);
+        }
+
+        if (!pdc.has(this.lastRestockScheduleKey, PersistentDataType.LONG)) {
+            pdc.set(this.lastRestockScheduleKey, PersistentDataType.LONG, fullTime);
+        }
+    }
+
+    private boolean isFixedTimeRestockWindow(@NotNull Villager villager, @NotNull PersistentDataContainer pdc) {
+        if (this.restockFixedTimes.isEmpty()) {
+            return false;
+        }
+
+        long fullTime = villager.getWorld().getFullTime();
+        int dayTime = (int) (fullTime % 24000L);
+        long lastCheck = pdc.getOrDefault(this.lastRestockScheduleKey, PersistentDataType.LONG, -1L);
+        boolean crossed = false;
+
+        if (lastCheck < 0L) {
+            crossed = this.restockFixedTimes.contains(dayTime);
+        } else {
+            long lastDay = lastCheck / 24000L;
+            long currentDay = fullTime / 24000L;
+            int lastDayTime = (int) (lastCheck % 24000L);
+
+            if (currentDay == lastDay) {
+                for (int time : this.restockFixedTimes) {
+                    if (time > lastDayTime && time <= dayTime) {
+                        crossed = true;
+                        break;
+                    }
+                }
+            } else if (currentDay > lastDay) {
+                if (currentDay - lastDay > 1) {
+                    crossed = true;
+                } else {
+                    for (int time : this.restockFixedTimes) {
+                        if (time > lastDayTime || time <= dayTime) {
+                            crossed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return crossed;
     }
 
     private void refreshTrades(@NotNull Villager villager) {
@@ -673,20 +759,32 @@ public class LobotomizeStorage {
         }
 
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
-
         long now = System.currentTimeMillis();
-        long timeSinceLastRestock = now - lastRestock;
-        long effectiveInterval = this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0);
-        
-        if (this.plugin.isDebugging()) {
-            this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() + 
-                    ": timeSinceLastRestock=" + timeSinceLastRestock + "ms, effectiveInterval=" + effectiveInterval + "ms, restocksToday=" + villager.getRestocksToday());
+        boolean restockWindow;
+        long timeSinceLastRestock = 0L;
+        long effectiveInterval = 0L;
+
+        if ("fixed-times".equals(this.restockTimingMode)) {
+            restockWindow = isFixedTimeRestockWindow(villager, pdc);
+        } else {
+            long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
+            timeSinceLastRestock = now - lastRestock;
+            effectiveInterval = this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0);
+
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() + 
+                        ": timeSinceLastRestock=" + timeSinceLastRestock + "ms, effectiveInterval=" + effectiveInterval + "ms, restocksToday=" + villager.getRestocksToday());
+            }
+
+            restockWindow = timeSinceLastRestock > effectiveInterval;
         }
-        
-        if (timeSinceLastRestock > effectiveInterval && shouldRestock(villager)) {
-            lastRestock = now;
-            pdc.set(this.key, PersistentDataType.LONG, lastRestock);
+
+        if (restockWindow && shouldRestock(villager)) {
+            pdc.set(this.key, PersistentDataType.LONG, now);
+            if ("fixed-times".equals(this.restockTimingMode)) {
+                long fullTime = villager.getWorld().getFullTime();
+                pdc.set(this.lastRestockScheduleKey, PersistentDataType.LONG, fullTime);
+            }
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
 
             for (MerchantRecipe recipe : recipes) {
@@ -709,7 +807,7 @@ public class LobotomizeStorage {
                         SoundCategory.NEUTRAL, 1.0F,
                         1.0F);
             }
-        } else if (this.plugin.isDebugging()) {
+        } else if (this.plugin.isDebugging() && !"fixed-times".equals(this.restockTimingMode)) {
             boolean intervalPassed = timeSinceLastRestock > effectiveInterval;
             this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() + 
                     ": intervalPassed=" + intervalPassed + " (needed " + effectiveInterval + "ms, had " + timeSinceLastRestock + "ms)" +
