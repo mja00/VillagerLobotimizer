@@ -6,10 +6,7 @@ on:
 
 jobs:
   test:
-    # arc-villager (self-hosted, on-cluster) for trusted runs only;
-    # fork PRs fall back to ubuntu-latest so untrusted gradle builds
-    # don't execute on the cluster.
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-villager' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code

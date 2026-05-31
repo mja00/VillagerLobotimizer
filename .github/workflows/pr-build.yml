@@ -11,10 +11,7 @@ permissions:
 
 jobs:
   build:
-    # arc-villager (self-hosted, on-cluster) for own-repo PRs only;
-    # fork PRs fall back to ubuntu-latest so untrusted gradle builds
-    # don't execute on the cluster.
-    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && 'arc-villager' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
