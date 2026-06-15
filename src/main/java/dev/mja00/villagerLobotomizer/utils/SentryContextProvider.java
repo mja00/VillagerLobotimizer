@@ -25,9 +25,6 @@ public class SentryContextProvider {
         }
     }
 
-    /**
-     * Get Minecraft version
-     */
     public static String getMinecraftVersion() {
         try {
             String version = Bukkit.getMinecraftVersion();
@@ -49,9 +46,6 @@ public class SentryContextProvider {
         }
     }
 
-    /**
-     * Get Java version
-     */
     public static String getJavaVersion() {
         String version = System.getProperty("java.version");
         return version != null ? version : "unknown";

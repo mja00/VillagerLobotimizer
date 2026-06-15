@@ -101,7 +101,6 @@ public class LobotomizeCommand {
     }
 
     private int debugCommand(CommandSourceStack source) throws CommandSyntaxException {
-        // If the command isn't executed by a player, we don't want to do anything
         Entity target = getLookedTarget(source);
         if (target == null) return 0;
         return this.getVillagerDetails(source, (Villager) target);
@@ -122,7 +121,6 @@ public class LobotomizeCommand {
     }
 
     private int debugCommandSpecific(CommandSourceStack source, EntitySelectorArgumentResolver resolver) throws CommandSyntaxException {
-        // If the command isn't executed by a player, we don't want to do anything
         if (!(source.getExecutor() instanceof Player)) {
             source.getSender().sendMessage(Component.text("Only players can use this command."));
             return 0;
@@ -142,7 +140,7 @@ public class LobotomizeCommand {
     private int getVillagerDetails(CommandSourceStack source, Villager villager) {
         boolean lobotomized = this.plugin.getStorage().getLobotomized().contains(villager);
         boolean active = this.plugin.getStorage().getActive().contains(villager);
-        // If they aren't aware we should ignore the hasAI call
+        // isAware false implies no AI regardless of hasAI
         boolean hasAI = villager.isAware() && villager.hasAI();
         Component message = Component.text("Is Awareness enabled: ")
                 .append(Component.text(villager.isAware()).color(villager.isAware() ? NamedTextColor.GREEN : NamedTextColor.RED));
@@ -171,7 +169,6 @@ public class LobotomizeCommand {
     }
 
     private int wakeCommand(CommandSourceStack source) throws CommandSyntaxException {
-        // If the command isn't executed by a player, we don't want to do anything
         Entity target = getLookedTarget(source);
         if (target == null) return 0;
         Villager villager = (Villager) target;
@@ -213,12 +210,10 @@ public class LobotomizeCommand {
             return builder.buildFuture();
         }
 
-        // Get all config keys dynamically from the config
         Set<String> configKeys = plugin.getConfig().getKeys(true);
 
         String remaining = builder.getRemaining().toLowerCase();
 
-        // Filter and suggest keys that match the input
         configKeys.stream()
                 .filter(key -> key.toLowerCase().startsWith(remaining))
                 .forEach(builder::suggest);
@@ -233,7 +228,6 @@ public class LobotomizeCommand {
     }
 
     private int setConfigCommand(CommandSourceStack source, String key, String value) throws CommandSyntaxException {
-        // Check if the key exists in the config
         if (!this.plugin.getConfig().contains(key)) {
             source.getSender().sendMessage(Component.text("Config key '" + key + "' does not exist.").color(NamedTextColor.RED));
             return 0;
@@ -243,9 +237,7 @@ public class LobotomizeCommand {
         Object currentValue = this.plugin.getConfig().get(key);
 
         try {
-            // Determine the type and set the value accordingly
             if (currentValue instanceof Boolean) {
-                // Boolean values
                 if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
                     source.getSender().sendMessage(Component.text("'" + key + "' expects a boolean value (true/false), but got: " + value).color(NamedTextColor.RED));
                     return 0;
@@ -264,23 +256,19 @@ public class LobotomizeCommand {
                     this.plugin.getConfig().set(key, parsed);
                 }
             } else if (currentValue instanceof String) {
-                // String values
                 this.plugin.getConfig().set(key, value);
             } else if (currentValue instanceof List) {
-                // List values - for now, we'll treat this as adding to the list
+                // List editing unsupported via command
                 source.getSender().sendMessage(Component.text("Setting list values is not supported yet. Use the config file directly.").color(NamedTextColor.YELLOW));
                 return 0;
             } else {
-                // Unknown type
                 source.getSender().sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.").color(NamedTextColor.RED));
                 return 0;
             }
 
-            // Save the config
             this.plugin.saveConfig();
             this.plugin.reloadConfig();
 
-            // Send success message
             source.getSender().sendMessage(Component.text("Successfully set '" + key + "' to '" + value + "'").color(NamedTextColor.GREEN));
             source.getSender().sendMessage(Component.text("Note: You may need to run '/lobotomy reload' for changes to take effect.").color(NamedTextColor.YELLOW));
 

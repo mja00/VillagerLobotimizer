@@ -59,68 +59,13 @@ public final class VillagerLobotomizer extends JavaPlugin {
         } else {
             this.getLogger().info("Update checker is disabled. You will not be notified of new versions.");
         }
-        // Detect if we're running on Folia
         this.isFolia = this.detectFolia();
         if (this.isFolia) {
             this.getLogger().info("Folia detected, using per-entity schedulers.");
         }
 
-        // Initialize Sentry if enabled
-        boolean enableSentry = this.getConfig().getBoolean("enable-sentry", true);
-        if (enableSentry) {
-            // Check if Sentry is already initialized (e.g., from a previous plugin reload)
-            if (Sentry.isEnabled()) {
-                this.sentryEnabled = true;
-                this.getLogger().info("Sentry is already initialized, skipping re-initialization");
-            } else {
-                // Detect if we're running in dev mode (runServer task)
-                boolean isDev = Boolean.getBoolean("villagerlobotimizer.dev");
-                String environment = isDev ? "development" : "production";
-
-                try {
-                    Sentry.init(options -> {
-                        options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
-                        options.setEnvironment(environment);
-                        options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
-
-                        // Set context tags
-                        try {
-                            options.setTag("server.brand", SentryContextProvider.getServerBrand());
-                            options.setTag("server.version", SentryContextProvider.getServerVersion());
-                            options.setTag("minecraft.version", SentryContextProvider.getMinecraftVersion());
-                            options.setTag("bukkit.version", SentryContextProvider.getBukkitVersion());
-                            options.setTag("java.version", SentryContextProvider.getJavaVersion());
-                            options.setTag("folia.enabled", String.valueOf(this.isFolia));
-                        } catch (Exception e) {
-                            this.getLogger().log(java.util.logging.Level.WARNING, "Failed to set Sentry context tags: " + e.getMessage(), e);
-                        }
-
-                        // Enable source context and stack traces
-                        options.setAttachStacktrace(true); // Attach stack traces to all events
-                        options.setAttachThreads(true); // Attach thread information
-
-                        // Mark our package as in-app for better source highlighting
-                        options.addInAppInclude("dev.mja00.villagerLobotimizer");
-
-                        // Performance monitoring
-                        options.setTracesSampleRate(0.1); // 10% sampling
-
-                        // Privacy: disable PII
-                        options.setSendDefaultPii(false);
-
-                        // Disable uncaught exception handler
-                        options.setEnableUncaughtExceptionHandler(false);
-                    });
-                    this.sentryEnabled = true;
-                    this.getLogger().info("Sentry error tracking enabled (environment: " + environment + ")");
-                } catch (Exception e) {
-                    this.getLogger().log(java.util.logging.Level.WARNING, "Failed to initialize Sentry: " + e.getMessage(), e);
-                    this.sentryEnabled = false;
-                }
-            }
-        } else {
-            this.getLogger().info("Sentry error tracking is disabled in config");
-        }
+        // Initialize Sentry to match config (also handles enable/disable transitions on reload)
+        this.applySentryConfig();
 
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
@@ -128,7 +73,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
         this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, command -> {
             command.registrar().register(lobotomizeCommand.createCommand("lobotomy"));
         });
-        // Set our debugs based on the config
         this.debugging = this.getConfig().getBoolean("debug");
         this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
         this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
@@ -187,13 +131,10 @@ public final class VillagerLobotomizer extends JavaPlugin {
             this.getLogger().info(String.format("Status determining class: %s", VersionUtils.getSupportStatusClass()));
         }
 
-        // Plugin startup logic
         getLogger().info("I'm ready to lobotomize your villagers!");
         if (this.isDebugging()) {
             getLogger().info("Debug mode is enabled. This will print debug messages to the console.");
-            // Ensure two teams are created for debugging purposes, active and inactive villagers
-            // Colors for the teams are green and red respectively
-            // This way we can toggle glow on them in debug mode
+            // Active/inactive teams let us toggle glow on villagers in debug mode
             if (createDebuggingTeams) {
                 createDebuggingTeams();
             }
@@ -253,13 +194,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        // Plugin shutdown logic
         getLogger().info("Man guess I'll put my tools away now :(");
         if (this.storage != null) {
             this.storage.flush();
         }
         // No need to cancel tasks manually - Paper handles this automatically on disable
-        // If either of the teams are not null, we need to remove them (only on non-Folia servers)
+        // Clean up debug teams (non-Folia only)
         if (!this.isFolia) {
             ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
             if (scoreboardManager != null) {
@@ -272,7 +212,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
             }
         }
 
-        // Flush and close Sentry
         if (this.sentryEnabled) {
             try {
                 Sentry.close();
@@ -287,7 +226,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     private void clearTeam(Team team) {
         if (team != null) {
-            // Get all entities on the team and unglow them just in case
+            // Unglow entries before unregistering
             for (String entry : team.getEntries()) {
                 UUID uuid = UUID.fromString(entry);
                 Entity entity = this.getServer().getEntity(uuid);
@@ -314,7 +253,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
         // Skip team operations on Folia
         if (!this.isFolia) {
-            // If debugging is being set to false, we need to clean up the teams
             if (!debugging) {
                 ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
                 if (scoreboardManager != null) {
@@ -328,14 +266,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 this.activeVillagersTeam = null;
                 this.inactiveVillagersTeam = null;
             } else {
-                // Create them again
                 createDebuggingTeams();
             }
         } else if (debugging) {
             this.getLogger().info("Debug mode enabled. Note: Villager teams/glowing are not available on Folia.");
         }
 
-        // Update the config
         this.getConfig().set("debug", this.debugging);
         this.saveConfig();
     }
@@ -346,7 +282,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
     public void setChunkDebugging(boolean chunkDebugging) {
         this.chunkDebugging = chunkDebugging;
-        // Update the config
         this.getConfig().set("chunk-debug", this.chunkDebugging);
         this.saveConfig();
     }
@@ -357,8 +292,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
 
 
     private void checkForUpdates() {
-        // We need to GET the url. It returns an array of objects for each version
-        // This'll be scheduled off thread so no need to worry here
+        // Runs off-thread via async scheduler
         String currentVersion = this.getPluginMeta().getVersion();
         this.getLogger().info("Checking for updates...");
         VillagerLobotomizer plugin = this;
@@ -375,13 +309,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 plugin.getLogger().warning("Failed to check for updates: No response from the server");
                 return;
             }
-            // Parse our response into json and filter to only release versions (ignore beta/alpha)
+            // Parse the version list response
             List<Modrinth.ModrinthVersion> versions = Modrinth.fromJson(responseBody);
             if (versions == null || versions.isEmpty()) {
                 plugin.getLogger().warning("Failed to check for updates: No versions found");
                 return;
             }
-            // Only consider versions where version_type is "release"
             Modrinth.ModrinthVersion latestVersion = versions.stream()
                     .filter(v -> "release".equalsIgnoreCase(v.getVersionType()))
                     .findFirst()
@@ -392,7 +325,6 @@ public final class VillagerLobotomizer extends JavaPlugin {
             }
 
 
-            // Compare versions using proper semantic versioning
             int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.getVersionNumber());
             if (comparison < 0) {
                 plugin.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
@@ -439,12 +371,88 @@ public final class VillagerLobotomizer extends JavaPlugin {
     }
 
     /**
+     * Initializes or shuts down Sentry to match the current {@code enable-sentry} config value.
+     * Safe to call on enable and on {@code /lobotomy reload}; handles transitions in both directions.
+     */
+    private void applySentryConfig() {
+        boolean enableSentry = this.getConfig().getBoolean("enable-sentry", true);
+        if (enableSentry) {
+            // Already initialized (e.g. fresh enable after a soft plugin reload, or a prior reload)
+            if (Sentry.isEnabled()) {
+                this.sentryEnabled = true;
+                this.getLogger().info("Sentry is already initialized, skipping re-initialization");
+                return;
+            }
+            initializeSentry();
+        } else {
+            // Disabled in config: close it if it was previously running so a reload takes effect.
+            if (this.sentryEnabled || Sentry.isEnabled()) {
+                try {
+                    Sentry.close();
+                    if (this.isDebugging()) {
+                        this.getLogger().info("Sentry shutdown complete (disabled via config)");
+                    }
+                } catch (Exception e) {
+                    this.getLogger().log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
+                }
+            }
+            this.sentryEnabled = false;
+            this.getLogger().info("Sentry error tracking is disabled in config");
+        }
+    }
+
+    private void initializeSentry() {
+        // dev mode set by the runServer task
+        boolean isDev = Boolean.getBoolean("villagerlobotimizer.dev");
+        String environment = isDev ? "development" : "production";
+
+        try {
+            Sentry.init(options -> {
+                options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+                options.setEnvironment(environment);
+                options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
+
+                try {
+                    options.setTag("server.brand", SentryContextProvider.getServerBrand());
+                    options.setTag("server.version", SentryContextProvider.getServerVersion());
+                    options.setTag("minecraft.version", SentryContextProvider.getMinecraftVersion());
+                    options.setTag("bukkit.version", SentryContextProvider.getBukkitVersion());
+                    options.setTag("java.version", SentryContextProvider.getJavaVersion());
+                    options.setTag("folia.enabled", String.valueOf(this.isFolia));
+                } catch (Exception e) {
+                    this.getLogger().log(java.util.logging.Level.WARNING, "Failed to set Sentry context tags: " + e.getMessage(), e);
+                }
+
+                options.setAttachStacktrace(true);
+                options.setAttachThreads(true);
+
+                // Mark our package as in-app for better source highlighting
+                options.addInAppInclude("dev.mja00.villagerLobotimizer");
+
+                options.setTracesSampleRate(0.1);
+
+                // Privacy: disable PII
+                options.setSendDefaultPii(false);
+
+                options.setEnableUncaughtExceptionHandler(false);
+            });
+            this.sentryEnabled = true;
+            this.getLogger().info("Sentry error tracking enabled (environment: " + environment + ")");
+        } catch (Exception e) {
+            this.getLogger().log(java.util.logging.Level.WARNING, "Failed to initialize Sentry: " + e.getMessage(), e);
+            this.sentryEnabled = false;
+        }
+    }
+
+    /**
      * Reloads plugin configuration, storage, and debug flags.
      *
      * @return number of villagers reloaded into storage
      */
     public int reloadPluginState() {
         this.reloadConfig();
+        // Apply enable-sentry transitions on reload (init if newly enabled, close if newly disabled).
+        this.applySentryConfig();
         this.debugging = this.getConfig().getBoolean("debug");
         this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
         this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
@@ -464,11 +472,12 @@ public final class VillagerLobotomizer extends JavaPlugin {
         }
 
         if (previousStorage != null) {
-            previousStorage.flush();
+            // Reload: plugin stays enabled, so dispatch wake work via the entity scheduler (Folia-safe).
+            previousStorage.flush(true);
         }
         this.storage = newStorage;
 
-        // Reset or recreate debug teams based on current configuration
+        // Reset/recreate debug teams per current config
         if (!this.isFolia) {
             ScoreboardManager scoreboardManager = this.getServer().getScoreboardManager();
             if (scoreboardManager != null) {

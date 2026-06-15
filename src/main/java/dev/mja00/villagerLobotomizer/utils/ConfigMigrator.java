@@ -56,7 +56,6 @@ public class ConfigMigrator {
         try {
             createBackup(configFile);
 
-            // Use comment-preserving migration
             String existingYaml = Files.readString(configFile.toPath(), StandardCharsets.UTF_8);
             String migratedYaml = getString(existingYaml);
 
@@ -80,7 +79,6 @@ public class ConfigMigrator {
             logger.severe("  Please report this error with the stack trace below:");
             e.printStackTrace();
 
-            // Attempt fallback to standard config
             logger.info("Attempting fallback to standard config merge...");
             try {
                 fallbackMigration(configFile, existingConfig);
@@ -98,11 +96,9 @@ public class ConfigMigrator {
         CommentPreservingYamlMigrator commentMigrator = new CommentPreservingYamlMigrator(logger);
         String migratedYaml = commentMigrator.mergeWithComments(existingYaml, defaultYaml);
 
-        // Ensure config-version is set
         if (!migratedYaml.contains("config-version:")) {
             migratedYaml = "config-version: " + CURRENT_CONFIG_VERSION + "\n" + migratedYaml;
         } else {
-            // Update existing config-version
             migratedYaml = migratedYaml.replaceFirst("config-version:\\s*\\d+", "config-version: " + CURRENT_CONFIG_VERSION);
         }
         return migratedYaml;
