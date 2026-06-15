@@ -2,7 +2,6 @@ package dev.mja00.villagerLobotomizer;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -24,8 +23,6 @@ import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.block.data.Ageable;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
@@ -37,6 +34,11 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
 
+import dev.mja00.villagerLobotomizer.policy.BlockClassifier;
+import dev.mja00.villagerLobotomizer.policy.BlockGrid;
+import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
+import dev.mja00.villagerLobotomizer.policy.VillagerActivityPolicy;
+import dev.mja00.villagerLobotomizer.policy.VillagerState;
 import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import dev.mja00.villagerLobotomizer.utils.StringUtils;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
@@ -47,92 +49,13 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public class LobotomizeStorage {
-    /**
-     * IMPASSABLE_REGULAR is a set of blocks that are occulding light (so most solid blocks)
-     */
-    private static final EnumSet<Material> IMPASSABLE_REGULAR;
-    /**
-     * IMPASSABLE_FLOOR is a set of carpets types
-     */
-    private static final EnumSet<Material> IMPASSABLE_FLOOR;
-    /**
-     * IMPASSABLE_TALL is a set of blocks that are tall (so walls and fences)
-     */
-    private static final EnumSet<Material> IMPASSABLE_TALL;
-    /**
-     * IMPASSABLE_ALL is a set of all the impassable blocks
-     */
-    private static final EnumSet<Material> IMPASSABLE_ALL;
-    /**
-     * IMPASSABLE_REGULAR_FLOOR is a set of blocks that are regular and floor
-     */
-    private static final EnumSet<Material> IMPASSABLE_REGULAR_FLOOR;
-    /**
-     * IMPASSABLE_REGULAR_TALL is a set of blocks that are regular and tall
-     */
-    private static final EnumSet<Material> IMPASSABLE_REGULAR_TALL;
-    /**
-     * PROFESSION_BLOCKS is a set of blocks that are profession blocks
-     */
-    private static final EnumSet<Material> PROFESSION_BLOCKS;
-    private static final EnumSet<Material> DOOR_BLOCKS;
-
-    static {
-        IMPASSABLE_REGULAR = EnumSet.of(Material.LAVA);
-        IMPASSABLE_FLOOR = EnumSet.noneOf(Material.class);
-        IMPASSABLE_TALL = EnumSet.noneOf(Material.class);
-        DOOR_BLOCKS = EnumSet.noneOf(Material.class);
-        for (Material m : Registry.MATERIAL) {
-            if (m.isOccluding()) {
-                IMPASSABLE_REGULAR.add(m);
-            }
-
-            if (m.name().contains("_CARPET")) {
-                IMPASSABLE_FLOOR.add(m);
-            }
-
-            if (m.name().contains("_WALL") || m.name().contains("_FENCE")) {
-                IMPASSABLE_TALL.add(m);
-            }
-
-            if (m.name().contains("_DOOR")) {
-                DOOR_BLOCKS.add(m);
-            }
-        }
-
-        IMPASSABLE_ALL = EnumSet.copyOf(IMPASSABLE_REGULAR);
-        IMPASSABLE_REGULAR_FLOOR = EnumSet.copyOf(IMPASSABLE_REGULAR);
-        IMPASSABLE_REGULAR_TALL = EnumSet.copyOf(IMPASSABLE_REGULAR);
-        IMPASSABLE_ALL.addAll(IMPASSABLE_FLOOR);
-        IMPASSABLE_ALL.addAll(IMPASSABLE_TALL);
-        IMPASSABLE_REGULAR_FLOOR.addAll(IMPASSABLE_FLOOR);
-        IMPASSABLE_REGULAR_TALL.addAll(IMPASSABLE_TALL);
-
-        // Create a list of blocks that are profession blocks
-        PROFESSION_BLOCKS = EnumSet.noneOf(Material.class);
-        PROFESSION_BLOCKS.add(Material.BLAST_FURNACE);
-        PROFESSION_BLOCKS.add(Material.SMOKER);
-        PROFESSION_BLOCKS.add(Material.CARTOGRAPHY_TABLE);
-        PROFESSION_BLOCKS.add(Material.BREWING_STAND);
-        PROFESSION_BLOCKS.add(Material.COMPOSTER);
-        PROFESSION_BLOCKS.add(Material.BARREL);
-        PROFESSION_BLOCKS.add(Material.FLETCHING_TABLE);
-        PROFESSION_BLOCKS.add(Material.CAULDRON);
-        PROFESSION_BLOCKS.add(Material.LECTERN);
-        PROFESSION_BLOCKS.add(Material.STONECUTTER);
-        PROFESSION_BLOCKS.add(Material.LOOM);
-        PROFESSION_BLOCKS.add(Material.SMITHING_TABLE);
-        PROFESSION_BLOCKS.add(Material.GRINDSTONE);
-    }
-
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
     private final NamespacedKey lobotomizedKey;
+    private final NamespacedKey lastRestockCheckDayTimeKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
-    // Used to track what chunks we need to trigger updates for
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
-    // Track per-villager scheduled tasks using Paper's native schedulers
     private final Map<UUID, ScheduledTask> villagerTasks = new ConcurrentHashMap<>();
     private final Map<UUID, Long> villagerTaskIntervals = new ConcurrentHashMap<>();
     private final Set<String> exemptNames;
@@ -146,6 +69,8 @@ public class LobotomizeStorage {
     private final boolean checkRoof;
     private final boolean silentLobotomizedVillagers;
     private final boolean persistLobotomizedState;
+    private final boolean ignoreStuckInDoors;
+    private final VillagerActivityPolicy activityPolicy;
     private Sound restockSound;
     private Sound levelUpSound;
     private final Logger logger;
@@ -161,10 +86,13 @@ public class LobotomizeStorage {
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
-        this.checkInterval = plugin.getConfig().getLong("check-interval");
-        this.inactiveCheckInterval = plugin.getConfig().getLong("inactive-check-interval", this.checkInterval);
-        this.restockInterval = plugin.getConfig().getLong("restock-interval");
-        this.restockRandomRange = plugin.getConfig().getLong("restock-random-range");
+        // check-interval/inactive-check-interval are scheduler periods (ticks) and must be >= 1, or
+        // runAtFixedRate throws IllegalArgumentException for every tracked villager. restock-interval
+        // and restock-random-range are wall-clock milliseconds and must not be negative.
+        this.checkInterval = validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 150L);
+        this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 150L);
+        this.restockInterval = validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
+        this.restockRandomRange = validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -174,7 +102,6 @@ public class LobotomizeStorage {
         String soundName = plugin.getConfig().getString("restock-sound", "");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
-        // Convert legacy sound names if needed
         soundName = convertLegacySoundName(soundName, "restock-sound");
         levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
 
@@ -185,7 +112,7 @@ public class LobotomizeStorage {
             levelUpSoundName = "";
         }
 
-        // If either sound starts with "minecraft:" we can remove that part as we handle it
+        // We add the minecraft: namespace ourselves when resolving, so strip it here
         if (!soundName.isEmpty() && soundName.startsWith("minecraft:")) {
             soundName = soundName.replace("minecraft:", "");
         }
@@ -199,12 +126,20 @@ public class LobotomizeStorage {
                 .map(String::toLowerCase)
                 .collect(Collectors.toSet());
 
-        // Empty our door set if the config is set to false
-        if (!plugin.getConfig().getBoolean("ignore-villagers-stuck-in-doors")) {
-            DOOR_BLOCKS.clear();
-        }
+        // Whether door blocks should count as a bypass (passable) block. Stored per-instance so it
+        // is re-read on /lobotomy reload, then passed into the activity policy below.
+        this.ignoreStuckInDoors = plugin.getConfig().getBoolean("ignore-villagers-stuck-in-doors");
 
-        // Get the registry
+        this.activityPolicy = new VillagerActivityPolicy(
+                this.lobotomizePassengers,
+                this.onlyProfessions,
+                this.onlyWithExperience,
+                this.checkRoof,
+                this.ignoreStuckInDoors,
+                plugin.getConfig().getBoolean("ignore-non-solid-blocks"),
+                this.exemptNames,
+                BlockClassifier.fromServerRegistry());
+
         Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
 
         try {
@@ -225,7 +160,6 @@ public class LobotomizeStorage {
         try {
             if (!levelUpSoundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, levelUpSoundName);
-                // If the sound is not found, it will throw an exception
                 this.levelUpSound = soundRegistry.getOrThrow(key);
             } else {
                 this.levelUpSound = null;
@@ -239,7 +173,10 @@ public class LobotomizeStorage {
 
         this.key = new NamespacedKey(plugin, "lastRestock");
         this.lobotomizedKey = new NamespacedKey(plugin, "isLobotomized");
-        // Use Paper's GlobalRegionScheduler for chunk processing (doesn't access entities directly)
+        this.lastRestockCheckDayTimeKey = new NamespacedKey(plugin, "lastRestockCheckDayTime");
+        // Use Paper's GlobalRegionScheduler for chunk processing. It never touches entities directly;
+        // per-chunk entity access is dispatched to the owning region via getRegionScheduler() (see
+        // scheduleChunkVillagerProcessing), keeping this Folia thread-ownership safe.
         this.chunkProcessingTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 SentryTaskWrapper.wrap((task) -> this.processChunks()),
@@ -287,12 +224,10 @@ public class LobotomizeStorage {
     }
 
     public final void addVillager(@NotNull Villager villager) {
-        // Don't add villagers if shutting down
         if (this.shuttingDown || !this.plugin.isEnabled()) {
             return;
         }
 
-        // Check if this villager was previously lobotomized
         boolean wasLobotomized = false;
         if (this.persistLobotomizedState) {
             PersistentDataContainer pdc = villager.getPersistentDataContainer();
@@ -318,22 +253,21 @@ public class LobotomizeStorage {
             }
         }
 
-        // Schedule per-villager task with appropriate interval
         long interval = wasLobotomized ? this.inactiveCheckInterval : this.checkInterval;
         this.scheduleVillagerTask(villager, interval);
     }
 
     public final void removeVillager(@NotNull Villager villager) {
-        // Cancel the per-villager task
-        ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
-        this.villagerTaskIntervals.remove(villager.getUniqueId());
-        if (task != null && !task.isCancelled()) {
-            task.cancel();
-        }
-
         boolean wasInactive;
         boolean wasActive;
+        // Cancel the per-villager task and drop set membership atomically (paired with
+        // scheduleVillagerTask) so a concurrent (re)schedule can't leave a live orphan task.
         synchronized (this.stateLock) {
+            ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
+            this.villagerTaskIntervals.remove(villager.getUniqueId());
+            if (task != null && !task.isCancelled()) {
+                task.cancel();
+            }
             wasActive = this.activeVillagers.remove(villager);
             wasInactive = this.inactiveVillagers.remove(villager);
         }
@@ -365,25 +299,38 @@ public class LobotomizeStorage {
      * @param villager The villager to clear the marker from
      */
     public void clearLobotomizedMarker(@NotNull Villager villager) {
-        if (this.persistLobotomizedState) {
-            PersistentDataContainer pdc = villager.getPersistentDataContainer();
-            if (pdc.has(this.lobotomizedKey, PersistentDataType.BYTE)) {
-                pdc.remove(this.lobotomizedKey);
-                if (this.plugin.isDebugging()) {
-                    this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
-                }
+        // Clear unconditionally, even when persist-lobotomized-state is off: a marker written under a
+        // previously-enabled config must not survive to re-lobotomize a woken villager if the feature
+        // is toggled back on. has() keeps this cheap when there is nothing to remove.
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        if (pdc.has(this.lobotomizedKey, PersistentDataType.BYTE)) {
+            pdc.remove(this.lobotomizedKey);
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
             }
         }
     }
 
     /**
-     * Flushes all villagers from storage and stops their tasks. Attempts to un-lobotomize them if possible.
+     * Flushes all villagers from storage and stops their tasks, attempting to un-lobotomize them.
+     * Equivalent to {@code flush(false)} (a true shutdown).
      */
     public final void flush() {
-        // Set shutdown flag to prevent new tasks from being scheduled
+        flush(false);
+    }
+
+    /**
+     * Flushes all villagers from storage and stops their tasks, attempting to un-lobotomize them.
+     *
+     * @param reloading {@code true} when the plugin stays enabled (a {@code /lobotomy reload}). In that
+     *                  case wake work is dispatched via each villager's EntityScheduler, which reliably
+     *                  runs for cross-region (Folia) entities. On a true shutdown ({@code false}) the
+     *                  scheduler may not run, so we mutate directly and rely on the persistent marker.
+     */
+    public final void flush(boolean reloading) {
+        // Prevent new tasks from being scheduled past this point
         this.shuttingDown = true;
-        
-        // Cancel all per-villager tasks
+
         for (ScheduledTask task : this.villagerTasks.values()) {
             if (task != null && !task.isCancelled()) {
                 task.cancel();
@@ -399,8 +346,7 @@ public class LobotomizeStorage {
             this.watchdogTask.cancel();
         }
 
-        // We'll flush all the villagers before shutdown, so if the plugin is removed, they won't have lobotomized villagers forever
-        // During shutdown, we need to handle this carefully since we can't schedule new tasks.
+        // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
         List<Villager> toFlush;
         synchronized (this.stateLock) {
@@ -412,39 +358,38 @@ public class LobotomizeStorage {
             this.inactiveVillagers.clear();
             this.activeVillagers.clear();
         }
-        
+
+        // On a true shutdown the scheduler may not run, so cross-region (Folia) villagers can't be
+        // reliably woken; warn once. The persistent marker (when enabled) re-tracks them on next
+        // load so the normal check loop can wake them once their chunk is active again.
+        if (!reloading && this.plugin.isFolia() && !toFlush.isEmpty()) {
+            this.logger.info("Some Villagers may remain lobotomized after shutdown until their chunk next loads. "
+                    + "Enable persist-lobotomized-state so they are re-evaluated and woken once their chunk reloads.");
+        }
+
         for (Villager villager : toFlush) {
             if (this.plugin.isDebugging()) {
                 this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
             }
 
-            if (plugin.isFolia()) {
-                this.logger.info("Some Villagers may remain lobotomized after shutdown. If you remove the plugin they will be lobotomized forever.");
-            }
-            
-            try {
-                // During shutdown, try setting directly first since scheduler might not work
-                villager.setAware(true);
-                if (this.silentLobotomizedVillagers) {
-                    villager.setSilent(false);
-                }
-                // Remove persistent lobotomized marker
-                if (this.persistLobotomizedState) {
-                    villager.getPersistentDataContainer().remove(this.lobotomizedKey);
-                }
-            } catch (IllegalStateException e) {
-                // If we get a thread violation, try using entity scheduler as last resort
+            if (reloading) {
+                // Plugin stays enabled: the entity scheduler will run, so this works cross-region
+                // without throwing a thread-ownership exception per villager.
                 try {
-                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> {
-                        villager.setAware(true);
-                        if (this.silentLobotomizedVillagers) {
-                            villager.setSilent(false);
-                        }
-                        // Remove persistent lobotomized marker
-                        if (this.persistLobotomizedState) {
-                            villager.getPersistentDataContainer().remove(this.lobotomizedKey);
-                        }
-                    }), null);
+                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
+                } catch (Exception e) {
+                    this.logger.log(java.util.logging.Level.WARNING, "Failed to schedule un-lobotomize for villager " + villager.getUniqueId() + " during reload: " + e.getMessage(), e);
+                }
+                continue;
+            }
+
+            try {
+                // During shutdown, try setting directly first since the scheduler might not run.
+                wakeVillager(villager);
+            } catch (IllegalStateException e) {
+                // If we get a thread violation, try using the entity scheduler as a last resort.
+                try {
+                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
                 } catch (Exception schedulerException) {
                     // If both fail, log warning but don't crash the shutdown
                     this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
@@ -454,12 +399,30 @@ public class LobotomizeStorage {
             }
         }
     }
+
+    /**
+     * Restores a villager to its un-lobotomized vanilla state. Must be called on the thread/region
+     * that owns the entity (call directly only when already on it, otherwise via its EntityScheduler).
+     */
+    private void wakeVillager(@NotNull Villager villager) {
+        villager.setAware(true);
+        if (this.silentLobotomizedVillagers) {
+            villager.setSilent(false);
+        }
+        clearLobotomizedMarker(villager);
+    }
     
     
     /**
      * Thread-safe wrapper for processing villagers using entity scheduling
      */
     private void processVillagerSafely(@NotNull Villager villager) {
+        // After flush()/reload swap, an old storage instance can still have in-flight callbacks on
+        // other region threads. Bail out promptly so we don't mutate the old, orphaned sets or
+        // reschedule tasks via the dead instance while the new instance is taking over.
+        if (this.shuttingDown) {
+            return;
+        }
         try {
             if (!villager.isValid() || villager.isDead()) {
                 ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
@@ -506,18 +469,21 @@ public class LobotomizeStorage {
 
     private boolean processVillager(@NotNull Villager villager, boolean active) {
         if (!villager.isValid() || villager.isDead()) {
-            // Remove from whatever
             return true;
         }
 
         Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        int blockX = villagerLocation.getBlockX();
+        int blockY = villagerLocation.getBlockY();
+        int blockZ = villagerLocation.getBlockZ();
 
-        // If the chunk is not loaded, and the villager is not active, we want to add them to the active list
-        if (!villager.getWorld().isChunkLoaded(villagerLocation.getBlockX() >> 4, villagerLocation.getBlockZ() >> 4)) {
+        // Chunk unloaded: can't evaluate blocks, keep current state
+        if (!villager.getWorld().isChunkLoaded(blockX >> 4, blockZ >> 4)) {
             return false; // Keep current if chunk is unloaded
         }
 
-        boolean shouldBeActive = this.shouldBeActive(villager);
+        // Reuse the coordinates already computed above instead of cloning the location again.
+        boolean shouldBeActive = this.shouldBeActive(villager, blockX, blockY, blockZ);
 
         if (shouldBeActive) {
             if (!active) {
@@ -526,13 +492,7 @@ public class LobotomizeStorage {
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(false);
                 }
-                // Remove persistent lobotomized marker
-                if (this.persistLobotomizedState) {
-                    villager.getPersistentDataContainer().remove(this.lobotomizedKey);
-                    if (this.plugin.isDebugging()) {
-                        this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
-                    }
-                }
+                clearLobotomizedMarker(villager);
                 setActive(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");
@@ -544,7 +504,7 @@ public class LobotomizeStorage {
                 villager.setGlowing(true);
             }
         } else {
-            // Refresh any trades as this villager is inactive
+            // Inactive villagers still need their trades refreshed
             this.refreshTrades(villager);
 
             if (active) {
@@ -553,7 +513,6 @@ public class LobotomizeStorage {
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(true);
                 }
-                // Set persistent lobotomized marker
                 if (this.persistLobotomizedState) {
                     villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
                     if (this.plugin.isDebugging()) {
@@ -632,38 +591,36 @@ public class LobotomizeStorage {
     }
 
     private boolean shouldRestock(@NotNull Villager villager) {
-        NamespacedKey lastRestockGameTimeKey = new NamespacedKey(this.plugin, "lastRestockGameTime");
-        NamespacedKey lastRestockCheckDayTimeKey = new NamespacedKey(this.plugin, "lastRestockCheckDayTime");
-        
-        boolean result = VillagerUtils.shouldRestock(villager, lastRestockGameTimeKey, lastRestockCheckDayTimeKey);
-        
-        // if (this.plugin.isDebugging() && !result) {
-        //     // Log why shouldRestock returned false
-        //     long fullTime = villager.getWorld().getFullTime();
-        //     long lastRestockFullTime = villager.getPersistentDataContainer().getOrDefault(lastRestockGameTimeKey, PersistentDataType.LONG, 0L);
-        //     int restocksToday = villager.getRestocksToday();
-        //     boolean cooldownPassed = fullTime > lastRestockFullTime + 2400L;
-        //     boolean needsRestock = VillagerUtils.needsToRestock(villager);
-            
-        //     this.logger.info("[Debug] shouldRestock=false for " + villager.getUniqueId() + 
-        //             ": restocksToday=" + restocksToday + " (need !=2)" +
-        //             ", fullTime=" + fullTime + ", lastRestockFullTime=" + lastRestockFullTime +
-        //             ", cooldownPassed=" + cooldownPassed + " (need >2400 ticks)" +
-        //             ", needsToRestock=" + needsRestock);
-        // }
-        
-        return result;
+        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey);
     }
 
     private void refreshTrades(@NotNull Villager villager) {
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
+
+        long now = System.currentTimeMillis();
+        long timeSinceLastRestock = now - lastRestock;
+        long effectiveInterval = this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0);
+        boolean intervalPassed = timeSinceLastRestock > effectiveInterval;
+
+        int currentLevel = villager.getVillagerLevel();
+        int expectedLevel = VillagerUtils.getVillagerLevel(villager);
+        boolean needsLevelUp = currentLevel < expectedLevel;
+
+        // Cheap gate first: if neither a restock nor a level-up could happen this tick, skip the
+        // daytime check and the 27-block job-site scan entirely. restock-interval is much larger
+        // than check-interval, so the interval gate is false on most checks for most villagers.
+        if (!intervalPassed && !needsLevelUp) {
+            return;
+        }
+
+        // Both restocking and leveling require it to be day (in the overworld) with a job site nearby.
         if (villager.getWorld().getEnvironment() == World.Environment.NORMAL && !villager.getWorld().isDayTime()) {
-            // It's night, do not refresh trades
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Skipping trade refresh for " + villager.getUniqueId() + " - it's night time in overworld");
             }
             return;
         }
-
 
         if (!VillagerUtils.isJobSiteNearby(villager)) {
             if (this.plugin.isDebugging()) {
@@ -672,19 +629,12 @@ public class LobotomizeStorage {
             return;
         }
 
-        PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
-
-        long now = System.currentTimeMillis();
-        long timeSinceLastRestock = now - lastRestock;
-        long effectiveInterval = this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0);
-        
         if (this.plugin.isDebugging()) {
-            this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() + 
+            this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() +
                     ": timeSinceLastRestock=" + timeSinceLastRestock + "ms, effectiveInterval=" + effectiveInterval + "ms, restocksToday=" + villager.getRestocksToday());
         }
-        
-        if (timeSinceLastRestock > effectiveInterval && shouldRestock(villager)) {
+
+        if (intervalPassed && shouldRestock(villager)) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
@@ -710,26 +660,14 @@ public class LobotomizeStorage {
                         1.0F);
             }
         } else if (this.plugin.isDebugging()) {
-            boolean intervalPassed = timeSinceLastRestock > effectiveInterval;
-            this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() + 
+            this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() +
                     ": intervalPassed=" + intervalPassed + " (needed " + effectiveInterval + "ms, had " + timeSinceLastRestock + "ms)" +
                     (intervalPassed ? ", shouldRestock=false" : ""));
         }
 
-        // Derek comment - Not sure if we want to split this level up check, to separate it from refresh trades. Might
-        // be better to(?)
-        // Lets also see if we need to level up the villager
-        int currentLevel = villager.getVillagerLevel();
-
-        // If we're max level, then just return early
-        if (currentLevel == 5) {
-            return;
-        }
-
-        int expectedLevel = VillagerUtils.getVillagerLevel(villager);
-
-        if (currentLevel < expectedLevel) {
-            // We can just set the villager level to the expected level
+        // Level the villager up to match its accumulated experience. Gated on day + job site above
+        // (mirrors restock); max villager level is 5, which getVillagerLevel already caps.
+        if (needsLevelUp) {
             int increaseAmount = Math.max(0, expectedLevel - currentLevel);
             villager.increaseLevel(increaseAmount);
             if (this.levelUpSound != null) {
@@ -738,92 +676,22 @@ public class LobotomizeStorage {
             PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
             villager.addPotionEffect(regenEffect);
 
-            // Write a log message if we're debugging
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
             }
         }
     }
 
-    private boolean canMoveThrough(World w, int x, int y, int z, boolean roof) {
-        boolean isChunkLoaded = w.isChunkLoaded(x >> 4, z >> 4);
-        if (!isChunkLoaded) {
-            return false;
-        }
-        Block blockAtHead = w.getBlockAt(x, y + 1, z);
-        Block blockAtFeet = w.getBlockAt(x, y, z);
-        Block blockUnderFeet = w.getBlockAt(x, y - 1, z);
-
-        // First check if the block at the head is solid, if so, then we can't move from here
-        boolean isHeadImpassable = this.testImpassable(IMPASSABLE_REGULAR_FLOOR, blockAtHead, false);
-        // Next check if the block at the feet is just regular (villagers can walk on carpets)
-        boolean isFeetImpassable = this.testImpassable(IMPASSABLE_REGULAR, blockAtFeet, false);
-        // Next check if the block under the feet is regular or tall
-        boolean isUnderFeetImpassable = this.testImpassable(IMPASSABLE_TALL, blockUnderFeet, true);
-        return !isHeadImpassable && !isFeetImpassable && (!roof || !isUnderFeetImpassable);
-    }
-
-    /**
-     * Tests if a block is impassable, based on the set provided.
-     * If onlyTallBlocks is true, it will only check for tall blocks.
-     * If false, it will check for all blocks in the set.
-     *
-     * @param set            The set of materials to check against
-     * @param b              The block to test
-     * @param onlyTallBlocks If true, only checks tall blocks
-     * @return true if the block is impassable, false otherwise
-     */
-    private boolean testImpassable(@NotNull EnumSet<Material> set, @NotNull Block b, boolean onlyTallBlocks) {
-        Material type = b.getType();
-
-        // Skip any extra checks here
-        if (set.contains(type)) {
-            return true;
-        }
-
-        // If we're only checking tall blocks and we reach this part, return false early
-        if (onlyTallBlocks) {
-            return false;
-        }
-
-        boolean isCarpet = type.name().contains("_CARPET");
-        boolean isBed = type.name().contains("_BED");
-        boolean isWater = type == Material.WATER;
-        BlockData blockData = b.getBlockData();
-        boolean isCrop = blockData instanceof Ageable;
-        boolean isABypassBlock = (isCrop || isBed || isCarpet || DOOR_BLOCKS.contains(type));
-        boolean isNonSolid = !type.isSolid() && this.plugin.getConfig().getBoolean("ignore-non-solid-blocks") && !PROFESSION_BLOCKS.contains(type);
-        // A block is impassable if:
-        // 1. It isn't water and it's not passable
-        // 2. AND it's not a bypass block (the early return ensures if it's in our testing set, it's impassable)
-        // 3. AND it's in the set
-        return (!isWater && !b.isPassable() && !isABypassBlock && !isNonSolid) || set.contains(type);
-    }
-
-    private boolean canMoveCardinally(World w, int x, int y, int z, boolean roof) {
-        // Essentially check x + 1, x - 1, z + 1, z - 1, and return the or of the results
-        // Means as long as there's 1 walkable path it should not be lobotomized
-        Boolean xPlusOne = this.canMoveThrough(w, x + 1, y, z, roof);
-        Boolean xMinusOne = this.canMoveThrough(w, x - 1, y, z, roof);
-        Boolean zPlusOne = this.canMoveThrough(w, x, y, z + 1, roof);
-        Boolean zMinusOne = this.canMoveThrough(w, x, y, z - 1, roof);
-
-        return xPlusOne || xMinusOne || zPlusOne || zMinusOne;
-    }
-
-
     public void handleBlockChange(Block block) {
         if (this.plugin.isDisableChunkVillagerUpdate()) {
             return;
         }
-        // Create a list of chunks we'll add to
-        List<Chunk> chunksToProcess = new ArrayList<>();
-        // Get our chunk
+        // Mark the block's own chunk, plus any edge-adjacent neighbor, without allocating a list
+        // per event (block break/place fires constantly on a busy server).
         Chunk chunk = block.getChunk();
-        // Put our chunk in the list
-        chunksToProcess.add(chunk);
+        long stamp = System.currentTimeMillis();
+        changedChunks.put(chunk, stamp);
 
-        // We also want to do neighbors if needed
         int blockInChunkX = block.getX() & 0xF;
         int blockInChunkZ = block.getZ() & 0xF;
 
@@ -831,19 +699,16 @@ public class LobotomizeStorage {
 
         // If <= 1 or >= 14 then add the -/+ chunk respectively without loading them
         if (blockInChunkX <= 1 && world.isChunkLoaded(chunk.getX() - 1, chunk.getZ())) {
-            chunksToProcess.add(world.getChunkAt(chunk.getX() - 1, chunk.getZ()));
+            changedChunks.put(world.getChunkAt(chunk.getX() - 1, chunk.getZ()), stamp);
         } else if (blockInChunkX >= 14 && world.isChunkLoaded(chunk.getX() + 1, chunk.getZ())) {
-            chunksToProcess.add(world.getChunkAt(chunk.getX() + 1, chunk.getZ()));
+            changedChunks.put(world.getChunkAt(chunk.getX() + 1, chunk.getZ()), stamp);
         }
 
         // Same for Z
         if (blockInChunkZ <= 1 && world.isChunkLoaded(chunk.getX(), chunk.getZ() - 1)) {
-            chunksToProcess.add(world.getChunkAt(chunk.getX(), chunk.getZ() - 1));
+            changedChunks.put(world.getChunkAt(chunk.getX(), chunk.getZ() - 1), stamp);
         } else if (blockInChunkZ >= 14 && world.isChunkLoaded(chunk.getX(), chunk.getZ() + 1)) {
-            chunksToProcess.add(world.getChunkAt(chunk.getX(), chunk.getZ() + 1));
-        }
-        for (Chunk c : chunksToProcess) {
-            changedChunks.put(c, System.currentTimeMillis());
+            changedChunks.put(world.getChunkAt(chunk.getX(), chunk.getZ() + 1), stamp);
         }
     }
 
@@ -853,61 +718,69 @@ public class LobotomizeStorage {
             Chunk chunk = entry.getKey();
             long lastChange = entry.getValue();
 
-            // If the chunk hasn't changed in a while, remove it
+            // Drop chunks idle past the update threshold (3 seconds)
             if (now - lastChange > 3000) {
                 return true;
             }
 
-            // Are we unloaded?
             if (!chunk.isLoaded()) {
                 return true;
             }
 
-            // Log a debug
             if (this.plugin.isChunkDebugging()) {
                 this.logger.info("[Debug] Processing chunk " + chunk.getX() + ", " + chunk.getZ() + " for villagers");
             }
 
-            // Schedule villager processing for this chunk on the appropriate region
             if (chunk.isLoaded()) {
                 this.scheduleChunkVillagerProcessing(chunk);
             }
 
-            // Keep tracked
             return false;
         });
     }
     
     /**
-     * Schedules villager processing for a chunk using region-appropriate scheduling
+     * Schedules villager processing for a chunk using region-appropriate scheduling.
+     *
+     * <p>Entity enumeration ({@link Chunk#getEntities()}) and per-entity access must happen on the
+     * region thread that owns the chunk. This method is invoked from {@link #processChunks()} on the
+     * global region scheduler, which on Folia does <strong>not</strong> own arbitrary chunks, so
+     * touching entities here directly would throw a thread-ownership violation. We therefore dispatch
+     * the whole body onto the owning region via {@link io.papermc.paper.threadedregions.scheduler.RegionScheduler}
+     * (which simply runs on the main thread on non-Folia Paper).
      */
     private void scheduleChunkVillagerProcessing(Chunk chunk) {
         if (!chunk.isLoaded()) {
             return;
         }
 
-        Entity[] entities = chunk.getEntities();
-        for (Entity entity : entities) {
-            if (entity instanceof Villager villager) {
-                // Check if this villager is tracked by us
-                if (inactiveVillagers.contains(villager) || activeVillagers.contains(villager)) {
-                    // Schedule processing on the villager's region thread using Paper's EntityScheduler
-                    try {
-                        villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((scheduledTask) -> {
+        final World world = chunk.getWorld();
+        final int cx = chunk.getX();
+        final int cz = chunk.getZ();
+
+        try {
+            Bukkit.getRegionScheduler().run(this.plugin, world, cx, cz, SentryTaskWrapper.wrap((scheduledTask) -> {
+                // Re-check liveness: the region task runs a tick or more after we were scheduled.
+                if (!chunk.isLoaded()) {
+                    return;
+                }
+                for (Entity entity : chunk.getEntities()) {
+                    if (entity instanceof Villager villager) {
+                        if (this.inactiveVillagers.contains(villager) || this.activeVillagers.contains(villager)) {
                             boolean isActive = this.activeVillagers.contains(villager);
                             if (this.processVillager(villager, isActive)) {
                                 if (this.plugin.isDebugging()) {
-                                    this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + chunk.getX() + ", " + chunk.getZ());
+                                    this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + cx + ", " + cz);
                                 }
                             }
-                        }), null);
-                    } catch (IllegalPluginAccessException e) {
-                        // Plugin disabled, ignore
-                        if (this.plugin.isDebugging()) {
-                            this.logger.fine("Skipped chunk villager processing; plugin disabled or stopping.");
                         }
                     }
                 }
+            }));
+        } catch (IllegalPluginAccessException e) {
+            // Plugin disabled, ignore
+            if (this.plugin.isDebugging()) {
+                this.logger.fine("Skipped chunk villager processing; plugin disabled or stopping.");
             }
         }
     }
@@ -920,64 +793,72 @@ public class LobotomizeStorage {
      * @return true if the villager should be active, false otherwise.
      */
     private boolean shouldBeActive(Villager villager) {
-        Location villagerLoc = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        Location loc = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        return shouldBeActive(villager, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+    }
 
-        // Check name
+    private boolean shouldBeActive(Villager villager, int blockX, int blockY, int blockZ) {
+        return this.activityPolicy.shouldBeActive(
+                villagerStateOf(villager, blockX, blockY, blockZ),
+                gridOf(villager.getWorld()));
+    }
+
+    private VillagerState villagerStateOf(Villager villager, int blockX, int blockY, int blockZ) {
         Component customName = villager.customName();
-        String villagerName = customName == null ? "" : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+        String name = customName == null
+                ? ""
+                : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+        return new VillagerState(
+                name,
+                villager.isSwimming(),
+                villager.isSleeping(),
+                villager.getVehicle() instanceof Vehicle,
+                villager.getProfession() == Villager.Profession.NONE,
+                villager.getVillagerExperience(),
+                blockX, blockY, blockZ);
+    }
 
-        if (villagerName.contains("nobrain")) {
-            return false;
-        } else if (exemptNames.contains(villagerName)) {
-            return true;
-        }
+    /**
+     * Adapts a live {@link World} to a {@link BlockGrid}. Returns {@code null} for coordinates in an
+     * unloaded chunk, which the policy treats as "cannot move there" — this reproduces the original
+     * per-column {@code isChunkLoaded} short-circuit for cardinal neighbours. The villager's own
+     * column (feet/head/floor/roof) is assumed loaded by callers ({@code processVillager} guards the
+     * villager's chunk before evaluating; {@code reconcile} only runs on valid in-world villagers),
+     * so the policy's null-tolerance for the centre column is never exercised in practice. A future
+     * caller that evaluates a villager whose own chunk may be unloaded must revisit that assumption.
+     * <p>
+     * A single {@code shouldBeActive} evaluation queries up to ~16 blocks, the bulk of them in the
+     * villager's own chunk (only cardinal neighbours near a chunk edge cross into another chunk). The
+     * adapter caches the most-recently-resolved {@link Chunk} so those queries collapse to one
+     * chunk-map lookup instead of one per block. The returned grid is stateful and not thread-safe,
+     * but each evaluation builds a fresh one and drives it synchronously on the owning region thread,
+     * where the cached chunk cannot unload mid-evaluation.
+     */
+    private static BlockGrid gridOf(World world) {
+        return new BlockGrid() {
+            private Chunk cachedChunk;
+            private int cachedChunkX;
+            private int cachedChunkZ;
 
-        // Villagers who are lobotomized will just sink
-
-        // Are we currently swimming?
-        if (villager.isSwimming()) {
-            return true; // Let them keep swimming
-        }
-
-        // Is our feet in water? (No idea if #isSwimming() works when lobotomized)
-        Block feetBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ());
-        Block headBlock = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 1, villagerLoc.getBlockZ());
-        if (feetBlock.getType() == Material.WATER || headBlock.getType() == Material.WATER) {
-            // If the feet or head block is water, we can consider the villager active
-            return true;
-        }
-
-        // Is the villager currently sleeping? (A sleeping villager doesn't do anything really anyways)
-        if (villager.isSleeping()) {
-            return true;
-        }
-
-        // Check vehicle
-        if (this.lobotomizePassengers && villager.getVehicle() instanceof Vehicle) {
-            return false;
-        }
-
-        // Check profession
-        if (this.onlyProfessions && villager.getProfession() == Villager.Profession.NONE) {
-            return true;
-        }
-
-        // Check experience
-        if (this.onlyWithExperience && villager.getVillagerExperience() == 0) {
-            return true;
-        }
-
-        // Check movement
-        Material floorBlockMaterial = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() - 1, villagerLoc.getBlockZ()).getType();
-        Block villagerRoof = villager.getWorld().getBlockAt(villagerLoc.getBlockX(), villagerLoc.getBlockY() + 2, villagerLoc.getBlockZ());
-
-        if (this.checkRoof && villagerRoof.getType() == Material.AIR) {
-            return true;
-        }
-
-        boolean hasRoof = floorBlockMaterial == Material.HONEY_BLOCK || this.testImpassable(IMPASSABLE_ALL, villagerRoof, false);
-
-        return this.canMoveCardinally(villager.getWorld(), villagerLoc.getBlockX(), villagerLoc.getBlockY(), villagerLoc.getBlockZ(), hasRoof);
+            @Override
+            public BlockSnapshot at(int x, int y, int z) {
+                int chunkX = x >> 4;
+                int chunkZ = z >> 4;
+                Chunk chunk = this.cachedChunk;
+                if (chunk == null || chunkX != this.cachedChunkX || chunkZ != this.cachedChunkZ) {
+                    if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                        return null;
+                    }
+                    chunk = world.getChunkAt(chunkX, chunkZ);
+                    this.cachedChunk = chunk;
+                    this.cachedChunkX = chunkX;
+                    this.cachedChunkZ = chunkZ;
+                }
+                Block b = chunk.getBlock(x & 0xF, y, z & 0xF);
+                Material type = b.getType();
+                return new BlockSnapshot(type, b.isPassable(), type.isSolid());
+            }
+        };
     }
 
     private String convertLegacySoundName(String soundName, String configKey) {
@@ -994,6 +875,24 @@ public class LobotomizeStorage {
     }
 
     /**
+     * Validates a config interval, clamping out-of-range values to a safe fallback and warning.
+     *
+     * @param configKey the config key (for the warning message)
+     * @param value     the configured value
+     * @param min       the minimum acceptable value (inclusive)
+     * @param fallback  the value to use when {@code value < min}
+     * @return {@code value} if it is at least {@code min}, otherwise {@code fallback}
+     */
+    private long validateInterval(String configKey, long value, long min, long fallback) {
+        if (value < min) {
+            this.logger.warning("Config value '" + configKey + "' must be >= " + min + " (got " + value
+                    + "); falling back to " + fallback + ".");
+            return fallback;
+        }
+        return value;
+    }
+
+    /**
      * Schedule a villager with the given interval, replacing any existing task.
      */
     private void scheduleVillagerTask(@NotNull Villager villager, long interval) {
@@ -1002,24 +901,34 @@ public class LobotomizeStorage {
         }
 
         UUID id = villager.getUniqueId();
-        ScheduledTask existing = this.villagerTasks.remove(id);
-        if (existing != null && !existing.isCancelled()) {
-            existing.cancel();
-        }
+        // Manage the task and set membership atomically (paired with removeVillager) so a concurrent
+        // removal can't interleave between cancelling the old task and installing the new one, which
+        // would leak a live task for a villager that is no longer tracked.
+        synchronized (this.stateLock) {
+            // Don't install a task for a villager that was removed concurrently.
+            if (!this.activeVillagers.contains(villager) && !this.inactiveVillagers.contains(villager)) {
+                return;
+            }
 
-        try {
-            ScheduledTask task = villager.getScheduler().runAtFixedRate(
-                    this.plugin,
-                    SentryTaskWrapper.wrap((scheduledTask) -> this.processVillagerSafely(villager)),
-                    null,
-                    interval,
-                    interval
-            );
-            this.villagerTasks.put(id, task);
-            this.villagerTaskIntervals.put(id, interval);
-        } catch (IllegalPluginAccessException e) {
-            untrack(villager);
-            this.villagerTaskIntervals.remove(id);
+            ScheduledTask existing = this.villagerTasks.remove(id);
+            if (existing != null && !existing.isCancelled()) {
+                existing.cancel();
+            }
+
+            try {
+                ScheduledTask task = villager.getScheduler().runAtFixedRate(
+                        this.plugin,
+                        SentryTaskWrapper.wrap((scheduledTask) -> this.processVillagerSafely(villager)),
+                        null,
+                        interval,
+                        interval
+                );
+                this.villagerTasks.put(id, task);
+                this.villagerTaskIntervals.put(id, interval);
+            } catch (IllegalPluginAccessException e) {
+                untrack(villager);
+                this.villagerTaskIntervals.remove(id);
+            }
         }
     }
 
@@ -1033,6 +942,4 @@ public class LobotomizeStorage {
         }
         this.scheduleVillagerTask(villager, newInterval);
     }
-
-    // Removed ActivatorTask and DeactivatorTask classes - replaced with per-villager entity scheduling
 }
