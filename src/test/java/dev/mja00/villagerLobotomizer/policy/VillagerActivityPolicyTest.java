@@ -20,6 +20,10 @@ class VillagerActivityPolicyTest {
     private static final BlockSnapshot HONEY = new BlockSnapshot(Material.HONEY_BLOCK, false, true);
     private static final BlockSnapshot DOOR = new BlockSnapshot(Material.OAK_DOOR, false, true);
     private static final BlockSnapshot FENCE = new BlockSnapshot(Material.OAK_FENCE, false, true);
+    // Non-solid, non-passable, and not a bypass block (sign-like). Walkable only when ignoreNonSolidBlocks is on.
+    private static final BlockSnapshot NON_SOLID = new BlockSnapshot(Material.OAK_SIGN, false, false);
+    // A profession block that is also non-solid; must stay blocking even with ignoreNonSolidBlocks on.
+    private static final BlockSnapshot LECTERN = new BlockSnapshot(Material.LECTERN, false, false);
 
     /** Minimal hand-built classifier — we control exactly which materials are "impassable". */
     private static BlockClassifier classifier() {
@@ -175,6 +179,26 @@ class VillagerActivityPolicyTest {
         assertFalse(defaultPolicy().shouldBeActive(villager("", 0, 64, 0), grid));
         // doors ignored -> door is a bypass -> walkable -> active
         assertTrue(policy(false, false, false, false, true, false, Set.of())
+                .shouldBeActive(villager("", 0, 64, 0), grid));
+    }
+
+    @Test
+    void nonSolidNeighbourIsWalkableOnlyWhenIgnoreNonSolidBlocks() {
+        // Box the villager in, but put a non-solid, non-passable, non-bypass block on one neighbour's feet.
+        TestGrid grid = sealedBox(0, 64, 0).set(1, 64, 0, NON_SOLID);
+        // non-solid blocks not ignored -> the block stays impassable -> still inactive
+        assertFalse(defaultPolicy().shouldBeActive(villager("", 0, 64, 0), grid));
+        // non-solid blocks ignored -> the block becomes walkable -> active
+        assertTrue(policy(false, false, false, false, false, true, Set.of())
+                .shouldBeActive(villager("", 0, 64, 0), grid));
+    }
+
+    @Test
+    void professionBlockStaysBlockingEvenWhenIgnoreNonSolidBlocks() {
+        // A non-solid profession block (lectern) is carved out of the ignoreNonSolidBlocks bypass,
+        // so it must keep blocking movement even with the feature on -> inactive.
+        TestGrid grid = sealedBox(0, 64, 0).set(1, 64, 0, LECTERN);
+        assertFalse(policy(false, false, false, false, false, true, Set.of())
                 .shouldBeActive(villager("", 0, 64, 0), grid));
     }
 
