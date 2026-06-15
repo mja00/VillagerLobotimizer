@@ -5,8 +5,7 @@ import org.bukkit.Bukkit;
 import java.lang.reflect.Method;
 import java.util.Map;
 
-import javax.annotation.Nonnull;
-
+import org.jetbrains.annotations.NotNull;
 public class VersionUtils   {
 
     private static final Map<String, SupportStatus> unsupportedServers;
@@ -117,7 +116,7 @@ public class VersionUtils   {
         }
     }
 
-    private static @Nonnull String make(@Nonnull String in) {
+    private static @NotNull String make(@NotNull String in) {
         final char[] c = in.toCharArray();
         for (int i = 0; i < c.length; i++) {
             c[i] ^= 0x5A;
