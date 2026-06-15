@@ -11,7 +11,7 @@ public class StringUtils {
      * @return -1 if version1 < version2, 0 if equal, 1 if version1 > version2
      */
     public static int compareSemVer(@NotNull String version1, @NotNull String version2) {
-        // If either version string does not match semantic versioning (e.g., "1.2.3"), return 0
+        // Non-semver strings are treated as equal
         if (!version1.matches("\\d+\\.\\d+\\.\\d+") || !version2.matches("\\d+\\.\\d+\\.\\d+")) {
             return 0;
         }
@@ -35,7 +35,6 @@ public class StringUtils {
 
     /**
      * Converts a legacy sound name (all uppercase with underscores) to the new format (lowercase with dots).
-     * Stateless utility for string conversion only.
      */
     public static String convertLegacySoundNameFormat(String soundName) {
         if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {

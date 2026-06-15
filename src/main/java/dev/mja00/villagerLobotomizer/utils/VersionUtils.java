@@ -2,9 +2,10 @@ package dev.mja00.villagerLobotomizer.utils;
 
 import com.google.common.collect.ImmutableMap;
 import org.bukkit.Bukkit;
-
 import java.lang.reflect.Method;
 import java.util.Map;
+
+import javax.annotation.Nonnull;
 
 public class VersionUtils   {
 
@@ -116,7 +117,7 @@ public class VersionUtils   {
         }
     }
 
-    private static String make(String in) {
+    private static @Nonnull String make(@Nonnull String in) {
         final char[] c = in.toCharArray();
         for (int i = 0; i < c.length; i++) {
             c[i] ^= 0x5A;
