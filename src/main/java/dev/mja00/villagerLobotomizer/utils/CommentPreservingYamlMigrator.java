@@ -22,21 +22,27 @@ public class CommentPreservingYamlMigrator {
     }
 
     /**
-     * Merges existing config with default config, preserving comments from both.
-     * User comments are preserved, and comments from default config are added for new fields.
+     * Merges default YAML configuration with existing YAML while preserving comments from both.
+     *
+     * <p>User comments from the existing YAML are preserved for matching keys. Comments from
+     * the default YAML are added for new keys and sections not present in the existing YAML.
+     * Extra keys from the existing YAML that are not in the default are preserved in the output.
+     *
+     * @param existingYaml the existing YAML configuration
+     * @param defaultYaml  the default YAML configuration to merge
+     * @return the merged YAML as a string with comments from both sources
+     * @throws IOException if the merge process fails
      */
     public String mergeWithComments(String existingYaml, String defaultYaml) throws IOException {
         try {
             logger.fine("Starting comment-preserving YAML merge");
 
-            // Parse both YAML files with comment information
             CommentedYamlData existingData = parseWithComments(existingYaml);
             CommentedYamlData defaultData = parseWithComments(defaultYaml);
 
             logger.fine("Extracted " + existingData.comments.size() + " comments from existing config");
             logger.fine("Extracted " + defaultData.comments.size() + " comments from default config");
 
-            // Parse actual data structures
             Yaml yaml = new Yaml();
             Map<String, Object> existingMap = yaml.load(existingYaml);
             Map<String, Object> defaultMap = yaml.load(defaultYaml);
@@ -44,16 +50,13 @@ public class CommentPreservingYamlMigrator {
             if (existingMap == null) existingMap = new LinkedHashMap<>();
             if (defaultMap == null) defaultMap = new LinkedHashMap<>();
 
-            // Create merged data structure
             Map<String, Object> mergedMap = new LinkedHashMap<>();
             Map<String, String> mergedComments = new LinkedHashMap<>();
 
-            // Merge the configurations
             mergeRecursive("", existingMap, defaultMap, mergedMap, existingData.comments, defaultData.comments, mergedComments);
 
             logger.fine("Merged configuration has " + mergedComments.size() + " comments");
 
-            // Generate the final YAML with preserved comments
             return generateYamlWithComments(mergedMap, mergedComments, defaultData.headerComments);
 
         } catch (Exception e) {
@@ -65,6 +68,9 @@ public class CommentPreservingYamlMigrator {
         }
     }
 
+    /**
+     * Recursively merges default YAML configuration into existing configuration, preserving comments and extra keys.
+     */
     @SuppressWarnings("unchecked")
     private void mergeRecursive(String path, Map<String, Object> existing, Map<String, Object> defaults,
                                Map<String, Object> merged, Map<String, String> existingComments,
@@ -77,7 +83,6 @@ public class CommentPreservingYamlMigrator {
             Object existingValue = existing.get(key);
 
             if (defaultValue instanceof Map && existingValue instanceof Map) {
-                // Recursive merge for nested maps
                 Map<String, Object> nestedMerged = new LinkedHashMap<>();
                 merged.put(key, nestedMerged);
 
@@ -100,14 +105,12 @@ public class CommentPreservingYamlMigrator {
                 // Use existing value if present, otherwise use default
                 if (existingValue != null) {
                     merged.put(key, existingValue);
-                    // Preserve existing comment
                     String comment = existingComments.get(keyPath);
                     if (comment != null) {
                         mergedComments.put(keyPath, comment);
                     }
                 } else {
                     merged.put(key, defaultValue);
-                    // Use default comment for new field
                     String comment = defaultComments.get(keyPath);
                     if (comment != null) {
                         mergedComments.put(keyPath, comment);
@@ -124,7 +127,6 @@ public class CommentPreservingYamlMigrator {
             if (!defaults.containsKey(key)) {
                 String keyPath = path.isEmpty() ? key : path + "." + key;
                 merged.put(key, existing.get(key));
-                // Preserve comment for obsolete key
                 String comment = existingComments.get(keyPath);
                 if (comment != null) {
                     mergedComments.put(keyPath, comment);
@@ -134,6 +136,17 @@ public class CommentPreservingYamlMigrator {
         }
     }
 
+    /**
+     * Extracts comments from YAML content and associates them with keys.
+     *
+     * Comments appearing before the first detected key are treated as header comments.
+     * Subsequent full-line comments are buffered and attached to the following key line,
+     * identified by dot-separated paths based on indentation nesting.
+     *
+     * @param yamlContent the YAML content to parse
+     * @return a CommentedYamlData object containing the mapping of dot-path keys to their comments
+     *         and a list of header comments
+     */
     private CommentedYamlData parseWithComments(String yamlContent) {
         Map<String, String> comments = new LinkedHashMap<>();
         List<String> headerComments = new ArrayList<>();
@@ -157,13 +170,12 @@ public class CommentPreservingYamlMigrator {
             } else if (line.trim().contains(":") && !line.trim().startsWith("#") && !line.trim().startsWith("-")) {
                 foundFirstKey = true;
 
-                // This is a key line, associate pending comments with it
+                // Key line: attach pending comments to it
                 if (!pendingComments.isEmpty()) {
                     String keyPath = extractKeyPath(lines, lineIndex);
                     if (keyPath == null || keyPath.isEmpty()) {
                         keyPath = extractKey(line);
                     }
-                    // Combine all pending comments
                     String combinedComment = String.join(" ", pendingComments);
                     if (keyPath != null && !keyPath.isEmpty()) {
                         comments.put(keyPath, combinedComment);
@@ -182,26 +194,17 @@ public class CommentPreservingYamlMigrator {
         return new CommentedYamlData(comments, headerComments);
     }
 
-    private String findCommentTarget(String[] lines, int commentIndex) {
-        // Look for the next non-comment, non-empty line that contains a key
-        for (int i = commentIndex + 1; i < lines.length; i++) {
-            String line = lines[i].trim();
-            if (!line.startsWith("#") && line.contains(":")) {
-                // Skip lines that are just list items
-                if (line.startsWith("-")) {
-                    continue;
-                }
-                return extractKeyPath(lines, i);
-            }
-        }
-        return null;
-    }
-
+    /**
+     * Determines the dot-separated key path for a YAML line based on its nesting context.
+     *
+     * @param lines     the YAML content split into lines
+     * @param lineIndex the index of the line for which to extract the key path
+     * @return          the dot-separated key path representing the nested structure, or an empty string if no keys are found
+     */
     private String extractKeyPath(String[] lines, int lineIndex) {
         Stack<String> pathStack = new Stack<>();
         Stack<Integer> indentStack = new Stack<>();
 
-        // Build path up to this line
         for (int i = 0; i <= lineIndex; i++) {
             String line = lines[i];
             if (line.trim().contains(":") && !line.trim().startsWith("#")) {
@@ -240,11 +243,16 @@ public class CommentPreservingYamlMigrator {
         return indent;
     }
 
+    /**
+     * Extracts the YAML key from a line, removing surrounding quotes.
+     *
+     * @param line the YAML line to parse
+     * @return the key portion before the first colon, with surrounding quotes removed, or {@code null} if no colon is found
+     */
     private String extractKey(String line) {
         String trimmed = line.trim();
         if (trimmed.contains(":")) {
             String key = trimmed.split(":")[0].trim();
-            // Remove quotes if present
             if (key.startsWith("\"") && key.endsWith("\"")) {
                 key = key.substring(1, key.length() - 1);
             } else if (key.startsWith("'") && key.endsWith("'")) {
@@ -255,10 +263,17 @@ public class CommentPreservingYamlMigrator {
         return null;
     }
 
+    /**
+     * Generates a YAML string with comments attached to keys.
+     *
+     * @param data the YAML data structure to serialize
+     * @param comments mapping from dot-separated key paths to comment strings
+     * @param headerComments comments to include at the start of the output
+     * @return the formatted YAML string with comments
+     */
     private String generateYamlWithComments(Map<String, Object> data, Map<String, String> comments, List<String> headerComments) {
         StringBuilder result = new StringBuilder();
 
-        // Add header comments
         for (String comment : headerComments) {
             result.append("#").append(comment).append("\n");
         }
@@ -267,12 +282,17 @@ public class CommentPreservingYamlMigrator {
             result.append("\n");
         }
 
-        // Generate YAML with comments
         generateYamlSection(data, comments, result, "", 0);
 
         return result.toString();
     }
 
+    /**
+     * Serializes a YAML section with attached comments at the specified indentation level.
+     *
+     * @param comments map of dot-separated key paths to comment strings
+     * @param pathPrefix the current dot-separated key path prefix for looking up comments
+     */
     @SuppressWarnings("unchecked")
     private void generateYamlSection(Map<String, Object> data, Map<String, String> comments,
                                    StringBuilder result, String pathPrefix, int indentLevel) {
@@ -283,7 +303,6 @@ public class CommentPreservingYamlMigrator {
             Object value = entry.getValue();
             String keyPath = pathPrefix.isEmpty() ? key : pathPrefix + "." + key;
 
-            // Add comment if exists
             String comment = comments.get(keyPath);
             if (comment != null && !comment.isEmpty()) {
                 result.append(indent).append("#").append(comment).append("\n");

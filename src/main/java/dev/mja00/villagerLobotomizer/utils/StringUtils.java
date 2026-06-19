@@ -6,12 +6,16 @@ import java.util.Locale;
 
 public class StringUtils {
     /**
-     * Compares two semantic version strings (e.g., "1.2.3").
+     * Compares two semantic version strings in the format major.minor.patch.
      *
-     * @return -1 if version1 < version2, 0 if equal, 1 if version1 > version2
+     * Strings that do not match the pattern X.Y.Z (where X, Y, Z are integers)
+     * are treated as equal.
+     *
+     * @return -1 if version1 is less than version2, 1 if version1 is greater,
+     *         0 if they are equal or either string is not a valid semantic version
      */
     public static int compareSemVer(@NotNull String version1, @NotNull String version2) {
-        // If either version string does not match semantic versioning (e.g., "1.2.3"), return 0
+        // Non-semver strings are treated as equal
         if (!version1.matches("\\d+\\.\\d+\\.\\d+") || !version2.matches("\\d+\\.\\d+\\.\\d+")) {
             return 0;
         }
@@ -34,8 +38,9 @@ public class StringUtils {
     }
 
     /**
-     * Converts a legacy sound name (all uppercase with underscores) to the new format (lowercase with dots).
-     * Stateless utility for string conversion only.
+     * Converts legacy sound names from uppercase with underscores to lowercase with dots.
+     *
+     * Only converts if the input is entirely uppercase; returns the input unchanged otherwise.
      */
     public static String convertLegacySoundNameFormat(String soundName) {
         if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {

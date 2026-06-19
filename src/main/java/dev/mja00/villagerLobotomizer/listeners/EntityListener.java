@@ -94,14 +94,18 @@ public class EntityListener implements Listener {
         this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
 
+    /**
+     * Prevents players from trading with unlobotomized villagers if the prevention feature is enabled.
+     *
+     * Sends the player a configured message when trading is blocked, falling back to a default
+     * message if the configuration message fails to parse as MiniMessage.
+     */
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public final void onInventoryOpen(InventoryOpenEvent event) {
-        // Check if the feature is enabled in config
         if (!this.plugin.getConfig().getBoolean("prevent-trading-with-unlobotomized-villagers", false)) {
             return;
         }
 
-        // Only handle merchant (trading) inventories
         if (!(event.getInventory() instanceof MerchantInventory merchantInventory)) {
             return;
         }
@@ -111,17 +115,15 @@ public class EntityListener implements Listener {
             return;
         }
 
-        // Only block trades with tracked, unlobotomized (active) villagers
+        // active set == tracked, unlobotomized villagers
         if (!this.plugin.getStorage().getActive().contains(villager)) {
             return;
         }
 
-        // Prevent the trade GUI from opening
         event.setCancelled(true);
 
         Player player = (Player) event.getPlayer();
 
-        // Send a message to the player explaining why the trade was blocked
         String messageString = this.plugin.getConfig().getString("unlobotomized-villager-trade-message", DEFAULT_TRADE_MESSAGE);
         if (messageString == null) {
             messageString = DEFAULT_TRADE_MESSAGE;

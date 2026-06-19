@@ -58,17 +58,31 @@ public class VillagerUtils {
         soundMap.put(Villager.Profession.NITWIT, Sound.ENTITY_VILLAGER_CELEBRATE);
         soundMap.put(Villager.Profession.NONE, Sound.ENTITY_VILLAGER_CELEBRATE);
 
-        // One time registered map
         PROFESSION_TO_SOUND = Collections.unmodifiableMap(soundMap);
         PROFESSION_TO_STATION = Collections.unmodifiableMap(map);
     }
 
     /**
-     * Check for a job site in a 1 block adjacent radius (including diagonals)
-     * This checks in a 3 block height box, for a total of 3x3x3 box
+     * Collects all workstation materials from the profession-to-station mapping, excluding {@link Material#AIR}.
+     * Data is derived from {@link #PROFESSION_TO_STATION} to ensure consistency with the canonical profession map.
      *
-     * @param villager Villager entity the check is centered around
-     * @return
+     * @return an EnumSet of all workstation materials
+     */
+    public static java.util.EnumSet<Material> professionStationMaterials() {
+        java.util.EnumSet<Material> stations = java.util.EnumSet.noneOf(Material.class);
+        for (Material station : PROFESSION_TO_STATION.values()) {
+            if (station != Material.AIR) {
+                stations.add(station);
+            }
+        }
+        return stations;
+    }
+
+    /**
+     * Determines if a workstation block for the villager's profession exists within a 3×3×3 cube centered on the villager's location.
+     *
+     * @param villager the villager to check
+     * @return `true` if a matching workstation block is found, `false` otherwise
      */
     public static boolean isJobSiteNearby(Villager villager) {
         Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
@@ -131,10 +145,7 @@ public class VillagerUtils {
     }
 
     /**
-     * Adds particles around a villager for visual effects
-     *
-     * @param particle The type of particle to spawn
-     * @param villager The villager to spawn particles around
+     * Spawns a burst of particles around the villager.
      */
     public static void addParticlesAroundSelf(Particle particle, Villager villager) {
         World world = villager.getWorld();
@@ -142,62 +153,53 @@ public class VillagerUtils {
         BoundingBox boundingBox = villager.getBoundingBox();
         Random random = new Random();
 
-        // Spawn 5 particles around the villager
         for (int i = 0; i < 5; i++) {
             double d = random.nextGaussian() * 0.02;
             double d1 = random.nextGaussian() * 0.02;
             double d2 = random.nextGaussian() * 0.02;
-            // Get a vertical offset above the villager
             double randomY = villager.getY() + boundingBox.getHeight() * random.nextDouble();
             double xScale = (2.0 * random.nextDouble() - 1.0) * scale;
             double randomX = villager.getX() + boundingBox.getWidthX() * xScale;
             double zScale = (2.0 * random.nextDouble() - 1.0) * scale;
             double randomZ = villager.getZ() + boundingBox.getWidthZ() * zScale;
-            // Spawn the particle
             world.spawnParticle(particle, randomX, randomY, randomZ, 1, d, d1, d2, 0.0);
         }
     }
 
     /**
-     * Checks if a villager is allowed to restock based on restocks today and last restock game time.
+     * Determines if a villager is allowed to restock.
+     *
+     * @return true if the villager has fewer than 2 restocks today, false otherwise
      */
-    public static boolean allowedToRestock(Villager villager, NamespacedKey lastRestockFullTimeKey) {
+    public static boolean allowedToRestock(Villager villager) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        // Allow up to 2 restocks per day (vanilla behavior)
-        // The cooldown between restocks is handled by the config's restock-interval (wall-clock based)
-        // rather than a hardcoded game-time check, which is problematic when doDaylightCycle is disabled
-        return numberOfRestocksToday != 2;
+        return numberOfRestocksToday < 2;
     }
 
     /**
-     * Determines if a villager should restock, updating persistent data as needed.
+     * Determines whether a villager should restock, resetting the daily counter when a new day begins.
+     *
+     * @param villager the villager to check
+     * @param lastRestockCheckDayTimeKey the persistent data key for tracking the last full-time check
+     * @return {@code true} if the villager is allowed to restock today and has recipes requiring restocking,
+     *         {@code false} otherwise
      */
-    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockGameTimeKey, NamespacedKey lastRestockCheckDayTimeKey) {
+    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long fullTime = villager.getWorld().getFullTime();
-        
+
         // Check for new day using Full Time (absolute ticks) to avoid wrapping issues
         if (lastRestockCheckDayTime > 0L) {
             long lastDay = lastRestockCheckDayTime / 24000L;
             long currentDay = fullTime / 24000L;
             if (currentDay > lastDay) {
                 villager.setRestocksToday(0);
-                pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
             }
         }
-        
-        // Update the last check time to current full time
+
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        boolean allowed = allowedToRestock(villager, lastRestockGameTimeKey) && needsToRestock(villager);
-        
-        if (allowed) {
-            // Update last restock time to now, so the cooldown works for the next check
-            // Using getFullTime() (persistent) instead of getGameTime() (can reset)
-            pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
-        }
-        
-        return allowed;
+        return allowedToRestock(villager) && needsToRestock(villager);
     }
 }

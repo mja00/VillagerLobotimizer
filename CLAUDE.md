@@ -22,15 +22,19 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 **LobotomizeStorage.java** - Core logic:
 - Sets: `activeVillagers`, `inactiveVillagers`
 - Maps: `villagerTasks` (UUID→Task), `changedChunks`, `villagerTaskIntervals`
-- Lobotomy logic: name overrides ("nobrain" forces, exempt names prevent), water check, vehicle check, profession check, `canMoveCardinally()` movement check, optional roof check
+- Lobotomy decision delegated to `policy.VillagerActivityPolicy` (name overrides "nobrain"/exempt, water/vehicle/profession checks, movement check, optional roof check); `LobotomizeStorage` adapts a live `Villager`/`World` into `VillagerState`/`BlockGrid` per check (`villagerStateOf`, `gridOf`)
 - Trade refresh: PDC-tracked restock timing, daytime-only, job site proximity, profession sounds, level-up effects
-- Block sets: `IMPASSABLE_REGULAR` (occluding+lava), `IMPASSABLE_FLOOR` (carpets), `IMPASSABLE_TALL` (walls/fences), `PROFESSION_BLOCKS` (workstations), `DOOR_BLOCKS`
 
-**EntityListener.java** - Events: `EntityAddToWorldEvent`, `EntityRemoveFromWorldEvent`, `BlockBreakEvent/PlaceEvent` (chunk updates), `PlayerInteractEntityEvent` (optional trade prevention)
+**policy/** - Pure, unit-tested lobotomy decision logic (no Bukkit live objects, scheduler, or shared sets):
+- `VillagerActivityPolicy.shouldBeActive(VillagerState, BlockGrid)` - decision rules + `canMoveCardinally`/`canMoveThrough`/`testImpassable`
+- `BlockClassifier` - Material sets (`impassableRegular`, `impassableTall`, `impassableAll`, `cropBlocks`, `doorBlocks`, `professionBlocks`), built once via `fromServerRegistry()`
+- `BlockSnapshot` (type/passable/solid), `BlockGrid` (coord→snapshot, `null`=unloaded), `VillagerState` (villager properties)
+
+**EntityListener.java** - Events: `EntityAddToWorldEvent`, `EntityRemoveFromWorldEvent`, `BlockBreakEvent/PlaceEvent` (chunk updates), `InventoryOpenEvent` (optional trade prevention via merchant-inventory check)
 
 **LobotomizeCommand.java** - Brigadier commands registered via `LifecycleEvents.COMMANDS`, permission `lobotomy.command` (op), raycasting for targeting. Wake command clears `isLobotomized` PDC marker.
 
-**VillagerUtils.java** - Maps: `PROFESSION_TO_WORKSTATION`, `PROFESSION_TO_SOUND`. Methods: `isJobSiteNearby()` (48 blocks), `shouldRestock()` (PDC+day-time logic)
+**VillagerUtils.java** - Maps: `PROFESSION_TO_STATION`, `PROFESSION_TO_SOUND`. Methods: `isJobSiteNearby()` (3x3x3 box), `shouldRestock()` (PDC+day-time logic)
 
 ### Config (read in constructors)
 `check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `disable-chunk-villager-updates`, `persist-lobotomized-state`
@@ -38,8 +42,7 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 ### PDC Keys
 - `lastRestock` (LONG): Last trade refresh timestamp
 - `isLobotomized` (BYTE): Persistence marker (when `persist-lobotomized-state: true`)
-- `lastRestockGameTime` (LONG): Game time at last restock
-- `lastRestockCheckDayTime` (LONG): Day time at last restock check
+- `lastRestockCheckDayTime` (LONG): Full game time (absolute ticks) at last restock check; used for day-rollover detection
 
 ## Development
 

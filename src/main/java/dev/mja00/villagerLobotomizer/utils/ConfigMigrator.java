@@ -27,6 +27,12 @@ public class ConfigMigrator {
         this.logger = plugin.getLogger();
     }
 
+    /**
+     * Ensures the plugin's config.yml is at the current configuration version.
+     *
+     * If the config does not exist, a default is created. If the config exists but is outdated,
+     * it is updated to the current version.
+     */
     public void migrateConfig() {
         File dataFolder = plugin.getDataFolder();
         if (!dataFolder.exists() && !dataFolder.mkdirs()) {
@@ -56,7 +62,6 @@ public class ConfigMigrator {
         try {
             createBackup(configFile);
 
-            // Use comment-preserving migration
             String existingYaml = Files.readString(configFile.toPath(), StandardCharsets.UTF_8);
             String migratedYaml = getString(existingYaml);
 
@@ -80,7 +85,6 @@ public class ConfigMigrator {
             logger.severe("  Please report this error with the stack trace below:");
             e.printStackTrace();
 
-            // Attempt fallback to standard config
             logger.info("Attempting fallback to standard config merge...");
             try {
                 fallbackMigration(configFile, existingConfig);
@@ -92,17 +96,22 @@ public class ConfigMigrator {
         }
     }
 
+    /**
+     * Merges the existing YAML with the default YAML while preserving comments and ensures the correct config version.
+     *
+     * @param existingYaml the existing YAML content to merge with the default
+     * @return the merged YAML with the current config version
+     * @throws IOException if the default config cannot be read from the plugin jar
+     */
     private @NotNull String getString(String existingYaml) throws IOException {
         String defaultYaml = getDefaultConfigAsString();
 
         CommentPreservingYamlMigrator commentMigrator = new CommentPreservingYamlMigrator(logger);
         String migratedYaml = commentMigrator.mergeWithComments(existingYaml, defaultYaml);
 
-        // Ensure config-version is set
         if (!migratedYaml.contains("config-version:")) {
             migratedYaml = "config-version: " + CURRENT_CONFIG_VERSION + "\n" + migratedYaml;
         } else {
-            // Update existing config-version
             migratedYaml = migratedYaml.replaceFirst("config-version:\\s*\\d+", "config-version: " + CURRENT_CONFIG_VERSION);
         }
         return migratedYaml;
