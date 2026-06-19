@@ -49,6 +49,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
     private boolean disableChunkVillagerUpdate;
     private boolean sentryEnabled = false;
 
+    /**
+     * Initializes the plugin, loading configuration, storage, listeners, commands, and debug features.
+     */
     @Override
     public void onEnable() {
         ConfigMigrator migrator = new ConfigMigrator(this);
@@ -224,6 +227,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
         }
     }
 
+    /**
+     * Removes all villagers from a team, unglows them, and unregisters the team.
+     */
     private void clearTeam(Team team) {
         if (team != null) {
             // Unglow entries before unregistering
@@ -248,6 +254,11 @@ public final class VillagerLobotomizer extends JavaPlugin {
         return this.debugging;
     }
 
+    /**
+     * Enables or disables debug mode and updates debug teams if running on a non-Folia server.
+     *
+     * @param debugging true to enable debug mode, false to disable
+     */
     public void setDebugging(boolean debugging) {
         this.debugging = debugging;
 
@@ -280,6 +291,11 @@ public final class VillagerLobotomizer extends JavaPlugin {
         return this.chunkDebugging;
     }
 
+    /**
+     * Enables or disables chunk debugging and persists the setting.
+     *
+     * @param chunkDebugging whether chunk debugging should be enabled
+     */
     public void setChunkDebugging(boolean chunkDebugging) {
         this.chunkDebugging = chunkDebugging;
         this.getConfig().set("chunk-debug", this.chunkDebugging);
@@ -291,6 +307,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
     }
 
 
+    /**
+     * Checks Modrinth for a newer version of the plugin and flags if an update is available.
+     */
     private void checkForUpdates() {
         // Runs off-thread via async scheduler
         String currentVersion = this.getPluginMeta().getVersion();
@@ -366,13 +385,18 @@ public final class VillagerLobotomizer extends JavaPlugin {
         return this.disableChunkVillagerUpdate;
     }
 
+    /**
+     * Checks if Sentry error tracking is enabled.
+     *
+     * @return {@code true} if Sentry is enabled, {@code false} otherwise
+     */
     public boolean isSentryEnabled() {
         return this.sentryEnabled;
     }
 
     /**
-     * Initializes or shuts down Sentry to match the current {@code enable-sentry} config value.
-     * Safe to call on enable and on {@code /lobotomy reload}; handles transitions in both directions.
+     * Initializes or shuts down Sentry to match the current {@code enable-sentry} configuration value.
+     * Transitions safely in both directions and is idempotent.
      */
     private void applySentryConfig() {
         boolean enableSentry = this.getConfig().getBoolean("enable-sentry", true);
@@ -401,6 +425,13 @@ public final class VillagerLobotomizer extends JavaPlugin {
         }
     }
 
+    /**
+     * Initializes the Sentry error tracking SDK with project configuration.
+     *
+     * Configures Sentry with DSN, environment (determined by the {@code villagerlobotimizer.dev}
+     * system property), release tag, and server context tags. Sets {@code sentryEnabled} to
+     * {@code true} on success, or {@code false} and logs a warning on failure.
+     */
     private void initializeSentry() {
         // dev mode set by the runServer task
         boolean isDev = Boolean.getBoolean("villagerlobotimizer.dev");
@@ -445,9 +476,9 @@ public final class VillagerLobotomizer extends JavaPlugin {
     }
 
     /**
-     * Reloads plugin configuration, storage, and debug flags.
+     * Reloads configuration, reinitializes storage, and rescans all worlds for villagers.
      *
-     * @return number of villagers reloaded into storage
+     * @return the number of villagers added to storage, or -1 if storage recreation fails
      */
     public int reloadPluginState() {
         this.reloadConfig();

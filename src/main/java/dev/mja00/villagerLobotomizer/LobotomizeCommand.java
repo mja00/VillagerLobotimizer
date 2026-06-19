@@ -73,6 +73,11 @@ public class LobotomizeCommand {
                 || sender.hasPermission("lobotomy.command.config");
     }
 
+    /**
+     * Displays statistics about tracked villagers on the server.
+     *
+     * @return Command.SINGLE_SUCCESS
+     */
     private int infoCommand(CommandSourceStack source) throws CommandSyntaxException {
         int active = this.plugin.getStorage().getActive().size();
         int inactive = this.plugin.getStorage().getLobotomized().size();
@@ -100,13 +105,24 @@ public class LobotomizeCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * Displays debug information about the villager the executor is looking at.
+     *
+     * @return 0 if no villager is targeted; otherwise Command.SINGLE_SUCCESS
+     * @throws CommandSyntaxException if a command syntax error occurs
+     */
     private int debugCommand(CommandSourceStack source) throws CommandSyntaxException {
         Entity target = getLookedTarget(source);
         if (target == null) return 0;
         return this.getVillagerDetails(source, (Villager) target);
     }
 
-    // This ensures the executor is a player and that they are looking at a villager
+    /**
+     * Retrieves the villager the command executor is looking at.
+     *
+     * @param  source the command source stack
+     * @return the villager being looked at, or null if the executor is not a player or no villager is targeted
+     */
     private @Nullable Entity getLookedTarget(CommandSourceStack source) {
         if (!(source.getExecutor() instanceof Player player)) {
             source.getSender().sendMessage(Component.text("Only players can use this command."));
@@ -120,6 +136,12 @@ public class LobotomizeCommand {
         return target;
     }
 
+    /**
+     * Displays the details of a villager selected via entity selector.
+     *
+     * @return {@code Command.SINGLE_SUCCESS} if the villager details are displayed, {@code 0} otherwise.
+     * @throws CommandSyntaxException if entity selection fails.
+     */
     private int debugCommandSpecific(CommandSourceStack source, EntitySelectorArgumentResolver resolver) throws CommandSyntaxException {
         if (!(source.getExecutor() instanceof Player)) {
             source.getSender().sendMessage(Component.text("Only players can use this command."));
@@ -137,6 +159,11 @@ public class LobotomizeCommand {
         return getVillagerDetails(source, villager);
     }
 
+    /**
+     * Sends detailed status information about a villager to the command source.
+     *
+     * @return {@code Command.SINGLE_SUCCESS}
+     */
     private int getVillagerDetails(CommandSourceStack source, Villager villager) {
         boolean lobotomized = this.plugin.getStorage().getLobotomized().contains(villager);
         boolean active = this.plugin.getStorage().getActive().contains(villager);
@@ -159,6 +186,11 @@ public class LobotomizeCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * Finds the villager the player is looking at within 16 blocks.
+     *
+     * @return the villager in the player's line of sight, or {@code null} if none is targeted
+     */
     private @Nullable Entity getTargeted(Player player) {
         Entity target = null;
 
@@ -168,6 +200,11 @@ public class LobotomizeCommand {
         return target;
     }
 
+    /**
+     * Removes a targeted villager from plugin tracking and clears its lobotomized marker.
+     *
+     * @return the command status code; 1 on successful removal, 0 if no villager target was found
+     */
     private int wakeCommand(CommandSourceStack source) throws CommandSyntaxException {
         Entity target = getLookedTarget(source);
         if (target == null) return 0;
@@ -199,6 +236,11 @@ public class LobotomizeCommand {
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * Provides suggestions for config keys matching the partially-typed input.
+     *
+     * @return suggestions for matching config keys
+     */
     private static CompletableFuture<Suggestions> getConfigKeySuggestions(final CommandContext<CommandSourceStack> ctx, final SuggestionsBuilder builder) {
         CommandSourceStack source = ctx.getSource();
         if (!(source.getExecutor() instanceof Player)) {
@@ -221,12 +263,28 @@ public class LobotomizeCommand {
         return builder.buildFuture();
     }
 
+    /**
+     * Retrieves and displays a configuration value.
+     *
+     * @param key the configuration key to retrieve
+     * @return the command result code
+     */
     private int getConfigCommand(CommandSourceStack source, String key) throws CommandSyntaxException {
         String value = this.plugin.getConfig().getString(key);
         source.getSender().sendMessage(Component.text("The value of " + key + " is " + value));
         return Command.SINGLE_SUCCESS;
     }
 
+    /**
+     * Sets a configuration value by parsing and validating the input string according to the expected type.
+     * Saves the modified configuration and reloads it on success.
+     *
+     * @param key the config key to modify
+     * @param value the value as a string to set
+     * @return {@code Command.SINGLE_SUCCESS} if the value is successfully set; {@code 0}
+     *         if the key does not exist, the value type is unsupported or unrecognized,
+     *         the input is invalid for the expected type, or a parsing error occurs
+     */
     private int setConfigCommand(CommandSourceStack source, String key, String value) throws CommandSyntaxException {
         if (!this.plugin.getConfig().contains(key)) {
             source.getSender().sendMessage(Component.text("Config key '" + key + "' does not exist.").color(NamedTextColor.RED));

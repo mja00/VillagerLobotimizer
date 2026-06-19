@@ -22,8 +22,16 @@ public class CommentPreservingYamlMigrator {
     }
 
     /**
-     * Merges existing config with default config, preserving comments from both.
-     * User comments are preserved, and comments from default config are added for new fields.
+     * Merges default YAML configuration with existing YAML while preserving comments from both.
+     *
+     * <p>User comments from the existing YAML are preserved for matching keys. Comments from
+     * the default YAML are added for new keys and sections not present in the existing YAML.
+     * Extra keys from the existing YAML that are not in the default are preserved in the output.
+     *
+     * @param existingYaml the existing YAML configuration
+     * @param defaultYaml  the default YAML configuration to merge
+     * @return the merged YAML as a string with comments from both sources
+     * @throws IOException if the merge process fails
      */
     public String mergeWithComments(String existingYaml, String defaultYaml) throws IOException {
         try {
@@ -60,6 +68,9 @@ public class CommentPreservingYamlMigrator {
         }
     }
 
+    /**
+     * Recursively merges default YAML configuration into existing configuration, preserving comments and extra keys.
+     */
     @SuppressWarnings("unchecked")
     private void mergeRecursive(String path, Map<String, Object> existing, Map<String, Object> defaults,
                                Map<String, Object> merged, Map<String, String> existingComments,
@@ -125,6 +136,17 @@ public class CommentPreservingYamlMigrator {
         }
     }
 
+    /**
+     * Extracts comments from YAML content and associates them with keys.
+     *
+     * Comments appearing before the first detected key are treated as header comments.
+     * Subsequent full-line comments are buffered and attached to the following key line,
+     * identified by dot-separated paths based on indentation nesting.
+     *
+     * @param yamlContent the YAML content to parse
+     * @return a CommentedYamlData object containing the mapping of dot-path keys to their comments
+     *         and a list of header comments
+     */
     private CommentedYamlData parseWithComments(String yamlContent) {
         Map<String, String> comments = new LinkedHashMap<>();
         List<String> headerComments = new ArrayList<>();
@@ -172,6 +194,13 @@ public class CommentPreservingYamlMigrator {
         return new CommentedYamlData(comments, headerComments);
     }
 
+    /**
+     * Determines the dot-separated key path for a YAML line based on its nesting context.
+     *
+     * @param lines     the YAML content split into lines
+     * @param lineIndex the index of the line for which to extract the key path
+     * @return          the dot-separated key path representing the nested structure, or an empty string if no keys are found
+     */
     private String extractKeyPath(String[] lines, int lineIndex) {
         Stack<String> pathStack = new Stack<>();
         Stack<Integer> indentStack = new Stack<>();
@@ -214,6 +243,12 @@ public class CommentPreservingYamlMigrator {
         return indent;
     }
 
+    /**
+     * Extracts the YAML key from a line, removing surrounding quotes.
+     *
+     * @param line the YAML line to parse
+     * @return the key portion before the first colon, with surrounding quotes removed, or {@code null} if no colon is found
+     */
     private String extractKey(String line) {
         String trimmed = line.trim();
         if (trimmed.contains(":")) {
@@ -228,6 +263,14 @@ public class CommentPreservingYamlMigrator {
         return null;
     }
 
+    /**
+     * Generates a YAML string with comments attached to keys.
+     *
+     * @param data the YAML data structure to serialize
+     * @param comments mapping from dot-separated key paths to comment strings
+     * @param headerComments comments to include at the start of the output
+     * @return the formatted YAML string with comments
+     */
     private String generateYamlWithComments(Map<String, Object> data, Map<String, String> comments, List<String> headerComments) {
         StringBuilder result = new StringBuilder();
 
@@ -244,6 +287,12 @@ public class CommentPreservingYamlMigrator {
         return result.toString();
     }
 
+    /**
+     * Serializes a YAML section with attached comments at the specified indentation level.
+     *
+     * @param comments map of dot-separated key paths to comment strings
+     * @param pathPrefix the current dot-separated key path prefix for looking up comments
+     */
     @SuppressWarnings("unchecked")
     private void generateYamlSection(Map<String, Object> data, Map<String, String> comments,
                                    StringBuilder result, String pathPrefix, int indentLevel) {

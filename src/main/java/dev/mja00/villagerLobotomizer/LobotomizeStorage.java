@@ -83,6 +83,11 @@ public class LobotomizeStorage {
     // is never observable in both sets simultaneously.
     private final Object stateLock = new Object();
 
+    /**
+     * Initializes the villager lobotomization storage system.
+     *
+     * @param plugin the VillagerLobotomizer plugin instance providing configuration
+     */
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
@@ -215,6 +220,12 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Removes a villager from all tracking sets.
+     *
+     * @param v the villager to remove
+     * @return {@code true} if the villager was being tracked, {@code false} otherwise
+     */
     private boolean untrack(@NotNull Villager v) {
         synchronized (this.stateLock) {
             boolean wasActive = this.activeVillagers.remove(v);
@@ -223,6 +234,14 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Registers a villager for active/inactive state tracking with periodic monitoring.
+     *
+     * If persistent lobotomized state is configured, checks whether the villager
+     * carries a lobotomized marker; if so, initializes it as inactive, otherwise
+     * as active. Schedules a periodic task to monitor and potentially transition
+     * the villager between states.
+     */
     public final void addVillager(@NotNull Villager villager) {
         if (this.shuttingDown || !this.plugin.isEnabled()) {
             return;
@@ -257,6 +276,12 @@ public class LobotomizeStorage {
         this.scheduleVillagerTask(villager, interval);
     }
 
+    /**
+     * Removes a villager from tracking and reactivates it if it was previously lobotomized.
+     *
+     * Cancels the villager's scheduled processing task and removes it from the tracking sets.
+     * If the villager was inactive, restores awareness and optionally sound.
+     */
     public final void removeVillager(@NotNull Villager villager) {
         boolean wasInactive;
         boolean wasActive;
@@ -294,9 +319,8 @@ public class LobotomizeStorage {
 
     /**
      * Clears the persistent lobotomized marker from a villager.
-     * Used by the wake command to prevent re-lobotomization on chunk reload.
      *
-     * @param villager The villager to clear the marker from
+     * @param villager the villager to clear the marker from
      */
     public void clearLobotomizedMarker(@NotNull Villager villager) {
         // Clear unconditionally, even when persist-lobotomized-state is off: a marker written under a
@@ -312,20 +336,20 @@ public class LobotomizeStorage {
     }
 
     /**
-     * Flushes all villagers from storage and stops their tasks, attempting to un-lobotomize them.
-     * Equivalent to {@code flush(false)} (a true shutdown).
+     * Flushes all tracked villagers from storage, stops their processing tasks, and attempts to un-lobotomize them during shutdown.
      */
     public final void flush() {
         flush(false);
     }
 
     /**
-     * Flushes all villagers from storage and stops their tasks, attempting to un-lobotomize them.
-     *
-     * @param reloading {@code true} when the plugin stays enabled (a {@code /lobotomy reload}). In that
-     *                  case wake work is dispatched via each villager's EntityScheduler, which reliably
-     *                  runs for cross-region (Folia) entities. On a true shutdown ({@code false}) the
-     *                  scheduler may not run, so we mutate directly and rely on the persistent marker.
+     * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
+     * 
+     * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
+     *                  Wake operations are dispatched via each villager's {@code EntityScheduler}, 
+     *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
+     *                  where the scheduler may not run; in this case, mutations are attempted directly
+     *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
      */
     public final void flush(boolean reloading) {
         // Prevent new tasks from being scheduled past this point
@@ -414,7 +438,11 @@ public class LobotomizeStorage {
     
     
     /**
-     * Thread-safe wrapper for processing villagers using entity scheduling
+     * Safely processes and potentially transitions a villager between active and inactive states.
+     *
+     * Validates the villager, checks its membership in the tracked sets, and evaluates whether
+     * it should toggle state. If a state transition occurs, reschedules the villager's periodic
+     * task with the appropriate check interval.
      */
     private void processVillagerSafely(@NotNull Villager villager) {
         // After flush()/reload swap, an old storage instance can still have in-flight callbacks on
@@ -467,6 +495,12 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Evaluates whether a villager should be active based on configured policy and performs state transitions as necessary.
+     *
+     * @param active whether the villager is currently in the active state
+     * @return true if the villager transitioned states or is invalid or dead; false if it remained in its current state or the chunk was unloaded
+     */
     private boolean processVillager(@NotNull Villager villager, boolean active) {
         if (!villager.isValid() || villager.isDead()) {
             return true;
@@ -554,6 +588,14 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Corrects a villager found to be in an inconsistent active/inactive state.
+     *
+     * Determines the correct state based on the villager's environment and updates its membership,
+     * awareness, and any persistent state markers accordingly.
+     *
+     * @param v the villager to reconcile
+     */
     private void reconcile(@NotNull Villager v) {
         try {
             v.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((t) -> {
@@ -590,10 +632,22 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Determines if a villager should have its trades restocked.
+     *
+     * @return {@code true} if the villager should restock, {@code false} otherwise
+     */
     private boolean shouldRestock(@NotNull Villager villager) {
         return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey);
     }
 
+    /**
+     * Restocks the villager's trades and increases their level based on time and experience.
+     *
+     * Restock resets all merchant recipe uses when the configured interval has passed and restock
+     * conditions are met. Leveling increases the villager's level to match accumulated experience.
+     * Both operations require daytime (in the overworld) and a nearby job site.
+     */
     private void refreshTrades(@NotNull Villager villager) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestock = pdc.getOrDefault(this.key, PersistentDataType.LONG, 0L);
@@ -682,6 +736,9 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Records that a block has changed, marking its chunk and edge-adjacent neighbors for deferred villager processing.
+     */
     public void handleBlockChange(Block block) {
         if (this.plugin.isDisableChunkVillagerUpdate()) {
             return;
@@ -712,6 +769,11 @@ public class LobotomizeStorage {
         }
     }
 
+    /**
+     * Schedules villager activity evaluation for recently modified chunks.
+     * Chunks are removed from tracking if they have not been modified within the past 3 seconds
+     * or are no longer loaded.
+     */
     private void processChunks() {
         long now = System.currentTimeMillis();
         changedChunks.entrySet().removeIf(entry -> {
@@ -787,22 +849,32 @@ public class LobotomizeStorage {
 
 
     /**
-     * Determines if a villager should be considered "active" based on name, vehicle, profession, and movement.
+     * Determines if a villager should be considered active.
      *
-     * @param villager The villager to check.
-     * @return true if the villager should be active, false otherwise.
+     * @return {@code true} if the villager should be active, {@code false} otherwise.
      */
     private boolean shouldBeActive(Villager villager) {
         Location loc = villager.getLocation().add(0.0F, 0.51, 0.0F);
         return shouldBeActive(villager, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
     }
 
+    /**
+     * Determines whether a villager should be active at the given block location.
+     *
+     * @return {@code true} if the villager should be active at the given location, {@code false} otherwise
+     */
     private boolean shouldBeActive(Villager villager, int blockX, int blockY, int blockZ) {
         return this.activityPolicy.shouldBeActive(
                 villagerStateOf(villager, blockX, blockY, blockZ),
                 gridOf(villager.getWorld()));
     }
 
+    /**
+     * Builds a state representation of a villager at the given block coordinates.
+     *
+     * @return a VillagerState containing the villager's name, swimming and sleeping status,
+     *         vehicle presence, profession, experience, and block coordinates
+     */
     private VillagerState villagerStateOf(Villager villager, int blockX, int blockY, int blockZ) {
         Component customName = villager.customName();
         String name = customName == null
@@ -840,6 +912,11 @@ public class LobotomizeStorage {
             private int cachedChunkX;
             private int cachedChunkZ;
 
+            /**
+             * Gets a block snapshot at the specified world coordinates, caching chunk lookups for efficiency.
+             *
+             * @return a snapshot of the block at the coordinates, or null if the chunk is not loaded
+             */
             @Override
             public BlockSnapshot at(int x, int y, int z) {
                 int chunkX = x >> 4;
@@ -861,6 +938,13 @@ public class LobotomizeStorage {
         };
     }
 
+    /**
+     * Converts a legacy sound name format and updates the config if a conversion is needed.
+     *
+     * @param soundName the sound name to convert
+     * @param configKey the configuration key to update if conversion occurs
+     * @return the converted sound name, or an empty string if the conversion fails
+     */
     private String convertLegacySoundName(String soundName, String configKey) {
         String converted = StringUtils.convertLegacySoundNameFormat(soundName);
         if (converted == null) {
@@ -893,7 +977,15 @@ public class LobotomizeStorage {
     }
 
     /**
-     * Schedule a villager with the given interval, replacing any existing task.
+     * Schedules periodic processing of a villager at the specified interval,
+     * replacing any existing task.
+     *
+     * Does nothing if the plugin is disabled or shutting down. If the villager
+     * is no longer tracked, the scheduling is skipped. If a plugin access
+     * exception occurs, the villager is untracked.
+     *
+     * @param villager the villager to schedule
+     * @param interval the scheduling period in ticks
      */
     private void scheduleVillagerTask(@NotNull Villager villager, long interval) {
         if (this.shuttingDown || !this.plugin.isEnabled()) {

@@ -111,11 +111,22 @@ public class VersionUtils   {
             this.supported = supported;
         }
 
+        /**
+         * Indicates whether this server configuration is supported.
+         *
+         * @return true if supported, false otherwise.
+         */
         public boolean isSupported() {
             return supported;
         }
     }
 
+    /**
+     * Applies an XOR cipher with 0x5A to each character.
+     *
+     * @param  in the string to transform
+     * @return the XOR-transformed string
+     */
     private static @NotNull String make(@NotNull String in) {
         final char[] c = in.toCharArray();
         for (int i = 0; i < c.length; i++) {

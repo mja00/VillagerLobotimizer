@@ -27,6 +27,12 @@ public class ConfigMigrator {
         this.logger = plugin.getLogger();
     }
 
+    /**
+     * Ensures the plugin's config.yml is at the current configuration version.
+     *
+     * If the config does not exist, a default is created. If the config exists but is outdated,
+     * it is updated to the current version.
+     */
     public void migrateConfig() {
         File dataFolder = plugin.getDataFolder();
         if (!dataFolder.exists() && !dataFolder.mkdirs()) {
@@ -90,6 +96,13 @@ public class ConfigMigrator {
         }
     }
 
+    /**
+     * Merges the existing YAML with the default YAML while preserving comments and ensures the correct config version.
+     *
+     * @param existingYaml the existing YAML content to merge with the default
+     * @return the merged YAML with the current config version
+     * @throws IOException if the default config cannot be read from the plugin jar
+     */
     private @NotNull String getString(String existingYaml) throws IOException {
         String defaultYaml = getDefaultConfigAsString();
 

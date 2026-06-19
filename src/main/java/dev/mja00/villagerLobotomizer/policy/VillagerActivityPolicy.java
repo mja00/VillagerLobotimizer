@@ -20,6 +20,9 @@ public final class VillagerActivityPolicy {
     private final Set<String> exemptNames;
     private final BlockClassifier blocks;
 
+    /**
+     * Creates a new activity policy with the specified configuration.
+     */
     public VillagerActivityPolicy(boolean lobotomizePassengers, boolean onlyProfessions,
                                   boolean onlyWithExperience, boolean checkRoof,
                                   boolean ignoreStuckInDoors, boolean ignoreNonSolidBlocks,
@@ -34,6 +37,13 @@ public final class VillagerActivityPolicy {
         this.blocks = blocks;
     }
 
+    /**
+     * Determines whether a villager should be active based on its state and environment.
+     *
+     * @param v the villager's current state
+     * @param grid the surrounding block grid
+     * @return {@code true} if the villager should be active, {@code false} if it should be lobotomized
+     */
     public boolean shouldBeActive(VillagerState v, BlockGrid grid) {
         String name = v.name();
         if (name.contains("nobrain")) {
@@ -82,6 +92,11 @@ public final class VillagerActivityPolicy {
         return canMoveCardinally(grid, v.blockX(), v.blockY(), v.blockZ(), hasRoof);
     }
 
+    /**
+     * Determines whether the villager can move in any cardinal direction from the specified position.
+     *
+     * @return true if at least one cardinal direction is passable, false otherwise
+     */
     private boolean canMoveCardinally(BlockGrid grid, int x, int y, int z, boolean roof) {
         boolean xPlus = canMoveThrough(grid, x + 1, y, z, roof);
         boolean xMinus = canMoveThrough(grid, x - 1, y, z, roof);
@@ -90,6 +105,13 @@ public final class VillagerActivityPolicy {
         return xPlus || xMinus || zPlus || zMinus;
     }
 
+    /**
+     * Determines whether a villager can move through a given block position.
+     *
+     * @param grid the block grid to query
+     * @param roof whether the under-feet block must be passable
+     * @return `true` if the villager can pass through the position, `false` otherwise
+     */
     private boolean canMoveThrough(BlockGrid grid, int x, int y, int z, boolean roof) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
@@ -103,6 +125,14 @@ public final class VillagerActivityPolicy {
         return !isHeadImpassable && !isFeetImpassable && (!roof || !isUnderFeetImpassable);
     }
 
+    /**
+     * Determines whether a block should be treated as impassable.
+     *
+     * @param set             materials to classify as impassable
+     * @param b               the block to evaluate
+     * @param onlyTallBlocks  if true, blocks not in the set are never considered impassable
+     * @return                true if the block is impassable, false otherwise
+     */
     private boolean testImpassable(EnumSet<Material> set, BlockSnapshot b, boolean onlyTallBlocks) {
         if (b == null) {
             return false;
@@ -125,6 +155,12 @@ public final class VillagerActivityPolicy {
         return !isWater && !b.passable() && !isABypassBlock && !isNonSolid;
     }
 
+    /**
+     * Determines if a block is water.
+     *
+     * @param  b the block to check
+     * @return   {@code true} if the block is water, {@code false} otherwise
+     */
     private static boolean isWater(BlockSnapshot b) {
         return b != null && b.type() == Material.WATER;
     }

@@ -16,6 +16,11 @@ public class SentryContextProvider {
         }
     }
 
+    /**
+     * Retrieves the server version.
+     *
+     * @return the server version, or "unknown" if unavailable
+     */
     public static String getServerVersion() {
         try {
             String version = Bukkit.getServer().getVersion();
@@ -25,6 +30,11 @@ public class SentryContextProvider {
         }
     }
 
+    /**
+     * Retrieves the Minecraft version.
+     *
+     * @return the Minecraft version, or {@code "unknown"} if unavailable
+     */
     public static String getMinecraftVersion() {
         try {
             String version = Bukkit.getMinecraftVersion();
@@ -35,7 +45,9 @@ public class SentryContextProvider {
     }
 
     /**
-     * Get Bukkit/Paper API version
+     * Retrieves the Bukkit/Paper API version.
+     *
+     * @return the Bukkit/Paper API version, or "unknown" if unavailable
      */
     public static String getBukkitVersion() {
         try {
@@ -46,6 +58,11 @@ public class SentryContextProvider {
         }
     }
 
+    /**
+     * Retrieves the Java version.
+     *
+     * @return the Java version string, or {@code "unknown"} if not available
+     */
     public static String getJavaVersion() {
         String version = System.getProperty("java.version");
         return version != null ? version : "unknown";

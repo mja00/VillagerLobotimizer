@@ -63,9 +63,10 @@ public class VillagerUtils {
     }
 
     /**
-     * Returns the set of workstation materials villagers can be employed at, derived from
-     * {@link #PROFESSION_TO_STATION} so it can never drift from the canonical profession map.
-     * The no-workstation professions (mapped to {@link Material#AIR}) are excluded.
+     * Collects all workstation materials from the profession-to-station mapping, excluding {@link Material#AIR}.
+     * Data is derived from {@link #PROFESSION_TO_STATION} to ensure consistency with the canonical profession map.
+     *
+     * @return an EnumSet of all workstation materials
      */
     public static java.util.EnumSet<Material> professionStationMaterials() {
         java.util.EnumSet<Material> stations = java.util.EnumSet.noneOf(Material.class);
@@ -78,10 +79,10 @@ public class VillagerUtils {
     }
 
     /**
-     * Check for a job site in a 1 block adjacent radius (including diagonals)
-     * This checks in a 3 block height box, for a total of 3x3x3 box
+     * Determines if a workstation block for the villager's profession exists within a 3×3×3 cube centered on the villager's location.
      *
-     * @param villager Villager entity the check is centered around
+     * @param villager the villager to check
+     * @return `true` if a matching workstation block is found, `false` otherwise
      */
     public static boolean isJobSiteNearby(Villager villager) {
         Material jobSite = PROFESSION_TO_STATION.get(villager.getProfession());
@@ -144,10 +145,7 @@ public class VillagerUtils {
     }
 
     /**
-     * Adds particles around a villager for visual effects
-     *
-     * @param particle The type of particle to spawn
-     * @param villager The villager to spawn particles around
+     * Spawns a burst of particles around the villager.
      */
     public static void addParticlesAroundSelf(Particle particle, Villager villager) {
         World world = villager.getWorld();
@@ -169,7 +167,9 @@ public class VillagerUtils {
     }
 
     /**
-     * Checks if a villager is allowed to restock based on the number of restocks today.
+     * Determines if a villager is allowed to restock.
+     *
+     * @return true if the villager has fewer than 2 restocks today, false otherwise
      */
     public static boolean allowedToRestock(Villager villager) {
         int numberOfRestocksToday = villager.getRestocksToday();
@@ -177,7 +177,12 @@ public class VillagerUtils {
     }
 
     /**
-     * Determines if a villager should restock, updating persistent data as needed.
+     * Determines whether a villager should restock, resetting the daily counter when a new day begins.
+     *
+     * @param villager the villager to check
+     * @param lastRestockCheckDayTimeKey the persistent data key for tracking the last full-time check
+     * @return {@code true} if the villager is allowed to restock today and has recipes requiring restocking,
+     *         {@code false} otherwise
      */
     public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();

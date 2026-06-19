@@ -6,5 +6,13 @@ package dev.mja00.villagerLobotomizer.policy;
  */
 @FunctionalInterface
 public interface BlockGrid {
-    BlockSnapshot at(int x, int y, int z);
+    /**
+ * Retrieves the block snapshot at the specified world coordinates.
+ *
+ * @param x the x-coordinate
+ * @param y the y-coordinate
+ * @param z the z-coordinate
+ * @return the block snapshot at the specified coordinates, or {@code null} if the corresponding chunk is not loaded or available
+ */
+BlockSnapshot at(int x, int y, int z);
 }

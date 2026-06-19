@@ -18,6 +18,12 @@ public record BlockClassifier(
         EnumSet<Material> doorBlocks,
         EnumSet<Material> professionBlocks) {
 
+    /**
+     * Builds a BlockClassifier by scanning the server's material registry and classifying materials.
+     *
+     * @return A BlockClassifier containing precomputed material classifications for impassability,
+     *         crops, doors, and profession stations.
+     */
     public static BlockClassifier fromServerRegistry() {
         EnumSet<Material> impassableRegular = EnumSet.of(Material.LAVA);
         EnumSet<Material> impassableFloor = EnumSet.noneOf(Material.class);
