@@ -33,7 +33,8 @@ public final class VillagerActivityPolicy {
         this.checkRoof = checkRoof;
         this.ignoreStuckInDoors = ignoreStuckInDoors;
         this.ignoreNonSolidBlocks = ignoreNonSolidBlocks;
-        this.exemptNames = exemptNames;
+        // Defensive immutable copy so later caller mutations can't alter policy decisions.
+        this.exemptNames = Set.copyOf(exemptNames);
         this.blocks = blocks;
     }
 

@@ -458,7 +458,7 @@ public final class VillagerLobotomizer extends JavaPlugin {
                 options.setAttachThreads(true);
 
                 // Mark our package as in-app for better source highlighting
-                options.addInAppInclude("dev.mja00.villagerLobotimizer");
+                options.addInAppInclude("dev.mja00.villagerLobotomizer");
 
                 options.setTracesSampleRate(0.1);
 

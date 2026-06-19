@@ -355,14 +355,6 @@ public class LobotomizeStorage {
         // Prevent new tasks from being scheduled past this point
         this.shuttingDown = true;
 
-        for (ScheduledTask task : this.villagerTasks.values()) {
-            if (task != null && !task.isCancelled()) {
-                task.cancel();
-            }
-        }
-        this.villagerTasks.clear();
-        this.villagerTaskIntervals.clear();
-
         if (this.chunkProcessingTask != null && !this.chunkProcessingTask.isCancelled()) {
             this.chunkProcessingTask.cancel();
         }
@@ -372,8 +364,18 @@ public class LobotomizeStorage {
 
         // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
+        // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds, so a
+        // concurrent schedule can't install an orphan task after we clear (it re-checks shuttingDown there).
         List<Villager> toFlush;
         synchronized (this.stateLock) {
+            for (ScheduledTask task : this.villagerTasks.values()) {
+                if (task != null && !task.isCancelled()) {
+                    task.cancel();
+                }
+            }
+            this.villagerTasks.clear();
+            this.villagerTaskIntervals.clear();
+
             toFlush = new ArrayList<>(this.inactiveVillagers.size() + this.activeVillagers.size());
             toFlush.addAll(this.inactiveVillagers);
             for (Villager v : this.activeVillagers) {
@@ -520,13 +522,15 @@ public class LobotomizeStorage {
         boolean shouldBeActive = this.shouldBeActive(villager, blockX, blockY, blockZ);
 
         if (shouldBeActive) {
+            // Clear any stale marker whenever the villager should be active, not just on transition,
+            // so a marker left by a prior persist-enabled run can't re-lobotomize it after a config flip.
+            clearLobotomizedMarker(villager);
             if (!active) {
                 // Already running on entity thread, safe to modify villager
                 villager.setAware(true);
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(false);
                 }
-                clearLobotomizedMarker(villager);
                 setActive(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");
@@ -558,6 +562,17 @@ public class LobotomizeStorage {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now inactive");
                 }
                 return true; // Transitioned: caller may want to reschedule at new interval
+            }
+            // Re-assert lobotomized state if the villager drifted back to aware while still tracked
+            // inactive (such as a stale wake callback from an old storage instance after a reload).
+            if (villager.isAware()) {
+                villager.setAware(false);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(true);
+                }
+                if (this.persistLobotomizedState) {
+                    villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                }
             }
             if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
                 this.plugin.getInactiveVillagersTeam().addEntity(villager);
@@ -654,7 +669,12 @@ public class LobotomizeStorage {
 
         long now = System.currentTimeMillis();
         long timeSinceLastRestock = now - lastRestock;
-        long effectiveInterval = this.restockInterval - (this.restockRandomRange > 0 ? this.random.nextLong(this.restockRandomRange) : 0);
+        // Bound the random offset by restockInterval so effectiveInterval can't go negative when
+        // restock-random-range is misconfigured larger than restock-interval, which would make
+        // intervalPassed always true until the daily restock cap is hit.
+        long randomBound = Math.min(this.restockRandomRange, this.restockInterval);
+        long randomOffset = randomBound > 0 ? this.random.nextLong(randomBound) : 0L;
+        long effectiveInterval = this.restockInterval - randomOffset;
         boolean intervalPassed = timeSinceLastRestock > effectiveInterval;
 
         int currentLevel = villager.getVillagerLevel();
@@ -997,6 +1017,11 @@ public class LobotomizeStorage {
         // removal can't interleave between cancelling the old task and installing the new one, which
         // would leak a live task for a villager that is no longer tracked.
         synchronized (this.stateLock) {
+            // Re-check under the lock: flush() flips shuttingDown and clears tasks here too, so this
+            // closes the window where a schedule slipping past the pre-lock check installs an orphan.
+            if (this.shuttingDown) {
+                return;
+            }
             // Don't install a task for a villager that was removed concurrently.
             if (!this.activeVillagers.contains(villager) && !this.inactiveVillagers.contains(villager)) {
                 return;
