@@ -939,6 +939,8 @@ public class LobotomizeStorage {
              */
             @Override
             public BlockSnapshot at(int x, int y, int z) {
+                // Clamp y between the world's minimum and maximum height
+                int clampedY = Math.clamp(y, world.getMinHeight(), world.getMaxHeight() - 1);
                 int chunkX = x >> 4;
                 int chunkZ = z >> 4;
                 Chunk chunk = this.cachedChunk;
@@ -951,7 +953,7 @@ public class LobotomizeStorage {
                     this.cachedChunkX = chunkX;
                     this.cachedChunkZ = chunkZ;
                 }
-                Block b = chunk.getBlock(x & 0xF, y, z & 0xF);
+                Block b = chunk.getBlock(x & 0xF, clampedY, z & 0xF);
                 Material type = b.getType();
                 return new BlockSnapshot(type, b.isPassable(), type.isSolid());
             }
