@@ -39,6 +39,7 @@ class EntityListenerTest extends MockBukkitTestBase {
         Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
 
         server.getPluginManager().callEvent(new EntityAddToWorldEvent(villager, world));
+        server.getScheduler().performTicks(1);
 
         assertTrue(plugin.getStorage().getActive().contains(villager),
                 "a freshly added villager should be tracked as active");
@@ -48,6 +49,7 @@ class EntityListenerTest extends MockBukkitTestBase {
     void removeEventUntracksVillager() {
         Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
         server.getPluginManager().callEvent(new EntityAddToWorldEvent(villager, world));
+        server.getScheduler().performTicks(1);
         assertTrue(isTracked(villager), "precondition: villager is tracked after add");
 
         server.getPluginManager().callEvent(new EntityRemoveFromWorldEvent(villager, world));
@@ -66,6 +68,7 @@ class EntityListenerTest extends MockBukkitTestBase {
 
         // A fresh listener scans loaded worlds and registers existing villagers
         new EntityListener(plugin);
+        server.getScheduler().performTicks(1);
 
         assertTrue(isTracked(villager), "existing villagers should be picked up by the constructor scan");
     }

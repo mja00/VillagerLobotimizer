@@ -260,6 +260,12 @@ public class LobotomizeStorage {
             return;
         }
 
+        // Read the persistent lobotomized marker on the calling thread. PDC reads are safe
+        // across threads; the marker is a hint that the villager should be tracked as
+        // already-lobotomized. The entity-mutating portion (setAware/setSilent/PDC writes)
+        // and the set-membership update are dispatched to the villager's owning thread via
+        // villager.getScheduler() so the public API is Folia-safe by construction regardless
+        // of caller.
         boolean wasLobotomized = false;
         if (this.persistLobotomizedState) {
             PersistentDataContainer pdc = villager.getPersistentDataContainer();
@@ -267,26 +273,44 @@ public class LobotomizeStorage {
         }
 
         if (wasLobotomized) {
-            // Immediately lobotomize the villager to prevent lag spike
-            villager.setAware(false);
-            if (this.silentLobotomizedVillagers) {
-                villager.setSilent(true);
-            }
-            setInactive(villager);
-
-            if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
-            }
+            villager.getScheduler().run(this.plugin,
+                    SentryTaskWrapper.wrap(t -> reAddAsLobotomized(villager)), null);
         } else {
-            setActive(villager);
-
-            if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
-            }
+            villager.getScheduler().run(this.plugin,
+                    SentryTaskWrapper.wrap(t -> reAddAsActive(villager)), null);
         }
+    }
 
-        long interval = wasLobotomized ? this.inactiveCheckInterval : this.checkInterval;
-        this.scheduleVillagerTask(villager, interval);
+    /**
+     * Re-tracks a villager that was already lobotomized (PDC marker present). Runs on the
+     * villager's owning thread via {@code villager.getScheduler()}. Called from
+     * {@link #addVillager}.
+     */
+    private void reAddAsLobotomized(@NotNull Villager villager) {
+        // Re-lobotomize the villager to prevent lag spike on chunk load.
+        villager.setAware(false);
+        if (this.silentLobotomizedVillagers) {
+            villager.setSilent(true);
+        }
+        setInactive(villager);
+
+        if (this.plugin.isDebugging()) {
+            this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
+        }
+        this.scheduleVillagerTask(villager, this.inactiveCheckInterval);
+    }
+
+    /**
+     * Re-tracks a new villager (no PDC marker). Runs on the villager's owning thread via
+     * {@code villager.getScheduler()}. Called from {@link #addVillager}.
+     */
+    private void reAddAsActive(@NotNull Villager villager) {
+        setActive(villager);
+
+        if (this.plugin.isDebugging()) {
+            this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
+        }
+        this.scheduleVillagerTask(villager, this.checkInterval);
     }
 
     /**

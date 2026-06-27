@@ -6,7 +6,6 @@ import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Villager;
 import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
@@ -49,6 +48,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
     void addVillager_tracks_new_villager_as_active() {
         Villager v = spawnVillager();
         plugin.getStorage().addVillager(v);
+        server.getScheduler().performTicks(1);
 
         assertTrue(plugin.getStorage().getActive().contains(v),
                 "a freshly added villager (no PDC marker) should be tracked as active");
@@ -61,6 +61,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
         Villager v = spawnVillager();
         markAsLobotomized(v);
         plugin.getStorage().addVillager(v);
+        server.getScheduler().performTicks(1);
 
         assertTrue(plugin.getStorage().getLobotomized().contains(v),
                 "a villager with the persistent lobotomized marker should be tracked as lobotomized");
@@ -72,6 +73,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
     void addVillager_then_removeVillager_leaves_villager_in_neither_set() {
         Villager v = spawnVillager();
         plugin.getStorage().addVillager(v);
+        server.getScheduler().performTicks(1);
         assertTrue(plugin.getStorage().getActive().contains(v), "precondition: v is tracked as active");
 
         plugin.getStorage().removeVillager(v);
@@ -87,6 +89,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
         Villager v = spawnVillager();
         plugin.getStorage().addVillager(v);
         plugin.getStorage().addVillager(v);
+        server.getScheduler().performTicks(2);
 
         assertEquals(1, plugin.getStorage().getActive().size(),
                 "calling addVillager twice should not double-schedule the villager");
@@ -98,6 +101,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
         markAsLobotomized(v);
         plugin.getStorage().addVillager(v);
         plugin.getStorage().addVillager(v);
+        server.getScheduler().performTicks(2);
 
         assertEquals(1, plugin.getStorage().getLobotomized().size(),
                 "calling addVillager twice should not double-schedule the lobotomized villager");
@@ -111,6 +115,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
 
         plugin.getStorage().addVillager(v1);
         plugin.getStorage().addVillager(v2);
+        server.getScheduler().performTicks(2);
 
         assertEquals(1, plugin.getStorage().getActive().size(),
                 "exactly one villager should be in the active set");
@@ -127,11 +132,11 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
     /**
      * Defense-in-depth test: the lobotomized path's entity mutation (setAware(false), setSilent(true))
      * must be dispatched through {@code villager.getScheduler()} so the public API is Folia-safe
-     * regardless of caller. Currently the mutation is synchronous; this test is disabled until
-     * Chunk 6 lands and refactors {@code addVillager} to dispatch through the entity scheduler.
+     * regardless of caller. With the refactored addVillager, the mutation is scheduled, not
+     * synchronous: the villager stays aware immediately after addVillager returns, and only
+     * becomes unaware after the scheduled task runs.
      */
     @Test
-    @Disabled("enabled after chunk 6 (defense-in-depth: dispatch via getScheduler)")
     void addVillager_defers_lobotomize_mutation_to_entity_scheduler() {
         Villager v = spawnVillager();
         markAsLobotomized(v);
@@ -139,9 +144,6 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
 
         plugin.getStorage().addVillager(v);
 
-        // After Chunk 6, the mutation is scheduled, not synchronous. The villager should still
-        // be aware immediately after addVillager returns, and only become unaware after the
-        // scheduled task runs.
         assertTrue(v.isAware(),
                 "setAware(false) should be deferred to the entity scheduler, not called synchronously");
 
