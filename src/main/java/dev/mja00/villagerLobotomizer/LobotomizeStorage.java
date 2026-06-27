@@ -99,11 +99,13 @@ public class LobotomizeStorage {
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
-        // check-interval/inactive-check-interval are scheduler periods (ticks) and must be >= 1, or
-        // runAtFixedRate throws IllegalArgumentException for every tracked villager. restock-interval
-        // and restock-random-range are wall-clock milliseconds and must not be negative.
-        this.checkInterval = validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 150L);
-        this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 150L);
+        // check-interval/inactive-check-interval are scheduler periods (ticks). Lower bound is 1, or
+        // runAtFixedRate throws IllegalArgumentException for every tracked villager. Upper bound is
+        // 600 (30s at 20 TPS) — the longest reasonable tick-based interval before considering a
+        // cooldown-based design instead. restock-interval and restock-random-range are wall-clock
+        // milliseconds and must not be negative.
+        this.checkInterval = validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 600L);
+        this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 600L);
         this.restockInterval = validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
         this.restockRandomRange = validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
         // max-restocks-per-day is a small count (vanilla default 2). Negative values are nonsense
