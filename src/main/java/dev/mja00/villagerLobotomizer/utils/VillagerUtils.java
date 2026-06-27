@@ -2,19 +2,16 @@ package dev.mja00.villagerLobotomizer.utils;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.util.BoundingBox;
 
 public class VillagerUtils {
     public static final Map<Villager.Profession, Material> PROFESSION_TO_STATION;
@@ -142,28 +139,6 @@ public class VillagerUtils {
             }
         }
         return false;
-    }
-
-    /**
-     * Spawns a burst of particles around the villager.
-     */
-    public static void addParticlesAroundSelf(Particle particle, Villager villager) {
-        World world = villager.getWorld();
-        double scale = 1.0;
-        BoundingBox boundingBox = villager.getBoundingBox();
-        Random random = new Random();
-
-        for (int i = 0; i < 5; i++) {
-            double d = random.nextGaussian() * 0.02;
-            double d1 = random.nextGaussian() * 0.02;
-            double d2 = random.nextGaussian() * 0.02;
-            double randomY = villager.getY() + boundingBox.getHeight() * random.nextDouble();
-            double xScale = (2.0 * random.nextDouble() - 1.0) * scale;
-            double randomX = villager.getX() + boundingBox.getWidthX() * xScale;
-            double zScale = (2.0 * random.nextDouble() - 1.0) * scale;
-            double randomZ = villager.getZ() + boundingBox.getWidthZ() * zScale;
-            world.spawnParticle(particle, randomX, randomY, randomZ, 1, d, d1, d2, 0.0);
-        }
     }
 
     /**
