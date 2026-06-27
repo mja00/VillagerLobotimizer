@@ -114,7 +114,7 @@ public class LobotomizeCommand {
      */
     private static String formatPercent(int part, int total) {
         if (total == 0) return "0.00";
-        return String.format("%.2f", (100.0 * part) / total);
+        return String.format(java.util.Locale.ROOT, "%.2f", (100.0 * part) / total);
     }
 
     /**
