@@ -29,6 +29,11 @@ only-lobotomize-villagers-with-experience: false
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
 
+#Watchdog cadence in ticks. The watchdog scans the active set for villagers that ended up in both
+#the active and lobotomized sets and reconciles them. Default 1200 ticks = 60s. Operators on very
+#large servers can increase this to reduce overhead at the cost of slower dupe-state recovery.
+watchdog-interval: 1200
+
 #Whether to make lobotomized villagers silent. When enabled, villagers will be muted when their AI is disabled.
 silent-lobotomized-villagers: false
 

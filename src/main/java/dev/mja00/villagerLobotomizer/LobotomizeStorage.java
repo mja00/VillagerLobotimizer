@@ -106,7 +106,7 @@ public class LobotomizeStorage {
     private volatile boolean shuttingDown = false;
     private final ScheduledTask chunkProcessingTask;
     private ScheduledTask watchdogTask;
-    private static final long WATCHDOG_INTERVAL_TICKS = 1200L;
+    private final long watchdogInterval;
     /**
      * 0.01 above the villager's floor block, to land on the feet block rather than the floor
      * block itself when the villager is standing on a partial-block workstation (brewing stand,
@@ -138,6 +138,10 @@ public class LobotomizeStorage {
         // max-restocks-per-day is a small count (vanilla default 2). Negative values are nonsense
         // and would prevent restocking entirely by misdirection; clamp to the default.
         this.maxRestocksPerDay = (int) validateClampedInterval("max-restocks-per-day", plugin.getConfig().getInt("max-restocks-per-day", 2), 0L, 2L);
+        // watchdog-interval is the watchdog cadence in ticks. Lower bound is 1 tick (runAtFixedRate
+        // throws otherwise). Upper bound is 72000 ticks (1 hour at 20 TPS); operators with very large
+        // servers can set a longer interval to reduce overhead.
+        this.watchdogInterval = validateClampedInterval("watchdog-interval", plugin.getConfig().getLong("watchdog-interval", 1200L), 1L, 72000L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.alwaysLobotomizeVillagersInVehicles = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -231,8 +235,8 @@ public class LobotomizeStorage {
         this.watchdogTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 SentryTaskWrapper.wrap((task) -> this.runWatchdog()),
-                WATCHDOG_INTERVAL_TICKS,
-                WATCHDOG_INTERVAL_TICKS
+                this.watchdogInterval,
+                this.watchdogInterval
         );
     }
 

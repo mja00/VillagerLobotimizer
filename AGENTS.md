@@ -37,7 +37,7 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 **VillagerUtils.java** - Maps: `PROFESSION_TO_STATION`, `PROFESSION_TO_SOUND`. Methods: `isJobSiteNearby()` (3x3x3 box), `shouldRestock()` (PDC+day-time logic)
 
 ### Config (read in constructors)
-`check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `disable-chunk-villager-updates`, `persist-lobotomized-state`
+`check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `max-restocks-per-day`, `always-lobotomize-villagers-in-vehicles`, `silent-lobotomized-villagers`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `ignore-villagers-stuck-in-doors`, `disable-chunk-villager-updates`, `prevent-trading-with-unlobotomized-villagers`, `unlobotomized-villager-trade-message`, `persist-lobotomized-state`, `enable-sentry`, `disable-update-checker`, `watchdog-interval` (default 1200 ticks = 60s)
 
 ### PDC Keys
 - `lastRestock` (LONG): Last trade refresh timestamp
