@@ -155,19 +155,24 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
 
     @Test
     void flushFalse_dispatches_reeval_that_wakes_villager_in_open_space() {
+        // Start with a lobotomized villager in open space: this is the only state the
+        // re-eval can transition out of. If the re-eval never runs, the villager stays
+        // lobotomized; the assertion below proves the scheduled tick fired.
         Villager v = spawnVillager();
+        // The re-eval calls isChunkLoaded before evaluating the policy; in MockBukkit the
+        // spawned-villager chunk isn't auto-marked as loaded, so we touch the chunk first.
+        v.getWorld().getChunkAt(v.getLocation().getBlockX() >> 4, v.getLocation().getBlockZ() >> 4);
+        markAsLobotomized(v);
         plugin.getStorage().addVillager(v);
         server.getScheduler().performTicks(1);
-        assertTrue(plugin.getStorage().getActive().contains(v),
-                "precondition: v is tracked as active before shutdown");
+        assertTrue(plugin.getStorage().getLobotomized().contains(v),
+                "precondition: v starts shutdown tracked as lobotomized");
 
         plugin.getStorage().flush(false);
-        server.getScheduler().performTicks(1);
+        server.getScheduler().performTicks(2);
 
-        // flush() cleared both sets; the re-eval dispatched via the entity scheduler re-adds
-        // the villager to activeVillagers because the policy says "active" in open space.
         assertTrue(plugin.getStorage().getActive().contains(v),
-                "the re-eval should have woken a villager in open space and re-added it to the active set");
+                "the re-eval should wake a lobotomized villager in open space");
         assertFalse(plugin.getStorage().getLobotomized().contains(v),
                 "a woken villager should not be in the lobotomized set");
     }
