@@ -66,7 +66,7 @@ public class LobotomizeStorage {
     private final int maxRestocksPerDay;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
-    private final boolean lobotomizePassengers;
+    private final boolean alwaysLobotomizeVillagersInVehicles;
     private final boolean checkRoof;
     private final boolean silentLobotomizedVillagers;
     private final boolean persistLobotomizedState;
@@ -113,7 +113,7 @@ public class LobotomizeStorage {
         this.maxRestocksPerDay = (int) validateInterval("max-restocks-per-day", plugin.getConfig().getInt("max-restocks-per-day", 2), 0L, 2L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
-        this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.alwaysLobotomizeVillagersInVehicles = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
         this.persistLobotomizedState = plugin.getConfig().getBoolean("persist-lobotomized-state", true);
@@ -149,7 +149,7 @@ public class LobotomizeStorage {
         this.ignoreStuckInDoors = plugin.getConfig().getBoolean("ignore-villagers-stuck-in-doors");
 
         this.activityPolicy = new VillagerActivityPolicy(
-                this.lobotomizePassengers,
+                this.alwaysLobotomizeVillagersInVehicles,
                 this.onlyProfessions,
                 this.onlyWithExperience,
                 this.checkRoof,

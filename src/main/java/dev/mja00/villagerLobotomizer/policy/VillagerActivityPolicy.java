@@ -11,7 +11,7 @@ import java.util.Set;
  */
 public final class VillagerActivityPolicy {
 
-    private final boolean lobotomizePassengers;
+    private final boolean alwaysLobotomizeVillagersInVehicles;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
     private final boolean checkRoof;
@@ -23,11 +23,11 @@ public final class VillagerActivityPolicy {
     /**
      * Creates a new activity policy with the specified configuration.
      */
-    public VillagerActivityPolicy(boolean lobotomizePassengers, boolean onlyProfessions,
+    public VillagerActivityPolicy(boolean alwaysLobotomizeVillagersInVehicles, boolean onlyProfessions,
                                   boolean onlyWithExperience, boolean checkRoof,
                                   boolean ignoreStuckInDoors, boolean ignoreNonSolidBlocks,
                                   Set<String> exemptNames, BlockClassifier blocks) {
-        this.lobotomizePassengers = lobotomizePassengers;
+        this.alwaysLobotomizeVillagersInVehicles = alwaysLobotomizeVillagersInVehicles;
         this.onlyProfessions = onlyProfessions;
         this.onlyWithExperience = onlyWithExperience;
         this.checkRoof = checkRoof;
@@ -67,7 +67,7 @@ public final class VillagerActivityPolicy {
             return true;
         }
 
-        if (this.lobotomizePassengers && v.hasVehicle()) {
+        if (this.alwaysLobotomizeVillagersInVehicles && v.hasVehicle()) {
             return false;
         }
 
