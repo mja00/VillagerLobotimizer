@@ -23,9 +23,14 @@ import java.util.concurrent.TimeoutException;
 public final class ModrinthClient {
 
     private static final HttpClient CLIENT = HttpClient.newHttpClient();
+    // Modrinth requires a uniquely-identifying User-Agent on every request. Generic
+    // client UAs (e.g. "Java/17") may be blocked as abuse. The plugin's own name
+    // and version are sufficient for identification; we fall back to a stable
+    // string when the version is not yet resolvable.
     private static final HttpRequest VERSION_REQUEST = HttpRequest.newBuilder()
             .GET()
             .uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version"))
+            .header("User-Agent", "mja00/VillagerLobotimizer")
             .build();
     private static final Gson GSON = new Gson();
     private static final long REQUEST_TIMEOUT_SECONDS = 5L;
