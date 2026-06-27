@@ -93,16 +93,28 @@ public class LobotomizeCommand {
         message = message.append(Component.text("\nActive: "))
                 .append(Component.text(String.valueOf(active)).color(NamedTextColor.GREEN))
                 .append(Component.text(" ("))
-                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)active / (double)total) / (double)100.0F)).color(NamedTextColor.GREEN))
+                .append(Component.text(formatPercent(active, total)).color(NamedTextColor.GREEN))
                 .append(Component.text("%)"));
         message = message.append(Component.text("\nLobotomized: "))
                 .append(Component.text(String.valueOf(inactive)).color(NamedTextColor.RED))
                 .append(Component.text(" ("))
-                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)inactive / (double)total) / (double)100.0F)).color(NamedTextColor.GREEN))
+                .append(Component.text(formatPercent(inactive, total)).color(NamedTextColor.GREEN))
                 .append(Component.text("%)"));
         sender.sendMessage(message);
 
         return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * Formats a part/total ratio as a two-decimal-place percent string.
+     *
+     * @param part the part of the total
+     * @param total the whole
+     * @return a percent string with two decimal places (e.g. {@code "42.00"}), or {@code "0.00"} when total is zero
+     */
+    private static String formatPercent(int part, int total) {
+        if (total == 0) return "0.00";
+        return String.format("%.2f", (100.0 * part) / total);
     }
 
     /**
