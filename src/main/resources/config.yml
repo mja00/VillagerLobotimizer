@@ -60,6 +60,7 @@ create-debug-teams: false
 disable-update-checker: false
 
 #Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
+#Note: this only suppresses block-change-driven re-evaluation. The per-villager task tick (trade refresh, level-up) still runs.
 disable-chunk-villager-updates: false
 
 #Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.
