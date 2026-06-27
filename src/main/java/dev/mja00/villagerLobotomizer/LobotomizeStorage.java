@@ -290,9 +290,7 @@ public class LobotomizeStorage {
         synchronized (this.stateLock) {
             ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
             this.villagerTaskIntervals.remove(villager.getUniqueId());
-            if (task != null && !task.isCancelled()) {
-                task.cancel();
-            }
+            this.safeCancel(task);
             wasActive = this.activeVillagers.remove(villager);
             wasInactive = this.inactiveVillagers.remove(villager);
         }
@@ -343,6 +341,23 @@ public class LobotomizeStorage {
     }
 
     /**
+     * Cancels a scheduled task, swallowing any scheduler error. Cancellation failure is harmless:
+     * shuttingDown and the per-villager guards already neuter task bodies, so a surviving task no-ops.
+     */
+    private void safeCancel(ScheduledTask task) {
+        if (task == null) {
+            return;
+        }
+        try {
+            task.cancel();
+        } catch (Throwable t) {
+            if (this.plugin.isDebugging()) {
+                this.logger.fine("Failed to cancel scheduled task: " + t.getMessage());
+            }
+        }
+    }
+
+    /**
      * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
      * 
      * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
@@ -355,12 +370,8 @@ public class LobotomizeStorage {
         // Prevent new tasks from being scheduled past this point
         this.shuttingDown = true;
 
-        if (this.chunkProcessingTask != null && !this.chunkProcessingTask.isCancelled()) {
-            this.chunkProcessingTask.cancel();
-        }
-        if (this.watchdogTask != null && !this.watchdogTask.isCancelled()) {
-            this.watchdogTask.cancel();
-        }
+        this.safeCancel(this.chunkProcessingTask);
+        this.safeCancel(this.watchdogTask);
 
         // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
@@ -369,9 +380,7 @@ public class LobotomizeStorage {
         List<Villager> toFlush;
         synchronized (this.stateLock) {
             for (ScheduledTask task : this.villagerTasks.values()) {
-                if (task != null && !task.isCancelled()) {
-                    task.cancel();
-                }
+                this.safeCancel(task);
             }
             this.villagerTasks.clear();
             this.villagerTaskIntervals.clear();
@@ -457,9 +466,7 @@ public class LobotomizeStorage {
             if (!villager.isValid() || villager.isDead()) {
                 ScheduledTask task = this.villagerTasks.remove(villager.getUniqueId());
                 this.villagerTaskIntervals.remove(villager.getUniqueId());
-                if (task != null && !task.isCancelled()) {
-                    task.cancel();
-                }
+                this.safeCancel(task);
                 untrack(villager);
                 return;
             }

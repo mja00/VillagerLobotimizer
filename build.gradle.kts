@@ -29,13 +29,25 @@ repositories {
 }
 
 dependencies {
-    paperweight.paperDevBundle("1.21.6-R0.1-SNAPSHOT")
+    paperweight.paperDevBundle("1.21.11-R0.1-SNAPSHOT")
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation("org.bstats:bstats-bukkit:3.1.0")
     implementation("io.sentry:sentry:8.28.0")
     implementation("org.yaml:snakeyaml:2.2")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+    // Plain paper-api for tests: MockBukkit ships no paper-api, and paperweight's NMS server is
+    // kept off the test classpath (see paperweight block) to avoid a duplicate server impl.
+    testImplementation("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    // MockBukkit 4.110 pins junit-jupiter-api 6.0.3, so align the whole platform via the BOM
+    testImplementation(platform("org.junit:junit-bom:6.0.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+// Keep the paperweight server (NMS) artifact off the test classpath so MockBukkit's server
+// implementation is used instead. Safe because this plugin uses no NMS.
+paperweight {
+    addServerDependencyTo = configurations.named(JavaPlugin.COMPILE_ONLY_CONFIGURATION_NAME).map { setOf(it) }
 }
 
 val targetJavaVersion = 21
@@ -113,11 +125,11 @@ tasks {
     }
 }
 
-// Planning on using API only available in 1.21.6 (and technically 1.21.5 but only the last like 10 builds)
-val supportedVersions = listOf("1.21.6-26.2")
+// Targeting 1.21.11+; support for 1.21.6-1.21.10 was dropped to align with MockBukkit's tested API
+val supportedVersions = listOf("1.21.11-26.2")
 
 // Modrinth requires discrete game versions rather than a range
-val modrinthGameVersions = listOf("1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10", "1.21.11", "26.1", "26.1.1", "26.1.2", "26.2")
+val modrinthGameVersions = listOf("1.21.11", "26.1", "26.1.1", "26.1.2", "26.2")
 
 hangarPublish {
     publications.register("plugin") {
