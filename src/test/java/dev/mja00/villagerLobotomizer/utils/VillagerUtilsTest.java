@@ -99,7 +99,7 @@ class VillagerUtilsTest extends MockBukkitTestBase {
 
         // Advance to day 1 (fullTime / 24000 increments)
         world.setFullTime(24_000L + 50L);
-        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY);
+        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, 2);
 
         assertEquals(0, villager.getRestocksToday(), "crossing a day boundary resets the restock counter");
         assertEquals(24_050L, villager.getPersistentDataContainer()
