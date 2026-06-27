@@ -48,6 +48,33 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
+/**
+ * Core villager tracking state machine. Owns the active/inactive set split, the per-villager
+ * scheduler map, the trade-refresh path, the chunk-processing pipeline, and the watchdog
+ * that reconciles any state drift.
+ *
+ * <h2>Threading contract</h2>
+ *
+ * On Folia, the global region thread owns no entity. Direct calls into the Bukkit API
+ * ({@code setAware}, {@code setSilent}, persistent data container writes) from a non-entity
+ * thread will throw {@link IllegalStateException}. To keep the public API safe to call from
+ * any thread, methods that read or mutate a {@link Villager} dispatch through
+ * {@link org.bukkit.entity.Entity#getScheduler()} so the body runs on the villager's owning
+ * thread. The set mutations ({@link #setActive}, {@link #setInactive},
+ * {@link #addVillager}, {@link #removeVillager}, {@link #reEvaluateVillager}) acquire the
+ * {@code stateLock} to keep the active/inactive sets atomic and disjoint.
+ *
+ * <h2>Shutdown</h2>
+ *
+ * {@link #flush(boolean)} cancels all scheduled tasks and snapshots the tracked villagers.
+ * On reload ({@code reloading=true}) each villager is dispatched to its entity scheduler to
+ * wake up; the new storage instance starts empty. On shutdown ({@code reloading=false}) each
+ * villager is dispatched to its entity scheduler to <strong>re-evaluate</strong>: villagers
+ * still trapped stay lobotomized (and the persistent marker is honored), villagers whose
+ * environment opened up since the last check are woken. If the entity scheduler does not run
+ * before the JVM exits (a possibility on Folia), the persistent lobotomized marker, when
+ * enabled, re-lobotomizes the villager on next chunk load.
+ */
 public class LobotomizeStorage {
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
@@ -63,9 +90,10 @@ public class LobotomizeStorage {
     private final long inactiveCheckInterval;
     private final long restockInterval;
     private final long restockRandomRange;
+    private final int maxRestocksPerDay;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
-    private final boolean lobotomizePassengers;
+    private final boolean alwaysLobotomizeVillagersInVehicles;
     private final boolean checkRoof;
     private final boolean silentLobotomizedVillagers;
     private final boolean persistLobotomizedState;
@@ -78,7 +106,14 @@ public class LobotomizeStorage {
     private volatile boolean shuttingDown = false;
     private final ScheduledTask chunkProcessingTask;
     private ScheduledTask watchdogTask;
-    private static final long WATCHDOG_INTERVAL_TICKS = 1200L;
+    private final long watchdogInterval;
+    /**
+     * 0.01 above the villager's floor block, to land on the feet block rather than the floor
+     * block itself when the villager is standing on a partial-block workstation (brewing stand,
+     * lectern, etc.). The Y offset is applied via {@code Location.add(0, FEET_BLOCK_Y_OFFSET, 0)}
+     * before computing the block coordinates passed into the activity policy.
+     */
+    private static final double FEET_BLOCK_Y_OFFSET = 0.51;
     // Guards compound mutations of activeVillagers/inactiveVillagers so a villager
     // is never observable in both sets simultaneously.
     private final Object stateLock = new Object();
@@ -91,16 +126,25 @@ public class LobotomizeStorage {
     public LobotomizeStorage(VillagerLobotomizer plugin) {
         this.plugin = plugin;
         this.logger = plugin.getLogger();
-        // check-interval/inactive-check-interval are scheduler periods (ticks) and must be >= 1, or
-        // runAtFixedRate throws IllegalArgumentException for every tracked villager. restock-interval
-        // and restock-random-range are wall-clock milliseconds and must not be negative.
-        this.checkInterval = validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 150L);
-        this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 150L);
+        // check-interval/inactive-check-interval are scheduler periods (ticks). Lower bound is 1, or
+        // runAtFixedRate throws IllegalArgumentException for every tracked villager. Upper bound is
+        // 600 (30s at 20 TPS) — the longest reasonable tick-based interval before considering a
+        // cooldown-based design instead. restock-interval and restock-random-range are wall-clock
+        // milliseconds and must not be negative.
+        this.checkInterval = validateClampedInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 600L);
+        this.inactiveCheckInterval = validateClampedInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 600L);
         this.restockInterval = validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
         this.restockRandomRange = validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
+        // max-restocks-per-day is a small count (vanilla default 2). Negative values are nonsense
+        // and would prevent restocking entirely by misdirection; clamp to the default.
+        this.maxRestocksPerDay = (int) validateClampedInterval("max-restocks-per-day", plugin.getConfig().getInt("max-restocks-per-day", 2), 0L, 2L);
+        // watchdog-interval is the watchdog cadence in ticks. Lower bound is 1 tick (runAtFixedRate
+        // throws otherwise). Upper bound is 72000 ticks (1 hour at 20 TPS); operators with very large
+        // servers can set a longer interval to reduce overhead.
+        this.watchdogInterval = validateClampedInterval("watchdog-interval", plugin.getConfig().getLong("watchdog-interval", 1200L), 1L, 72000L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
-        this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
+        this.alwaysLobotomizeVillagersInVehicles = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
         this.persistLobotomizedState = plugin.getConfig().getBoolean("persist-lobotomized-state", true);
@@ -136,7 +180,7 @@ public class LobotomizeStorage {
         this.ignoreStuckInDoors = plugin.getConfig().getBoolean("ignore-villagers-stuck-in-doors");
 
         this.activityPolicy = new VillagerActivityPolicy(
-                this.lobotomizePassengers,
+                this.alwaysLobotomizeVillagersInVehicles,
                 this.onlyProfessions,
                 this.onlyWithExperience,
                 this.checkRoof,
@@ -191,8 +235,8 @@ public class LobotomizeStorage {
         this.watchdogTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
                 plugin,
                 SentryTaskWrapper.wrap((task) -> this.runWatchdog()),
-                WATCHDOG_INTERVAL_TICKS,
-                WATCHDOG_INTERVAL_TICKS
+                this.watchdogInterval,
+                this.watchdogInterval
         );
     }
 
@@ -247,6 +291,12 @@ public class LobotomizeStorage {
             return;
         }
 
+        // Read the persistent lobotomized marker on the calling thread. PDC reads are safe
+        // across threads; the marker is a hint that the villager should be tracked as
+        // already-lobotomized. The entity-mutating portion (setAware/setSilent/PDC writes)
+        // and the set-membership update are dispatched to the villager's owning thread via
+        // villager.getScheduler() so the public API is Folia-safe by construction regardless
+        // of caller.
         boolean wasLobotomized = false;
         if (this.persistLobotomizedState) {
             PersistentDataContainer pdc = villager.getPersistentDataContainer();
@@ -254,26 +304,44 @@ public class LobotomizeStorage {
         }
 
         if (wasLobotomized) {
-            // Immediately lobotomize the villager to prevent lag spike
-            villager.setAware(false);
-            if (this.silentLobotomizedVillagers) {
-                villager.setSilent(true);
-            }
-            setInactive(villager);
-
-            if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
-            }
+            villager.getScheduler().run(this.plugin,
+                    SentryTaskWrapper.wrap(t -> reAddAsLobotomized(villager)), null);
         } else {
-            setActive(villager);
-
-            if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
-            }
+            villager.getScheduler().run(this.plugin,
+                    SentryTaskWrapper.wrap(t -> reAddAsActive(villager)), null);
         }
+    }
 
-        long interval = wasLobotomized ? this.inactiveCheckInterval : this.checkInterval;
-        this.scheduleVillagerTask(villager, interval);
+    /**
+     * Re-tracks a villager that was already lobotomized (PDC marker present). Runs on the
+     * villager's owning thread via {@code villager.getScheduler()}. Called from
+     * {@link #addVillager}.
+     */
+    private void reAddAsLobotomized(@NotNull Villager villager) {
+        // Re-lobotomize the villager to prevent lag spike on chunk load.
+        villager.setAware(false);
+        if (this.silentLobotomizedVillagers) {
+            villager.setSilent(true);
+        }
+        setInactive(villager);
+
+        if (this.plugin.isDebugging()) {
+            this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
+        }
+        this.scheduleVillagerTask(villager, this.inactiveCheckInterval);
+    }
+
+    /**
+     * Re-tracks a new villager (no PDC marker). Runs on the villager's owning thread via
+     * {@code villager.getScheduler()}. Called from {@link #addVillager}.
+     */
+    private void reAddAsActive(@NotNull Villager villager) {
+        setActive(villager);
+
+        if (this.plugin.isDebugging()) {
+            this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
+        }
+        this.scheduleVillagerTask(villager, this.checkInterval);
     }
 
     /**
@@ -359,12 +427,13 @@ public class LobotomizeStorage {
 
     /**
      * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
-     * 
+     *
      * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
-     *                  Wake operations are dispatched via each villager's {@code EntityScheduler}, 
+     *                  Wake operations are dispatched via each villager's {@code EntityScheduler},
      *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
-     *                  where the scheduler may not run; in this case, mutations are attempted directly
-     *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
+     *                  where a per-villager re-evaluation is dispatched via the entity scheduler: each
+     *                  villager's current environment is re-checked and the villager is woken or re-
+     *                  lobotomized accordingly.
      */
     public final void flush(boolean reloading) {
         // Prevent new tasks from being scheduled past this point
@@ -373,10 +442,14 @@ public class LobotomizeStorage {
         this.safeCancel(this.chunkProcessingTask);
         this.safeCancel(this.watchdogTask);
 
-        // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
-        // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds, so a
-        // concurrent schedule can't install an orphan task after we clear (it re-checks shuttingDown there).
+        // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds,
+        // so a concurrent schedule can't install an orphan task after we clear (it re-checks
+        // shuttingDown there).
+        // We deliberately do NOT clear activeVillagers/inactiveVillagers on shutdown: the
+        // re-evaluation tasks below read those sets to determine the villager's current state.
+        // Clearing would force the re-eval to either assume a default (and mis-classify villagers
+        // that are still trapped) or accept an extra parameter to remember the prior state.
         List<Villager> toFlush;
         synchronized (this.stateLock) {
             for (ScheduledTask task : this.villagerTasks.values()) {
@@ -390,21 +463,22 @@ public class LobotomizeStorage {
             for (Villager v : this.activeVillagers) {
                 if (!this.inactiveVillagers.contains(v)) toFlush.add(v);
             }
-            this.inactiveVillagers.clear();
-            this.activeVillagers.clear();
+            if (reloading) {
+                // On reload, the new storage instance will start with empty sets; clear the old
+                // sets defensively so any leftover reference to the old storage sees a clean state.
+                this.inactiveVillagers.clear();
+                this.activeVillagers.clear();
+            }
         }
 
-        // On a true shutdown the scheduler may not run, so cross-region (Folia) villagers can't be
-        // reliably woken; warn once. The persistent marker (when enabled) re-tracks them on next
-        // load so the normal check loop can wake them once their chunk is active again.
-        if (!reloading && this.plugin.isFolia() && !toFlush.isEmpty()) {
-            this.logger.info("Some Villagers may remain lobotomized after shutdown until their chunk next loads. "
-                    + "Enable persist-lobotomized-state so they are re-evaluated and woken once their chunk reloads.");
+        if (!reloading && !toFlush.isEmpty()) {
+            this.logger.info("Shutdown: re-evaluating " + toFlush.size()
+                    + " tracked villager(s) on their owning threads. Persistent lobotomized markers will be honored.");
         }
 
         for (Villager villager : toFlush) {
             if (this.plugin.isDebugging()) {
-                this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
+                this.logger.info((reloading ? "Waking" : "Re-evaluating") + " villager " + villager.getUniqueId());
             }
 
             if (reloading) {
@@ -418,19 +492,22 @@ public class LobotomizeStorage {
                 continue;
             }
 
+            // Shutdown: dispatch a re-evaluation on the villager's owning thread. The re-eval
+            // checks the current environment and either wakes or re-lobotomizes accordingly.
             try {
-                // During shutdown, try setting directly first since the scheduler might not run.
-                wakeVillager(villager);
-            } catch (IllegalStateException e) {
-                // If we get a thread violation, try using the entity scheduler as a last resort.
-                try {
-                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
-                } catch (Exception schedulerException) {
-                    // If both fail, log warning but don't crash the shutdown
-                    this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
-                }
+                villager.getScheduler().run(this.plugin,
+                        SentryTaskWrapper.wrap((task) -> reEvaluateVillager(villager)), null);
             } catch (Exception e) {
-                this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
+                // If we can't even schedule the re-eval (e.g., the entity scheduler is unavailable
+                // mid-shutdown), fall back to a direct wake so the villager is not left lobotomized
+                // indefinitely. The persistent marker will still re-lobotomize it on next chunk load
+                // if the environment actually warrants it.
+                this.logger.log(java.util.logging.Level.WARNING, "Failed to schedule re-eval for villager " + villager.getUniqueId() + " during shutdown, falling back to wake: " + e.getMessage(), e);
+                try {
+                    wakeVillager(villager);
+                } catch (Exception inner) {
+                    this.logger.log(java.util.logging.Level.WARNING, "Failed to wake villager " + villager.getUniqueId() + " during shutdown fallback: " + inner.getMessage(), inner);
+                }
             }
         }
     }
@@ -446,8 +523,69 @@ public class LobotomizeStorage {
         }
         clearLobotomizedMarker(villager);
     }
-    
-    
+
+    /**
+     * Re-evaluates a tracked villager at shutdown and applies the policy result: wake if the
+     * environment has opened up, re-lobotomize if the villager is still trapped. Runs on the
+     * villager's owning thread via {@code villager.getScheduler()} (dispatched from
+     * {@link #flush(boolean)}). Reads the villager's current set membership under the state
+     * lock and writes the new membership, so a transition between active and inactive is
+     * atomic with respect to other set readers.
+     */
+    private void reEvaluateVillager(@NotNull Villager villager) {
+        if (!villager.isValid() || villager.isDead()) {
+            return;
+        }
+
+        Location villagerLocation = villager.getLocation().add(0.0F, (float) FEET_BLOCK_Y_OFFSET, 0.0F);
+        int blockX = villagerLocation.getBlockX();
+        int blockY = villagerLocation.getBlockY();
+        int blockZ = villagerLocation.getBlockZ();
+
+        // Chunk already unloaded: nothing to evaluate against. The persistent marker (when enabled)
+        // will re-lobotomize on next chunk load; otherwise the villager just stays as it is.
+        if (!villager.getWorld().isChunkLoaded(blockX >> 4, blockZ >> 4)) {
+            return;
+        }
+
+        boolean shouldBeActive = this.shouldBeActive(villager, blockX, blockY, blockZ);
+        boolean isActive = this.activeVillagers.contains(villager);
+        boolean isInactive = this.inactiveVillagers.contains(villager);
+
+        // Defensive: if the villager is no longer tracked (shouldn't happen for a flushed
+        // snapshot), keep its current state.
+        if (!isActive && !isInactive) {
+            return;
+        }
+
+        if (shouldBeActive) {
+            if (isInactive) {
+                // Wake up: the environment opened up between the last check and shutdown.
+                villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
+                clearLobotomizedMarker(villager);
+                setActive(villager);
+            } else {
+                // Already active; just clear any stale marker.
+                clearLobotomizedMarker(villager);
+            }
+        } else if (isActive) {
+            // Still trapped: re-lobotomize.
+            villager.setAware(false);
+            if (this.silentLobotomizedVillagers) {
+                villager.setSilent(true);
+            }
+            if (this.persistLobotomizedState) {
+                villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+            }
+            setInactive(villager);
+        }
+        // If already inactive and still trapped, do nothing: leave the persistent marker as-is.
+    }
+
+
     /**
      * Safely processes and potentially transitions a villager between active and inactive states.
      *
@@ -515,7 +653,7 @@ public class LobotomizeStorage {
             return true;
         }
 
-        Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        Location villagerLocation = villager.getLocation().add(0.0F, (float) FEET_BLOCK_Y_OFFSET, 0.0F);
         int blockX = villagerLocation.getBlockX();
         int blockY = villagerLocation.getBlockY();
         int blockZ = villagerLocation.getBlockZ();
@@ -660,7 +798,7 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager should restock, {@code false} otherwise
      */
     private boolean shouldRestock(@NotNull Villager villager) {
-        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey);
+        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey, this.maxRestocksPerDay);
     }
 
     /**
@@ -881,7 +1019,7 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager should be active, {@code false} otherwise.
      */
     private boolean shouldBeActive(Villager villager) {
-        Location loc = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        Location loc = villager.getLocation().add(0.0F, (float) FEET_BLOCK_Y_OFFSET, 0.0F);
         return shouldBeActive(villager, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
     }
 
@@ -1001,6 +1139,29 @@ public class LobotomizeStorage {
             this.logger.warning("Config value '" + configKey + "' must be >= " + min + " (got " + value
                     + "); falling back to " + fallback + ".");
             return fallback;
+        }
+        return value;
+    }
+
+    /**
+     * Validates a config interval, clamping out-of-range values to the nearest bound and warning.
+     *
+     * @param configKey the config key (for the warning message)
+     * @param value     the configured value
+     * @param min       the minimum acceptable value (inclusive)
+     * @param max       the maximum acceptable value (inclusive)
+     * @return {@code value} if it is in {@code [min, max]}, otherwise the nearest bound
+     */
+    private long validateClampedInterval(String configKey, long value, long min, long max) {
+        if (value < min) {
+            this.logger.warning("Config value '" + configKey + "' must be >= " + min + " (got " + value
+                    + "); clamping to " + min + ".");
+            return min;
+        }
+        if (value > max) {
+            this.logger.warning("Config value '" + configKey + "' must be <= " + max + " (got " + value
+                    + "); clamping to " + max + ".");
+            return max;
         }
         return value;
     }
