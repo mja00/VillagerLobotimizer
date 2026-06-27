@@ -63,6 +63,7 @@ public class LobotomizeStorage {
     private final long inactiveCheckInterval;
     private final long restockInterval;
     private final long restockRandomRange;
+    private final int maxRestocksPerDay;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
     private final boolean lobotomizePassengers;
@@ -105,6 +106,9 @@ public class LobotomizeStorage {
         this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 150L);
         this.restockInterval = validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
         this.restockRandomRange = validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
+        // max-restocks-per-day is a small count (vanilla default 2). Negative values are nonsense
+        // and would prevent restocking entirely by misdirection; clamp to the default.
+        this.maxRestocksPerDay = (int) validateInterval("max-restocks-per-day", plugin.getConfig().getInt("max-restocks-per-day", 2), 0L, 2L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -667,7 +671,7 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager should restock, {@code false} otherwise
      */
     private boolean shouldRestock(@NotNull Villager villager) {
-        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey);
+        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey, this.maxRestocksPerDay);
     }
 
     /**

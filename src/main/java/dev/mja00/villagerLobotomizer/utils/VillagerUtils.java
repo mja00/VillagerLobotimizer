@@ -144,11 +144,13 @@ public class VillagerUtils {
     /**
      * Determines if a villager is allowed to restock.
      *
-     * @return true if the villager has fewer than 2 restocks today, false otherwise
+     * @param villager the villager to check
+     * @param maxRestocksPerDay the configured daily restock cap (matches the vanilla default of 2)
+     * @return true if the villager has fewer than {@code maxRestocksPerDay} restocks today, false otherwise
      */
-    public static boolean allowedToRestock(Villager villager) {
+    public static boolean allowedToRestock(Villager villager, int maxRestocksPerDay) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        return numberOfRestocksToday < 2;
+        return numberOfRestocksToday < maxRestocksPerDay;
     }
 
     /**
@@ -156,10 +158,11 @@ public class VillagerUtils {
      *
      * @param villager the villager to check
      * @param lastRestockCheckDayTimeKey the persistent data key for tracking the last full-time check
+     * @param maxRestocksPerDay the configured daily restock cap (matches the vanilla default of 2)
      * @return {@code true} if the villager is allowed to restock today and has recipes requiring restocking,
      *         {@code false} otherwise
      */
-    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey) {
+    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey, int maxRestocksPerDay) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long fullTime = villager.getWorld().getFullTime();
@@ -175,6 +178,6 @@ public class VillagerUtils {
 
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        return allowedToRestock(villager) && needsToRestock(villager);
+        return allowedToRestock(villager, maxRestocksPerDay) && needsToRestock(villager);
     }
 }
