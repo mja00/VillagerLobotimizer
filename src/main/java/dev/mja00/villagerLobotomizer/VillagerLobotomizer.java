@@ -442,9 +442,16 @@ public class VillagerLobotomizer extends JavaPlugin {
         boolean isDev = Boolean.getBoolean("villagerlobotimizer.dev");
         String environment = isDev ? "development" : "production";
 
+        // Allow operators to redirect sentry events to their own project (or disable entirely with
+        // an empty string) by setting the system property at JVM startup. The default below is the
+        // project's official ingestion endpoint; treat it as public by design.
+        String sentryDsn = System.getProperty(
+                "villagerlobotimizer.sentry.dsn",
+                "https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+
         try {
             Sentry.init(options -> {
-                options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+                options.setDsn(sentryDsn);
                 options.setEnvironment(environment);
                 options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
 
