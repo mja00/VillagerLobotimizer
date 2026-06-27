@@ -3,6 +3,7 @@ package dev.mja00.villagerLobotomizer.listeners;
 import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -33,8 +34,24 @@ public class EntityListener implements Listener {
         this.plugin = plugin;
         if (plugin.isFolia()) {
             // On Folia, the main thread owns no region; iterating world.getEntities() from here
-            // is unsafe. We rely on EntityAddToWorldEvent firing for chunks as they load, and on
-            // the watchdog/reload path to recover any villagers that slipped through.
+            // is unsafe. Dispatch a per-region task per loaded chunk so the entity scan runs
+            // on the chunk's owning thread. addVillager is now Folia-safe (it dispatches the
+            // setAware/setSilent mutation to villager.getScheduler()) so the registration
+            // path is correct on both Paper and Folia.
+            for (World world : Bukkit.getWorlds()) {
+                for (Chunk chunk : world.getLoadedChunks()) {
+                    Bukkit.getRegionScheduler().execute(plugin, world, chunk.getX(), chunk.getZ(), () -> {
+                        if (!chunk.isLoaded()) {
+                            return;
+                        }
+                        for (Entity entity : chunk.getEntities()) {
+                            if (entity instanceof Villager villager) {
+                                plugin.getStorage().addVillager(villager);
+                            }
+                        }
+                    });
+                }
+            }
             return;
         }
         // Paper: the main thread owns all regions, so a direct entity scan is safe and gives
