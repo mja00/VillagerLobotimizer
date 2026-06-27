@@ -15,20 +15,23 @@ public class VersionUtils {
      * declares the named method) are preserved for forward compatibility, though no current entry
      * uses them.
      */
-    private static final Map<String, SupportStatus> UNSUPPORTED_SERVERS = Map.ofEntries(
-            // Leaf, known unstable fork of Paper
-            Map.entry("org.dreeam.leaf.LeafBootstrap", SupportStatus.DANGEROUS_FORK),
-            Map.entry("brand:Leaf", SupportStatus.DANGEROUS_FORK),
+    private static final Map<String, SupportStatus> UNSUPPORTED_SERVERS = new java.util.LinkedHashMap<>();
+    static {
+        // LinkedHashMap preserves insertion order, so getServerSupportStatus()'s first-match
+        // resolution is deterministic. The list below is the authoritative probe order.
+        // Leaf, known unstable fork of Paper
+        UNSUPPORTED_SERVERS.put("org.dreeam.leaf.LeafBootstrap", SupportStatus.DANGEROUS_FORK);
+        UNSUPPORTED_SERVERS.put("brand:Leaf", SupportStatus.DANGEROUS_FORK);
 
-            // Don't support weird Bukkit Hybrids
-            // Forge - Doesn't support Bukkit
-            Map.entry("net.minecraftforge.common.MinecraftForge", SupportStatus.UNSTABLE),
-            Map.entry("brand:Mohist", SupportStatus.UNSTABLE),
+        // Don't support weird Bukkit Hybrids
+        // Forge - Doesn't support Bukkit
+        UNSUPPORTED_SERVERS.put("net.minecraftforge.common.MinecraftForge", SupportStatus.UNSTABLE);
+        UNSUPPORTED_SERVERS.put("brand:Mohist", SupportStatus.UNSTABLE);
 
-            // Fabric - Doesn't support Bukkit
-            Map.entry("net.fabricmc.loader.launch.knot.KnotServer", SupportStatus.UNSTABLE),
-            Map.entry("brand:Youer", SupportStatus.UNSTABLE)
-    );
+        // Fabric - Doesn't support Bukkit
+        UNSUPPORTED_SERVERS.put("net.fabricmc.loader.launch.knot.KnotServer", SupportStatus.UNSTABLE);
+        UNSUPPORTED_SERVERS.put("brand:Youer", SupportStatus.UNSTABLE);
+    }
 
     private static final String BRAND_PREFIX = "brand:";
     private static final String INVERTED_PREFIX = "!";
