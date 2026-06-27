@@ -59,6 +59,11 @@ class EntityListenerTest extends MockBukkitTestBase {
     void constructorScanTracksExistingVillagers() {
         Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
 
+        // Untrack first so the constructor scan is the only thing that can re-track it; this holds
+        // whether or not spawning auto-fired an add event through the already-registered listener.
+        plugin.getStorage().removeVillager(villager);
+        assertFalse(isTracked(villager), "precondition: villager is untracked before the scan");
+
         // A fresh listener scans loaded worlds and registers existing villagers
         new EntityListener(plugin);
 
