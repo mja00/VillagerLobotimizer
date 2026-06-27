@@ -31,10 +31,18 @@ public class EntityListener implements Listener {
 
     public EntityListener(VillagerLobotomizer plugin) {
         this.plugin = plugin;
+        if (plugin.isFolia()) {
+            // On Folia, the main thread owns no region; iterating world.getEntities() from here
+            // is unsafe. We rely on EntityAddToWorldEvent firing for chunks as they load, and on
+            // the watchdog/reload path to recover any villagers that slipped through.
+            return;
+        }
+        // Paper: the main thread owns all regions, so a direct entity scan is safe and gives
+        // us immediate tracking for villagers that exist at plugin-load time.
         for (World world : Bukkit.getWorlds()) {
             for (Entity entity : world.getEntities()) {
-                if (entity instanceof Villager) {
-                    plugin.getStorage().addVillager((Villager)entity);
+                if (entity instanceof Villager villager) {
+                    plugin.getStorage().addVillager(villager);
                 }
             }
         }
