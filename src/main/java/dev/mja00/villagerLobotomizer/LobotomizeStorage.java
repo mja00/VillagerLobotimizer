@@ -131,13 +131,13 @@ public class LobotomizeStorage {
         // 600 (30s at 20 TPS) — the longest reasonable tick-based interval before considering a
         // cooldown-based design instead. restock-interval and restock-random-range are wall-clock
         // milliseconds and must not be negative.
-        this.checkInterval = validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 600L);
-        this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 600L);
+        this.checkInterval = validateClampedInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 600L);
+        this.inactiveCheckInterval = validateClampedInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 600L);
         this.restockInterval = validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
         this.restockRandomRange = validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
         // max-restocks-per-day is a small count (vanilla default 2). Negative values are nonsense
         // and would prevent restocking entirely by misdirection; clamp to the default.
-        this.maxRestocksPerDay = (int) validateInterval("max-restocks-per-day", plugin.getConfig().getInt("max-restocks-per-day", 2), 0L, 2L);
+        this.maxRestocksPerDay = (int) validateClampedInterval("max-restocks-per-day", plugin.getConfig().getInt("max-restocks-per-day", 2), 0L, 2L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.alwaysLobotomizeVillagersInVehicles = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -1135,6 +1135,29 @@ public class LobotomizeStorage {
             this.logger.warning("Config value '" + configKey + "' must be >= " + min + " (got " + value
                     + "); falling back to " + fallback + ".");
             return fallback;
+        }
+        return value;
+    }
+
+    /**
+     * Validates a config interval, clamping out-of-range values to the nearest bound and warning.
+     *
+     * @param configKey the config key (for the warning message)
+     * @param value     the configured value
+     * @param min       the minimum acceptable value (inclusive)
+     * @param max       the maximum acceptable value (inclusive)
+     * @return {@code value} if it is in {@code [min, max]}, otherwise the nearest bound
+     */
+    private long validateClampedInterval(String configKey, long value, long min, long max) {
+        if (value < min) {
+            this.logger.warning("Config value '" + configKey + "' must be >= " + min + " (got " + value
+                    + "); clamping to " + min + ".");
+            return min;
+        }
+        if (value > max) {
+            this.logger.warning("Config value '" + configKey + "' must be <= " + max + " (got " + value
+                    + "); clamping to " + max + ".");
+            return max;
         }
         return value;
     }
