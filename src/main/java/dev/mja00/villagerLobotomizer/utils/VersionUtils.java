@@ -1,39 +1,38 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import com.google.common.collect.ImmutableMap;
 import org.bukkit.Bukkit;
+
 import java.lang.reflect.Method;
 import java.util.Map;
 
-import org.jetbrains.annotations.NotNull;
-public class VersionUtils   {
+public class VersionUtils {
 
-    private static final Map<String, SupportStatus> unsupportedServers;
-    private static final String PFX = make("8(;4>`");
+    /**
+     * Detection keys for known-unsupported server forks. Keys prefixed with {@value #BRAND_PREFIX}
+     * are matched against {@link org.bukkit.Server#getName()}; non-prefixed keys are matched
+     * against class names via {@link Class#forName(String)}. The optional suffixes {@value #INVERTED_PREFIX}
+     * (match when the class is NOT present) and {@code class#method} (match only when the class
+     * declares the named method) are preserved for forward compatibility, though no current entry
+     * uses them.
+     */
+    private static final Map<String, SupportStatus> UNSUPPORTED_SERVERS = Map.ofEntries(
+            // Leaf, known unstable fork of Paper
+            Map.entry("org.dreeam.leaf.LeafBootstrap", SupportStatus.DANGEROUS_FORK),
+            Map.entry("brand:Leaf", SupportStatus.DANGEROUS_FORK),
 
-    static {
-        final ImmutableMap.Builder<String, SupportStatus> builder = ImmutableMap.builder();
+            // Don't support weird Bukkit Hybrids
+            // Forge - Doesn't support Bukkit
+            Map.entry("net.minecraftforge.common.MinecraftForge", SupportStatus.UNSTABLE),
+            Map.entry("brand:Mohist", SupportStatus.UNSTABLE),
 
-        // Leaf, known unstable fork of Paper
-        builder.put(make("5(=t>(??;7t6?;<t\\026?;<\\03055.).(;*"), SupportStatus.DANGEROUS_FORK);
-        builder.put("brand:Leaf", SupportStatus.DANGEROUS_FORK);
-        builder.put(PFX + make("\\026?;<"), SupportStatus.DANGEROUS_FORK);
+            // Fabric - Doesn't support Bukkit
+            Map.entry("net.fabricmc.loader.launch.knot.KnotServer", SupportStatus.UNSTABLE),
+            Map.entry("brand:Youer", SupportStatus.UNSTABLE)
+    );
 
-        // Don't support weird Bukkit Hybrids
-        // Forge - Doesn't support Bukkit
-        builder.put("net.minecraftforge.common.MinecraftForge", SupportStatus.UNSTABLE);
-        builder.put(make("4?.t734?9(;<.<5(=?t957754t\\02734?9(;<.\\0345(=?"), SupportStatus.UNSTABLE);
-        builder.put(PFX + make("\\027523)."), SupportStatus.UNSTABLE);
-        builder.put("brand:Mohist", SupportStatus.UNSTABLE);
-
-        // Fabric - Doesn't support Bukkit
-        // The below translates to net.fabricmc.loader.launch.knot.KnotServer
-        builder.put("net.fabricmc.loader.launch.knot.KnotServer", SupportStatus.UNSTABLE);
-        builder.put(make("4?.t<;8(3979t65;>?(t6;/492t145.t\\02145.\\t?(,?("), SupportStatus.UNSTABLE);
-        builder.put(PFX + make("\\0035/?("), SupportStatus.UNSTABLE);
-
-        unsupportedServers = builder.build();
-    }
+    private static final String BRAND_PREFIX = "brand:";
+    private static final String INVERTED_PREFIX = "!";
+    private static final String METHOD_SEPARATOR = "#";
 
     private static SupportStatus supportStatus = null;
     // Used to find the specific class that caused a given support status
@@ -43,27 +42,27 @@ public class VersionUtils   {
 
     public static SupportStatus getServerSupportStatus() {
         if (supportStatus == null) {
-            for (Map.Entry<String, SupportStatus> entry : unsupportedServers.entrySet()) {
+            for (Map.Entry<String, SupportStatus> entry : UNSUPPORTED_SERVERS.entrySet()) {
 
-                if (entry.getKey().startsWith(PFX)) {
-                    if (Bukkit.getName().equalsIgnoreCase(entry.getKey().replaceFirst(PFX, ""))) {
+                if (entry.getKey().startsWith(BRAND_PREFIX)) {
+                    if (Bukkit.getName().equalsIgnoreCase(entry.getKey().substring(BRAND_PREFIX.length()))) {
                         supportStatusClass = entry.getKey();
                         return supportStatus = entry.getValue();
                     }
                     continue;
                 }
 
-                final boolean inverted = entry.getKey().contains("!");
-                final String clazz = entry.getKey().replace("!", "").split("#")[0];
+                final boolean inverted = entry.getKey().contains(INVERTED_PREFIX);
+                final String clazz = entry.getKey().replace(INVERTED_PREFIX, "").split(METHOD_SEPARATOR)[0];
                 String method = "";
-                if (entry.getKey().contains("#")) {
-                    method = entry.getKey().split("#")[1];
+                if (entry.getKey().contains(METHOD_SEPARATOR)) {
+                    method = entry.getKey().split(METHOD_SEPARATOR)[1];
                 }
                 try {
-                    final Class<?> lolClass = Class.forName(clazz);
+                    final Class<?> detectedClass = Class.forName(clazz);
 
                     if (!method.isEmpty()) {
-                        for (final Method mth : lolClass.getDeclaredMethods()) {
+                        for (final Method mth : detectedClass.getDeclaredMethods()) {
                             if (mth.getName().equals(method)) {
                                 if (!inverted) {
                                     supportStatusClass = entry.getKey();
@@ -97,10 +96,7 @@ public class VersionUtils   {
 
     public enum SupportStatus {
         FULL(true),
-        LIMITED(true),
         DANGEROUS_FORK(false),
-        STUPID_PLUGIN(false),
-        NMS_CLEANROOM(false),
         UNSTABLE(false),
         OUTDATED(false)
         ;
@@ -119,19 +115,5 @@ public class VersionUtils   {
         public boolean isSupported() {
             return supported;
         }
-    }
-
-    /**
-     * Applies an XOR cipher with 0x5A to each character.
-     *
-     * @param  in the string to transform
-     * @return the XOR-transformed string
-     */
-    private static @NotNull String make(@NotNull String in) {
-        final char[] c = in.toCharArray();
-        for (int i = 0; i < c.length; i++) {
-            c[i] ^= 0x5A;
-        }
-        return new String(c);
     }
 }
