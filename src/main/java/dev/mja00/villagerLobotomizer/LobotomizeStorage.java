@@ -48,6 +48,33 @@ import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
+/**
+ * Core villager tracking state machine. Owns the active/inactive set split, the per-villager
+ * scheduler map, the trade-refresh path, the chunk-processing pipeline, and the watchdog
+ * that reconciles any state drift.
+ *
+ * <h2>Threading contract</h2>
+ *
+ * On Folia, the global region thread owns no entity. Direct calls into the Bukkit API
+ * ({@code setAware}, {@code setSilent}, persistent data container writes) from a non-entity
+ * thread will throw {@link IllegalStateException}. To keep the public API safe to call from
+ * any thread, methods that read or mutate a {@link Villager} dispatch through
+ * {@link org.bukkit.entity.Entity#getScheduler()} so the body runs on the villager's owning
+ * thread. The set mutations ({@link #setActive}, {@link #setInactive},
+ * {@link #addVillager}, {@link #removeVillager}, {@link #reEvaluateVillager}) acquire the
+ * {@code stateLock} to keep the active/inactive sets atomic and disjoint.
+ *
+ * <h2>Shutdown</h2>
+ *
+ * {@link #flush(boolean)} cancels all scheduled tasks and snapshots the tracked villagers.
+ * On reload ({@code reloading=true}) each villager is dispatched to its entity scheduler to
+ * wake up; the new storage instance starts empty. On shutdown ({@code reloading=false}) each
+ * villager is dispatched to its entity scheduler to <strong>re-evaluate</strong>: villagers
+ * still trapped stay lobotomized (and the persistent marker is honored), villagers whose
+ * environment opened up since the last check are woken. If the entity scheduler does not run
+ * before the JVM exits (a possibility on Folia), the persistent lobotomized marker, when
+ * enabled, re-lobotomizes the villager on next chunk load.
+ */
 public class LobotomizeStorage {
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
@@ -396,12 +423,13 @@ public class LobotomizeStorage {
 
     /**
      * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
-     * 
+     *
      * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
-     *                  Wake operations are dispatched via each villager's {@code EntityScheduler}, 
+     *                  Wake operations are dispatched via each villager's {@code EntityScheduler},
      *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
-     *                  where the scheduler may not run; in this case, mutations are attempted directly
-     *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
+     *                  where a per-villager re-evaluation is dispatched via the entity scheduler: each
+     *                  villager's current environment is re-checked and the villager is woken or re-
+     *                  lobotomized accordingly.
      */
     public final void flush(boolean reloading) {
         // Prevent new tasks from being scheduled past this point
@@ -410,10 +438,14 @@ public class LobotomizeStorage {
         this.safeCancel(this.chunkProcessingTask);
         this.safeCancel(this.watchdogTask);
 
-        // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
-        // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds, so a
-        // concurrent schedule can't install an orphan task after we clear (it re-checks shuttingDown there).
+        // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds,
+        // so a concurrent schedule can't install an orphan task after we clear (it re-checks
+        // shuttingDown there).
+        // We deliberately do NOT clear activeVillagers/inactiveVillagers on shutdown: the
+        // re-evaluation tasks below read those sets to determine the villager's current state.
+        // Clearing would force the re-eval to either assume a default (and mis-classify villagers
+        // that are still trapped) or accept an extra parameter to remember the prior state.
         List<Villager> toFlush;
         synchronized (this.stateLock) {
             for (ScheduledTask task : this.villagerTasks.values()) {
@@ -427,21 +459,22 @@ public class LobotomizeStorage {
             for (Villager v : this.activeVillagers) {
                 if (!this.inactiveVillagers.contains(v)) toFlush.add(v);
             }
-            this.inactiveVillagers.clear();
-            this.activeVillagers.clear();
+            if (reloading) {
+                // On reload, the new storage instance will start with empty sets; clear the old
+                // sets defensively so any leftover reference to the old storage sees a clean state.
+                this.inactiveVillagers.clear();
+                this.activeVillagers.clear();
+            }
         }
 
-        // On a true shutdown the scheduler may not run, so cross-region (Folia) villagers can't be
-        // reliably woken; warn once. The persistent marker (when enabled) re-tracks them on next
-        // load so the normal check loop can wake them once their chunk is active again.
-        if (!reloading && this.plugin.isFolia() && !toFlush.isEmpty()) {
-            this.logger.info("Some Villagers may remain lobotomized after shutdown until their chunk next loads. "
-                    + "Enable persist-lobotomized-state so they are re-evaluated and woken once their chunk reloads.");
+        if (!reloading && !toFlush.isEmpty()) {
+            this.logger.info("Shutdown: re-evaluating " + toFlush.size()
+                    + " tracked villager(s) on their owning threads. Persistent lobotomized markers will be honored.");
         }
 
         for (Villager villager : toFlush) {
             if (this.plugin.isDebugging()) {
-                this.logger.info("Un-lobotomizing Villager " + villager.getUniqueId());
+                this.logger.info((reloading ? "Waking" : "Re-evaluating") + " villager " + villager.getUniqueId());
             }
 
             if (reloading) {
@@ -455,19 +488,22 @@ public class LobotomizeStorage {
                 continue;
             }
 
+            // Shutdown: dispatch a re-evaluation on the villager's owning thread. The re-eval
+            // checks the current environment and either wakes or re-lobotomizes accordingly.
             try {
-                // During shutdown, try setting directly first since the scheduler might not run.
-                wakeVillager(villager);
-            } catch (IllegalStateException e) {
-                // If we get a thread violation, try using the entity scheduler as a last resort.
-                try {
-                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
-                } catch (Exception schedulerException) {
-                    // If both fail, log warning but don't crash the shutdown
-                    this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
-                }
+                villager.getScheduler().run(this.plugin,
+                        SentryTaskWrapper.wrap((task) -> reEvaluateVillager(villager)), null);
             } catch (Exception e) {
-                this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
+                // If we can't even schedule the re-eval (e.g., the entity scheduler is unavailable
+                // mid-shutdown), fall back to a direct wake so the villager is not left lobotomized
+                // indefinitely. The persistent marker will still re-lobotomize it on next chunk load
+                // if the environment actually warrants it.
+                this.logger.log(java.util.logging.Level.WARNING, "Failed to schedule re-eval for villager " + villager.getUniqueId() + " during shutdown, falling back to wake: " + e.getMessage(), e);
+                try {
+                    wakeVillager(villager);
+                } catch (Exception inner) {
+                    this.logger.log(java.util.logging.Level.WARNING, "Failed to wake villager " + villager.getUniqueId() + " during shutdown fallback: " + inner.getMessage(), inner);
+                }
             }
         }
     }
@@ -483,8 +519,69 @@ public class LobotomizeStorage {
         }
         clearLobotomizedMarker(villager);
     }
-    
-    
+
+    /**
+     * Re-evaluates a tracked villager at shutdown and applies the policy result: wake if the
+     * environment has opened up, re-lobotomize if the villager is still trapped. Runs on the
+     * villager's owning thread via {@code villager.getScheduler()} (dispatched from
+     * {@link #flush(boolean)}). Reads the villager's current set membership under the state
+     * lock and writes the new membership, so a transition between active and inactive is
+     * atomic with respect to other set readers.
+     */
+    private void reEvaluateVillager(@NotNull Villager villager) {
+        if (!villager.isValid() || villager.isDead()) {
+            return;
+        }
+
+        Location villagerLocation = villager.getLocation().add(0.0F, (float) FEET_BLOCK_Y_OFFSET, 0.0F);
+        int blockX = villagerLocation.getBlockX();
+        int blockY = villagerLocation.getBlockY();
+        int blockZ = villagerLocation.getBlockZ();
+
+        // Chunk already unloaded: nothing to evaluate against. The persistent marker (when enabled)
+        // will re-lobotomize on next chunk load; otherwise the villager just stays as it is.
+        if (!villager.getWorld().isChunkLoaded(blockX >> 4, blockZ >> 4)) {
+            return;
+        }
+
+        boolean shouldBeActive = this.shouldBeActive(villager, blockX, blockY, blockZ);
+        boolean isActive = this.activeVillagers.contains(villager);
+        boolean isInactive = this.inactiveVillagers.contains(villager);
+
+        // Defensive: if the villager is no longer tracked (shouldn't happen for a flushed
+        // snapshot), keep its current state.
+        if (!isActive && !isInactive) {
+            return;
+        }
+
+        if (shouldBeActive) {
+            if (isInactive) {
+                // Wake up: the environment opened up between the last check and shutdown.
+                villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
+                clearLobotomizedMarker(villager);
+                setActive(villager);
+            } else {
+                // Already active; just clear any stale marker.
+                clearLobotomizedMarker(villager);
+            }
+        } else if (isActive) {
+            // Still trapped: re-lobotomize.
+            villager.setAware(false);
+            if (this.silentLobotomizedVillagers) {
+                villager.setSilent(true);
+            }
+            if (this.persistLobotomizedState) {
+                villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+            }
+            setInactive(villager);
+        }
+        // If already inactive and still trapped, do nothing: leave the persistent marker as-is.
+    }
+
+
     /**
      * Safely processes and potentially transitions a villager between active and inactive states.
      *

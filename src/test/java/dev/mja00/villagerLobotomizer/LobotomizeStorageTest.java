@@ -152,4 +152,23 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
         assertFalse(v.isAware(),
                 "the scheduled entity-scheduler task should have applied setAware(false)");
     }
+
+    @Test
+    void flushFalse_dispatches_reeval_that_wakes_villager_in_open_space() {
+        Villager v = spawnVillager();
+        plugin.getStorage().addVillager(v);
+        server.getScheduler().performTicks(1);
+        assertTrue(plugin.getStorage().getActive().contains(v),
+                "precondition: v is tracked as active before shutdown");
+
+        plugin.getStorage().flush(false);
+        server.getScheduler().performTicks(1);
+
+        // flush() cleared both sets; the re-eval dispatched via the entity scheduler re-adds
+        // the villager to activeVillagers because the policy says "active" in open space.
+        assertTrue(plugin.getStorage().getActive().contains(v),
+                "the re-eval should have woken a villager in open space and re-added it to the active set");
+        assertFalse(plugin.getStorage().getLobotomized().contains(v),
+                "a woken villager should not be in the lobotomized set");
+    }
 }
