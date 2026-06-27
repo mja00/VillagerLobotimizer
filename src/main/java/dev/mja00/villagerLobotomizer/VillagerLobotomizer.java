@@ -33,7 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
-public final class VillagerLobotomizer extends JavaPlugin {
+public class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
@@ -81,9 +81,13 @@ public final class VillagerLobotomizer extends JavaPlugin {
         this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
         boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
 
-        Metrics metrics = new Metrics(this, 25704);
-
-        this.setupMetrics(metrics);
+        // Metrics must never take down plugin enable; bStats also throws when running unrelocated (tests).
+        try {
+            Metrics metrics = new Metrics(this, 25704);
+            this.setupMetrics(metrics);
+        } catch (Throwable t) {
+            this.getLogger().warning("Failed to initialize metrics: " + t.getMessage());
+        }
 
         // Check to see if plugman (or its fork Plugmanx) is installed. If so send a warning.
         PluginManager pluginManager = this.getServer().getPluginManager();

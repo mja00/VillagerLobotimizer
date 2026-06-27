@@ -1,0 +1,72 @@
+#Configuration version - DO NOT MODIFY MANUALLY
+config-version: 6
+
+#List of names that will always keep villagers active (case-insensitive)
+always-active-names:
+  - "alwaysbrain"
+
+#Interval between trapped checks, in ticks, for active villagers
+check-interval: 150
+
+#Interval between trapped checks, in ticks, for inactive villagers
+inactive-check-interval: 150
+
+#Interval between villager trade restocks, in milliseconds
+restock-interval: 540000
+
+#Range (in milliseconds) before restock-interval to start random restock checks. If set to 0, restocking is not randomized. If equal to or greater than restock-interval, restock will always occur.
+restock-random-range: 0
+
+#Whether to only lobotomize villagers with jobs
+only-lobotomize-villagers-with-professions: false
+
+#Whether to only lobotomize villagers that have been traded at least once
+only-lobotomize-villagers-with-experience: false
+
+#Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
+always-lobotomize-villagers-in-vehicles: false
+
+#Whether to make lobotomized villagers silent. When enabled, villagers will be muted when their AI is disabled.
+silent-lobotomized-villagers: false
+
+#The sound to play when a villager restocks. Leave empty ("") for default sounds.
+restock-sound: ""
+
+#The sound played when a villager is leveled up. Leave empty ("") for no sound.
+level-up-sound: "entity.villager.celebrate"
+
+#Debug mode. Prints debug messages to the console.
+debug: false
+
+#Chunk debug mode. Prints debug messages related to chunks
+chunk-debug: false
+
+#To ignore villagers stuck in doors, set this to true.
+ignore-villagers-stuck-in-doors: false
+
+#To not lobotomize villagers surrounded by non-solid blocks, set this to true.
+ignore-non-solid-blocks: false
+
+#To check if there is a roof above a villager before lobotomizing, set this to true
+check-roof: true
+
+#Create teams for debugging purposes.
+create-debug-teams: false
+
+#Disable the update checker. Kept true for tests to avoid the onEnable HTTP call.
+disable-update-checker: true
+
+#Disable chunk forced Villager updating.
+disable-chunk-villager-updates: false
+
+#Prevent trading with unlobotomized villagers.
+prevent-trading-with-unlobotomized-villagers: false
+
+#Message that is sent to players when they try to trade with an unlobotomized villager. Supports MiniMessage.
+unlobotomized-villager-trade-message: "<red>You cannot trade with unlobotomized villagers!</red> <yellow>This villager needs to be lobotomized first.</yellow>"
+
+#Persist lobotomized state across chunk unloads.
+persist-lobotomized-state: true
+
+#Sentry disabled for tests to avoid network init during MockBukkit.load().
+enable-sentry: false
