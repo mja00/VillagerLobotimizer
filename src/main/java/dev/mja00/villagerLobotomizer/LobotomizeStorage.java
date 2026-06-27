@@ -79,6 +79,13 @@ public class LobotomizeStorage {
     private final ScheduledTask chunkProcessingTask;
     private ScheduledTask watchdogTask;
     private static final long WATCHDOG_INTERVAL_TICKS = 1200L;
+    /**
+     * 0.01 above the villager's floor block, to land on the feet block rather than the floor
+     * block itself when the villager is standing on a partial-block workstation (brewing stand,
+     * lectern, etc.). The Y offset is applied via {@code Location.add(0, FEET_BLOCK_Y_OFFSET, 0)}
+     * before computing the block coordinates passed into the activity policy.
+     */
+    private static final double FEET_BLOCK_Y_OFFSET = 0.51;
     // Guards compound mutations of activeVillagers/inactiveVillagers so a villager
     // is never observable in both sets simultaneously.
     private final Object stateLock = new Object();
@@ -515,7 +522,7 @@ public class LobotomizeStorage {
             return true;
         }
 
-        Location villagerLocation = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        Location villagerLocation = villager.getLocation().add(0.0F, (float) FEET_BLOCK_Y_OFFSET, 0.0F);
         int blockX = villagerLocation.getBlockX();
         int blockY = villagerLocation.getBlockY();
         int blockZ = villagerLocation.getBlockZ();
@@ -881,7 +888,7 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager should be active, {@code false} otherwise.
      */
     private boolean shouldBeActive(Villager villager) {
-        Location loc = villager.getLocation().add(0.0F, 0.51, 0.0F);
+        Location loc = villager.getLocation().add(0.0F, (float) FEET_BLOCK_Y_OFFSET, 0.0F);
         return shouldBeActive(villager, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
     }
 
