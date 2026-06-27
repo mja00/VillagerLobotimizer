@@ -516,10 +516,16 @@ public class VillagerLobotomizer extends JavaPlugin {
         }
 
         int villagers = 0;
-        for (World world : Bukkit.getWorlds()) {
-            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
-                this.storage.addVillager(villager);
-                villagers++;
+        if (this.isFolia) {
+            // On Folia, the main thread owns no region; iterating world entities here is unsafe.
+            // The re-scan happens via EntityAddToWorldEvent as chunks load and via the watchdog.
+            this.getLogger().info("Reload on Folia: villager re-scan happens via EntityAddToWorldEvent and the watchdog.");
+        } else {
+            for (World world : Bukkit.getWorlds()) {
+                for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+                    this.storage.addVillager(villager);
+                    villagers++;
+                }
             }
         }
         return villagers;
