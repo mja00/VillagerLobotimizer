@@ -476,6 +476,17 @@ public class VillagerLobotomizer extends JavaPlugin {
         boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
 
         LobotomizeStorage previousStorage = this.storage;
+        // On Folia, the world-wide entity scan in the reload block is unsafe (main thread
+        // owns no region). Instead, snapshot the old storage's tracked set and re-add those
+        // villagers to the new storage. addVillager is now Folia-safe (the entity mutation
+        // dispatches via villager.getScheduler()), so the registration is correct.
+        java.util.List<org.bukkit.entity.Villager> foliaReloadVillagers = java.util.List.of();
+        if (this.isFolia && previousStorage != null) {
+            java.util.Set<org.bukkit.entity.Villager> tracked = new java.util.LinkedHashSet<>();
+            tracked.addAll(previousStorage.getActive());
+            tracked.addAll(previousStorage.getLobotomized());
+            foliaReloadVillagers = new java.util.ArrayList<>(tracked);
+        }
         LobotomizeStorage newStorage;
         try {
             newStorage = new LobotomizeStorage(this);
@@ -517,9 +528,12 @@ public class VillagerLobotomizer extends JavaPlugin {
 
         int villagers = 0;
         if (this.isFolia) {
-            // On Folia, the main thread owns no region; iterating world entities here is unsafe.
-            // The re-scan happens via EntityAddToWorldEvent as chunks load and via the watchdog.
-            this.getLogger().info("Reload on Folia: villager re-scan happens via EntityAddToWorldEvent and the watchdog.");
+            for (Villager villager : foliaReloadVillagers) {
+                this.storage.addVillager(villager);
+                villagers++;
+            }
+            this.getLogger().info("Reload on Folia: re-registered " + villagers
+                    + " previously tracked villager(s) via entity schedulers.");
         } else {
             for (World world : Bukkit.getWorlds()) {
                 for (Villager villager : world.getEntitiesByClass(Villager.class)) {
