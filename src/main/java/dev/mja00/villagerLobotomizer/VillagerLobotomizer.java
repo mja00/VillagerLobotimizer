@@ -1,9 +1,9 @@
 package dev.mja00.villagerLobotomizer;
 
-import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
 import dev.mja00.villagerLobotomizer.utils.ConfigMigrator;
+import dev.mja00.villagerLobotomizer.utils.ModrinthClient;
 import dev.mja00.villagerLobotomizer.utils.SentryContextProvider;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -24,23 +24,13 @@ import org.bukkit.World;
 import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.scoreboard.Team;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 public class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
     private boolean isFolia;
-    static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
-    static final HttpClient client = HttpClient.newHttpClient();
-    static final Gson gson = new Gson();
     public boolean needsUpdate = false;
     public Team activeVillagersTeam;
     public Team inactiveVillagersTeam;
@@ -312,26 +302,19 @@ public class VillagerLobotomizer extends JavaPlugin {
         this.getLogger().info("Checking for updates...");
         VillagerLobotomizer plugin = this;
         Bukkit.getAsyncScheduler().runNow(this, (task) -> {
-            String responseBody = null;
-            CompletableFuture<HttpResponse<String>> response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+            List<Modrinth.Version> versions;
             try {
-                responseBody = response.thenApply(HttpResponse::body).get(5, TimeUnit.SECONDS);
-            } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
+                versions = ModrinthClient.fetchVersions();
+            } catch (Exception e) {
                 plugin.getLogger().warning("Failed to check for updates: " + e.getMessage());
                 return;
             }
-            if (responseBody == null || responseBody.isEmpty()) {
-                plugin.getLogger().warning("Failed to check for updates: No response from the server");
-                return;
-            }
-            // Parse the version list response
-            List<Modrinth.ModrinthVersion> versions = Modrinth.fromJson(responseBody);
             if (versions == null || versions.isEmpty()) {
                 plugin.getLogger().warning("Failed to check for updates: No versions found");
                 return;
             }
-            Modrinth.ModrinthVersion latestVersion = versions.stream()
-                    .filter(v -> "release".equalsIgnoreCase(v.getVersionType()))
+            Modrinth.Version latestVersion = versions.stream()
+                    .filter(v -> "release".equalsIgnoreCase(v.version_type()))
                     .findFirst()
                     .orElse(null);
             if (latestVersion == null) {
@@ -340,9 +323,9 @@ public class VillagerLobotomizer extends JavaPlugin {
             }
 
 
-            int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.getVersionNumber());
+            int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.version_number());
             if (comparison < 0) {
-                plugin.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
+                plugin.getLogger().info("A new version of VillagerLobotimizer is available! (" + latestVersion.version_number() + ")");
                 plugin.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
                 plugin.needsUpdate = true;
             } else if (comparison > 0) {
