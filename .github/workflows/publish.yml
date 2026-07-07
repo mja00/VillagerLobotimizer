@@ -72,6 +72,26 @@ jobs:
           echo "output<<EOF" >> $GITHUB_OUTPUT
           echo "$output" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+      # CurseForge project 1601723 only accepts legacy type-1 game versions, which CurseForgeGradle
+      # cannot emit, so we upload the same shaded jar via the API directly.
+      - name: Publish to CurseForge
+        env:
+          CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          CURSEFORGE_PROJECT_ID: "1601723"
+          CURSEFORGE_GAME_VERSIONS: "1.21.11,26.1,26.1.1,26.1.2,26.2"
+        run: |
+          version=$(grep -E '^version = ' build.gradle.kts | sed -E 's/version = "(.*)"/\1/')
+          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            export CURSEFORGE_RELEASE_TYPE=release
+            export CURSEFORGE_DISPLAY_NAME="VillagerLobotimizer $version"
+          else
+            export CURSEFORGE_RELEASE_TYPE=beta
+            export CURSEFORGE_DISPLAY_NAME="VillagerLobotimizer $version-snapshot-${GITHUB_SHA::7}"
+          fi
+          export CURSEFORGE_CHANGELOG="$(git log -1 --pretty=%B)"
+          export CURSEFORGE_JAR="$(ls build/libs/VillagerLobotimizer-*.jar | grep -Ev -- '-(sources|javadoc)\.jar$' | head -1)"
+          chmod +x scripts/publish-curseforge.sh
+          ./scripts/publish-curseforge.sh
       - name: Parse publish result
         id: parse-publish-result
         run: |
@@ -98,6 +118,7 @@ jobs:
             ### Downloads
             - 📦 [Hangar](${{ steps.parse-publish-result.outputs.url }})
             - 📦 [Modrinth](${{ steps.parse-publish-result.outputs.modrinth_url }})
+            - 📦 [CurseForge](https://www.curseforge.com/minecraft/bukkit-plugins/villagerlobotomy)
             
             ### What's Changed
             Check the commits since the last release for detailed changes.
@@ -113,6 +134,6 @@ jobs:
           username: Villager Lobotomy
           avatar-url: https://cdn.modrinth.com/data/sQ1MQcd2/16cd6db5088b78b41c29cda8eda940f5390efa08.png
           embed-title: "New VillagerLobotimizer update!"
-          embed-description: "${{ steps.parse-publish-result.outputs.version }} is now available on Hangar and Modrinth! [Hangar](${{ steps.parse-publish-result.outputs.url }}) | [Modrinth](${{ steps.parse-publish-result.outputs.modrinth_url }})"
+          embed-description: "${{ steps.parse-publish-result.outputs.version }} is now available on Hangar, Modrinth, and CurseForge! [Hangar](${{ steps.parse-publish-result.outputs.url }}) | [Modrinth](${{ steps.parse-publish-result.outputs.modrinth_url }}) | [CurseForge](https://www.curseforge.com/minecraft/bukkit-plugins/villagerlobotimizer)"
           embed-thumbnail-url: https://hangarcdn.papermc.io/avatars/project/3678.webp?v=1
           embed-timestamp: "${{ steps.date.outputs.date }}"

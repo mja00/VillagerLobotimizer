@@ -4,7 +4,7 @@
 
 A Minecraft Paper plugin that improves server performance by turning off villagers' AI when they're confined to trading halls.
 
-<a href="https://modrinth.com/plugin/villagerlobotomy" target="_blank" rel="noopener noreferrer"><img alt="modrinth" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg"></a> <a href="https://hangar.papermc.io/mja00/VillagerLobotimizer"><img alt="hangar" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/hangar_vector.svg"></a>
+<a href="https://modrinth.com/plugin/villagerlobotomy" target="_blank" rel="noopener noreferrer"><img alt="modrinth" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg"></a> <a href="https://hangar.papermc.io/mja00/VillagerLobotimizer"><img alt="hangar" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/hangar_vector.svg"></a> <a href="https://www.curseforge.com/minecraft/bukkit-plugins/villagerlobotomy" target="_blank" rel="noopener noreferrer"><img alt="curseforge" height="56" src="https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/curseforge_vector.svg"></a>
 
 ![](https://img.shields.io/bstats/players/25704?color=green?label=Players) ![](https://img.shields.io/bstats/servers/25704?color=green?label=Servers) ![](https://modrinth.roughness.technology/full_villagerlobotomy_downloads.svg)
 
@@ -165,7 +165,7 @@ All error data is anonymized and used solely for debugging purposes.
 
 ## Installation
 
-1. Download the latest release from [Modrinth](https://modrinth.com/plugin/villagerlobotomy) or [Hangar](https://hangar.papermc.io/mja00/VillagerLobotimizer)
+1. Download the latest release from [Modrinth](https://modrinth.com/plugin/villagerlobotomy), [Hangar](https://hangar.papermc.io/mja00/VillagerLobotimizer), or [CurseForge](https://www.curseforge.com/minecraft/bukkit-plugins/villagerlobotimizer)
 2. Place the .jar file in your server's plugins folder
 3. Restart your server or use a plugin manager to load the plugin
 4. Configure the plugin settings in `plugins/VillagerLobotimizer/config.yml` if needed
@@ -203,7 +203,7 @@ This will download a Paper server for Minecraft 1.21.5 and start it with the plu
 
 ### Publishing
 
-You can publish to Hangar and Modrinth using the same shaded artifact built by `shadowJar`.
+You can publish to Hangar, Modrinth, and CurseForge using the same shaded artifact built by `shadowJar`.
 
 - **Hangar**:
 
@@ -227,11 +227,22 @@ You can publish to Hangar and Modrinth using the same shaded artifact built by `
 
   Game versions are published for `1.21.6`, `1.21.7`, and `1.21.8`. Tagged commits publish a Release; otherwise a Snapshot-like Beta with a short git hash suffix.
 
-- **Publish everywhere**:
+- **Publish everywhere** (Hangar + Modrinth):
 
   ```bash
   ./gradlew publishAll
   ```
+
+- **CurseForge**:
+
+  ```bash
+  CURSEFORGE_TOKEN=… \
+  CURSEFORGE_GAME_VERSIONS="1.21.11,26.1,26.1.1,26.1.2,26.2" \
+  CURSEFORGE_JAR="$(ls build/libs/VillagerLobotimizer-*.jar)" \
+  ./scripts/publish-curseforge.sh
+  ```
+
+  CurseForge is published by `scripts/publish-curseforge.sh`, not Gradle: project `1601723` only accepts CurseForge's legacy flat "Minecraft" version list (typeID 1), which the CurseForgeGradle plugin cannot emit. The script resolves those IDs and uploads via the API. Keep `CURSEFORGE_GAME_VERSIONS` in sync with `modrinthGameVersions` in `build.gradle.kts`. In CI the release workflow runs this automatically (Release on a tag, otherwise Beta).
 
 ## Support
 
