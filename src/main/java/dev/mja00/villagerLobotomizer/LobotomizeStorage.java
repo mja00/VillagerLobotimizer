@@ -748,18 +748,22 @@ public class LobotomizeStorage {
 
         // Level the villager up to match its accumulated experience. Gated on day + job site above
         // (mirrors restock); max villager level is 5, which getVillagerLevel already caps.
-        if (needsLevelUp) {
-            int increaseAmount = Math.max(0, expectedLevel - currentLevel);
-            villager.increaseLevel(increaseAmount);
-            if (this.levelUpSound != null) {
-                villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
-            }
-            PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
-            villager.addPotionEffect(regenEffect);
+        try {
+            if (needsLevelUp) {
+                int increaseAmount = Math.max(0, expectedLevel - currentLevel);
+                villager.increaseLevel(increaseAmount);
+                if (this.levelUpSound != null) {
+                    villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+                }
+                PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
+                villager.addPotionEffect(regenEffect);
 
-            if (this.plugin.isDebugging()) {
-                this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
+                if (this.plugin.isDebugging()) {
+                    this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
+                }
             }
+        } catch (IllegalArgumentException e) {
+            this.plugin.getLogger().warning("Failed to level up villager " + villager.getUniqueId() + ": " + e.getMessage());
         }
     }
 
