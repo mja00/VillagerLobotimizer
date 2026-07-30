@@ -1,9 +1,9 @@
 package dev.mja00.villagerLobotomizer;
 
-import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
 import dev.mja00.villagerLobotomizer.utils.ConfigMigrator;
+import dev.mja00.villagerLobotomizer.utils.ModrinthClient;
 import dev.mja00.villagerLobotomizer.utils.SentryContextProvider;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -24,23 +24,13 @@ import org.bukkit.World;
 import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.scoreboard.Team;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 public class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
     private boolean isFolia;
-    static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
-    static final HttpClient client = HttpClient.newHttpClient();
-    static final Gson gson = new Gson();
     public boolean needsUpdate = false;
     public Team activeVillagersTeam;
     public Team inactiveVillagersTeam;
@@ -112,23 +102,14 @@ public class VillagerLobotomizer extends JavaPlugin {
         }
 
         switch (VersionUtils.getServerSupportStatus()) {
-            case NMS_CLEANROOM:
-                this.getLogger().severe("You are running a server that does not properly support Bukkit plugins that rely on internal Mojang code.");
-                break;
             case DANGEROUS_FORK:
                 this.getLogger().severe("You are running a server fork that is known to be extremely dangerous and lead to data loss. It is strongly recommended you switch to a more stable server software like Paper.");
-                break;
-            case STUPID_PLUGIN:
-                this.getLogger().severe("You are using plugins known to cause severe issues with VillagerLobotomy and other plugins.");
                 break;
             case UNSTABLE:
                 this.getLogger().severe("You are running a server that does not properly support Bukkit plugins. Bukkit plugins should not be used with Forge/Fabric mods!");
                 break;
             case OUTDATED:
                 this.getLogger().severe("You are running an unsupported server version!");
-                break;
-            case LIMITED:
-                this.getLogger().info("You are running a server with limited API functionality. Some features may become unavailable.");
                 break;
             case FULL:
                 // Fully supported, no warning needed
@@ -321,26 +302,19 @@ public class VillagerLobotomizer extends JavaPlugin {
         this.getLogger().info("Checking for updates...");
         VillagerLobotomizer plugin = this;
         Bukkit.getAsyncScheduler().runNow(this, (task) -> {
-            String responseBody = null;
-            CompletableFuture<HttpResponse<String>> response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+            List<Modrinth.Version> versions;
             try {
-                responseBody = response.thenApply(HttpResponse::body).get(5, TimeUnit.SECONDS);
-            } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
+                versions = ModrinthClient.fetchVersions();
+            } catch (Exception e) {
                 plugin.getLogger().warning("Failed to check for updates: " + e.getMessage());
                 return;
             }
-            if (responseBody == null || responseBody.isEmpty()) {
-                plugin.getLogger().warning("Failed to check for updates: No response from the server");
-                return;
-            }
-            // Parse the version list response
-            List<Modrinth.ModrinthVersion> versions = Modrinth.fromJson(responseBody);
             if (versions == null || versions.isEmpty()) {
                 plugin.getLogger().warning("Failed to check for updates: No versions found");
                 return;
             }
-            Modrinth.ModrinthVersion latestVersion = versions.stream()
-                    .filter(v -> "release".equalsIgnoreCase(v.getVersionType()))
+            Modrinth.Version latestVersion = versions.stream()
+                    .filter(v -> "release".equalsIgnoreCase(v.version_type()))
                     .findFirst()
                     .orElse(null);
             if (latestVersion == null) {
@@ -349,9 +323,9 @@ public class VillagerLobotomizer extends JavaPlugin {
             }
 
 
-            int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.getVersionNumber());
+            int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.version_number());
             if (comparison < 0) {
-                plugin.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
+                plugin.getLogger().info("A new version of VillagerLobotimizer is available! (" + latestVersion.version_number() + ")");
                 plugin.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
                 plugin.needsUpdate = true;
             } else if (comparison > 0) {
@@ -442,9 +416,16 @@ public class VillagerLobotomizer extends JavaPlugin {
         boolean isDev = Boolean.getBoolean("villagerlobotimizer.dev");
         String environment = isDev ? "development" : "production";
 
+        // Allow operators to redirect sentry events to their own project (or disable entirely with
+        // an empty string) by setting the system property at JVM startup. The default below is the
+        // project's official ingestion endpoint; treat it as public by design.
+        String sentryDsn = System.getProperty(
+                "villagerlobotimizer.sentry.dsn",
+                "https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+
         try {
             Sentry.init(options -> {
-                options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+                options.setDsn(sentryDsn);
                 options.setEnvironment(environment);
                 options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
 
@@ -495,6 +476,17 @@ public class VillagerLobotomizer extends JavaPlugin {
         boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
 
         LobotomizeStorage previousStorage = this.storage;
+        // On Folia, the world-wide entity scan in the reload block is unsafe (main thread
+        // owns no region). Instead, snapshot the old storage's tracked set and re-add those
+        // villagers to the new storage. addVillager is now Folia-safe (the entity mutation
+        // dispatches via villager.getScheduler()), so the registration is correct.
+        java.util.List<org.bukkit.entity.Villager> foliaReloadVillagers = java.util.List.of();
+        if (this.isFolia && previousStorage != null) {
+            java.util.Set<org.bukkit.entity.Villager> tracked = new java.util.LinkedHashSet<>();
+            tracked.addAll(previousStorage.getActive());
+            tracked.addAll(previousStorage.getLobotomized());
+            foliaReloadVillagers = new java.util.ArrayList<>(tracked);
+        }
         LobotomizeStorage newStorage;
         try {
             newStorage = new LobotomizeStorage(this);
@@ -535,10 +527,19 @@ public class VillagerLobotomizer extends JavaPlugin {
         }
 
         int villagers = 0;
-        for (World world : Bukkit.getWorlds()) {
-            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+        if (this.isFolia) {
+            for (Villager villager : foliaReloadVillagers) {
                 this.storage.addVillager(villager);
                 villagers++;
+            }
+            this.getLogger().info("Reload on Folia: re-registered " + villagers
+                    + " previously tracked villager(s) via entity schedulers.");
+        } else {
+            for (World world : Bukkit.getWorlds()) {
+                for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+                    this.storage.addVillager(villager);
+                    villagers++;
+                }
             }
         }
         return villagers;
