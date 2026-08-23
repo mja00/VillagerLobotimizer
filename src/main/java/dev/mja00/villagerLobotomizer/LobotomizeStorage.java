@@ -461,7 +461,6 @@ public class LobotomizeStorage {
         this.safeCancel(this.chunkProcessingTask);
         this.safeCancel(this.watchdogTask);
 
-        // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
         // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds, so a
         // concurrent schedule can't install an orphan task after we clear (it re-checks shuttingDown there).

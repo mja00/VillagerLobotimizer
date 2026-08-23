@@ -61,10 +61,18 @@ class UninstallSweepTest extends MockBukkitTestBase {
         return new UninstallSweep(plugin, store, null, loadedChunksOnly);
     }
 
+    /** Drives the state machine directly, without its scheduled pump. */
     private void pumpUntilFinished(UninstallSweep sweep) {
         for (int i = 0; i < MAX_PUMPS && !sweep.isFinished(); i++) {
             sweep.pumpForTesting();
         }
+        assertTrue(sweep.isFinished(), "sweep should reach a terminal state");
+    }
+
+    /** Drives a sweep through its own scheduled pump, as the server would. */
+    private void runSweep(UninstallSweep sweep) {
+        sweep.start();
+        server.getScheduler().performTicks(MAX_PUMPS);
         assertTrue(sweep.isFinished(), "sweep should reach a terminal state");
     }
 
@@ -76,8 +84,7 @@ class UninstallSweepTest extends MockBukkitTestBase {
         assertFalse(villager.isAware(), "precondition: the villager is lobotomized");
 
         UninstallSweep sweep = newSweep();
-        sweep.start();
-        server.getScheduler().performTicks(20);
+        runSweep(sweep);
 
         assertTrue(villager.isAware(), "the sweep should restore AI");
         assertFalse(villager.getPersistentDataContainer().has(markerKey), "and remove the marker");
@@ -161,8 +168,7 @@ class UninstallSweepTest extends MockBukkitTestBase {
         store.drainNow();
 
         UninstallSweep sweep = newSweep();
-        sweep.start();
-        server.getScheduler().performTicks(20);
+        runSweep(sweep);
 
         assertFalse(plugin.getDataFolder().toPath()
                         .resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME).toFile().exists(),

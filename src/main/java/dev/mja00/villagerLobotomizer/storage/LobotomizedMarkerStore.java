@@ -162,7 +162,8 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
             return;
         }
         this.intents.compute(entityId, (id, current) -> {
-            if (current != null && current.matches(worldId, chunkX, chunkZ) && !current.dirty()) {
+            // Already recorded, or already queued with this same chunk: nothing to do either way.
+            if (current != null && current.matches(worldId, chunkX, chunkZ)) {
                 return current;
             }
             return Intent.pendingUpsert(worldId, chunkX, chunkZ);

@@ -117,6 +117,7 @@ public final class UninstallSweep {
         long now = System.currentTimeMillis();
         this.phaseADeadline = now + PHASE_A_TIMEOUT_MILLIS;
         this.lastChangeAt = now;
+        this.lastProgressAt = now;
         this.pumpTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
                 this.plugin, SentryTaskWrapper.wrap((task) -> pump()), 1L, 1L);
     }
@@ -185,23 +186,27 @@ public final class UninstallSweep {
         if (!done && System.currentTimeMillis() < this.phaseADeadline) {
             return;
         }
+
         // Anything still outstanding is picked up by the row sweep; restore() is idempotent.
+        // Reading the table blocks briefly, which is fine here: it is one small local query during an
+        // operation the admin asked for that is about to force-load chunks anyway.
         this.store.drainNow();
-        buildTargets();
+        buildTargets(readRows());
         this.stage = Stage.SWEEPING_ROWS;
     }
 
-    /** Groups remaining rows by chunk, so a whole trading hall costs one chunk load. */
-    private void buildTargets() {
-        List<MarkedVillager> rows;
+    private @NotNull List<MarkedVillager> readRows() {
         try {
-            rows = this.store.loadAll();
+            return this.store.loadAll();
         } catch (SQLException e) {
             this.plugin.getLogger().log(Level.SEVERE, "Could not read the marker store; "
                     + "villagers in unloaded chunks were not restored.", e);
-            rows = List.of();
+            return List.of();
         }
+    }
 
+    /** Groups remaining rows by chunk, so a whole trading hall costs one chunk load. */
+    private void buildTargets(@NotNull List<MarkedVillager> rows) {
         Map<Long, ChunkTarget> byChunk = new HashMap<>();
         for (MarkedVillager row : rows) {
             if (this.cleared.contains(row.entityId())) {
