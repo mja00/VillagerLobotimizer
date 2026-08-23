@@ -62,6 +62,19 @@ Note `processVillager`'s active branch wakes on every check, not just on transit
 - Sounds: `RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT)` with NamespacedKeys
 - Legacy sounds: Convert via `StringUtils.convertLegacySoundNameFormat()`
 
+### Testing limits (MockBukkit 4.110)
+These throw `UnimplementedOperationException`, which JUnit reports as a **skipped** test rather than a
+failure, so a test that hits one looks green:
+- `BlockMock#isPassable` - so anything reaching `VillagerActivityPolicy` via live blocks is untestable.
+  Test the policy purely (see `policy/VillagerActivityPolicyTest`) and drive storage through
+  `addVillager` with a pre-set marker to skip the geometry.
+- `WorldMock#getChunkAtAsync`, `WorldMock#getPlayersSeeingChunk` - hence `UninstallSweep.ChunkAccessor`.
+- `PaperScheduledTask#cancel` - swallow cancel failures, as `safeCancel` already does.
+
+Also: mock chunks are unloaded by default (`world.loadChunk(x, z)` first, or `processVillager` bails),
+and `ChunkMock#isEntitiesLoaded` just returns `isLoaded()`. Always check the run for `skipped=0`, not
+just `failures=0`.
+
 ### Patterns
 - Early returns, guard clauses
 - Gate debug logs: `plugin.isDebugging()`, `plugin.isChunkDebugging()`
