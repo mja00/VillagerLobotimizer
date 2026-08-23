@@ -1,5 +1,5 @@
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 6
+config-version: 7
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -67,6 +67,9 @@ unlobotomized-villager-trade-message: "<red>You cannot trade with unlobotomized 
 
 #Persist lobotomized state across chunk unloads.
 persist-lobotomized-state: true
+
+#Keep shutdown state by default.
+uninstall: false
 
 #Sentry disabled for tests to avoid network init during MockBukkit.load().
 enable-sentry: false

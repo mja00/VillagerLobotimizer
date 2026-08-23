@@ -334,7 +334,8 @@ public class LobotomizeStorage {
     }
 
     /**
-     * Flushes all tracked villagers from storage, stops their processing tasks, and attempts to un-lobotomize them during shutdown.
+     * Flushes all tracked villagers from storage and stops their processing tasks during shutdown.
+     * Villager state is only restored when {@code uninstall} is enabled in the configuration.
      */
     public final void flush() {
         flush(false);
@@ -358,13 +359,13 @@ public class LobotomizeStorage {
     }
 
     /**
-     * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
+     * Stops tracking all villagers, cancels their scheduled tasks, and optionally restores their
+     * activity state.
      * 
      * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
      *                  Wake operations are dispatched via each villager's {@code EntityScheduler}, 
      *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
-     *                  where the scheduler may not run; in this case, mutations are attempted directly
-     *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
+     *                  where villager state is preserved unless {@code uninstall} is enabled.
      */
     public final void flush(boolean reloading) {
         // Prevent new tasks from being scheduled past this point
@@ -373,7 +374,11 @@ public class LobotomizeStorage {
         this.safeCancel(this.chunkProcessingTask);
         this.safeCancel(this.watchdogTask);
 
-        // Wake all villagers before shutdown so they aren't left lobotomized forever if the plugin is removed
+        // Reloads must restore state before the replacement storage rescans villagers. During a normal
+        // shutdown, preserve the state and PDC marker so villagers can be restored immediately on startup.
+        // Administrators explicitly opt into cleanup before permanently removing the plugin.
+        boolean cleanupVillagerState = reloading || this.plugin.getConfig().getBoolean("uninstall", false);
+
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
         // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds, so a
         // concurrent schedule can't install an orphan task after we clear (it re-checks shuttingDown there).
@@ -385,13 +390,24 @@ public class LobotomizeStorage {
             this.villagerTasks.clear();
             this.villagerTaskIntervals.clear();
 
-            toFlush = new ArrayList<>(this.inactiveVillagers.size() + this.activeVillagers.size());
-            toFlush.addAll(this.inactiveVillagers);
-            for (Villager v : this.activeVillagers) {
-                if (!this.inactiveVillagers.contains(v)) toFlush.add(v);
+            if (cleanupVillagerState) {
+                toFlush = new ArrayList<>(this.inactiveVillagers.size() + this.activeVillagers.size());
+                toFlush.addAll(this.inactiveVillagers);
+                for (Villager v : this.activeVillagers) {
+                    if (!this.inactiveVillagers.contains(v)) toFlush.add(v);
+                }
+            } else {
+                toFlush = Collections.emptyList();
             }
             this.inactiveVillagers.clear();
             this.activeVillagers.clear();
+        }
+
+        if (!cleanupVillagerState) {
+            if (this.plugin.isDebugging()) {
+                this.logger.info("Preserved lobotomized Villager state and markers for the next startup.");
+            }
+            return;
         }
 
         // On a true shutdown the scheduler may not run, so cross-region (Folia) villagers can't be

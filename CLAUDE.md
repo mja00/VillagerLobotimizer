@@ -36,8 +36,8 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 
 **VillagerUtils.java** - Maps: `PROFESSION_TO_STATION`, `PROFESSION_TO_SOUND`. Methods: `isJobSiteNearby()` (3x3x3 box), `shouldRestock()` (PDC+day-time logic)
 
-### Config (read in constructors)
-`check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `disable-chunk-villager-updates`, `persist-lobotomized-state`
+### Config
+`check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `disable-chunk-villager-updates`, `persist-lobotomized-state`. Most behavior config is captured by constructors and refreshed on reload. `uninstall` is read on disable so opt-in villager/PDC cleanup can be enabled immediately before shutdown.
 
 ### PDC Keys
 - `lastRestock` (LONG): Last trade refresh timestamp

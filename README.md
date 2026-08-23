@@ -34,7 +34,7 @@ A Minecraft Paper plugin that improves server performance by turning off village
 
 ```yaml
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 4
+config-version: 7
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -102,6 +102,10 @@ prevent-trading-with-unlobotomized-villagers: false
 #Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
 #This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
 persist-lobotomized-state: true
+
+#Set this to true before permanently uninstalling the plugin. On disable, all tracked villagers will be woken and their persistent lobotomy markers removed.
+#Keep this false during normal operation so lobotomized state survives server restarts.
+uninstall: false
 
 #Enable Sentry error tracking to help developers identify and fix bugs. See "Privacy & Telemetry" section below for details.
 enable-sentry: true
