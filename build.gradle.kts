@@ -33,6 +33,7 @@ dependencies {
     implementation("net.kyori:adventure-text-serializer-plain:4.22.0")
     implementation("org.bstats:bstats-bukkit:3.1.0")
     implementation("io.sentry:sentry:8.28.0")
+    implementation("org.xerial:sqlite-jdbc:3.53.2.1")
     implementation("org.yaml:snakeyaml:2.2")
     // Plain paper-api for tests: MockBukkit ships no paper-api, and paperweight's NMS server is
     // kept off the test classpath (see paperweight block) to avoid a duplicate server impl.
@@ -103,7 +104,11 @@ tasks {
     }
 
     shadowJar {
-        minimize()
+        // sqlite-jdbc resolves classes and its bundled natives at runtime, so minimize would strip
+        // parts of the driver that static analysis cannot see.
+        minimize {
+            exclude(dependency("org.xerial:sqlite-jdbc"))
+        }
 
         archiveClassifier = null
         archiveVersion = project.version.toString()
@@ -112,10 +117,30 @@ tasks {
             include(dependency("org.bstats:bstats-bukkit"))
             include(dependency("org.bstats:bstats-base"))
             include(dependency("io.sentry:sentry"))
+            include(dependency("org.xerial:sqlite-jdbc"))
         }
 
         relocate("org.bstats", "dev.mja00.villagerLobotomizer.bstats")
         relocate("io.sentry", "dev.mja00.villagerLobotomizer.sentry")
+        // org.sqlite is deliberately NOT relocated: the bundled native library has the JNI class
+        // name org/sqlite/core/NativeDB compiled into it, so a renamed package fails to link. The
+        // usual hazard of shading it unrelocated is the JVM-global JDBC registry, which we avoid by
+        // opening connections through SQLiteDataSource and shipping no driver service file.
+        exclude("META-INF/services/java.sql.Driver")
+        exclude("META-INF/native-image/org.xerial/**")
+
+        // sqlite-jdbc bundles a ~1MB native library per platform. Keep only the ones a Paper server
+        // realistically runs on; the rest would triple the download for nothing.
+        exclude("org/sqlite/native/FreeBSD/**")
+        exclude("org/sqlite/native/Linux/arm/**")
+        exclude("org/sqlite/native/Linux/armv6/**")
+        exclude("org/sqlite/native/Linux/armv7/**")
+        exclude("org/sqlite/native/Linux/ppc64/**")
+        exclude("org/sqlite/native/Linux/riscv64/**")
+        exclude("org/sqlite/native/Linux/x86/**")
+        exclude("org/sqlite/native/Linux-Musl/x86/**")
+        exclude("org/sqlite/native/Windows/armv7/**")
+        exclude("org/sqlite/native/Windows/x86/**")
 
         // Optionally include sources for better Sentry source context
         // Set -PincludeSources=true to enable (increases JAR size)

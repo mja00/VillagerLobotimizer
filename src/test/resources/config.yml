@@ -65,7 +65,7 @@ prevent-trading-with-unlobotomized-villagers: false
 #Message that is sent to players when they try to trade with an unlobotomized villager. Supports MiniMessage.
 unlobotomized-villager-trade-message: "<red>You cannot trade with unlobotomized villagers!</red> <yellow>This villager needs to be lobotomized first.</yellow>"
 
-#Persist lobotomized state across chunk unloads.
+#Persist lobotomized state across chunk unloads and restarts.
 persist-lobotomized-state: true
 
 #Sentry disabled for tests to avoid network init during MockBukkit.load().
