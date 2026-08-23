@@ -14,7 +14,6 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
-import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -139,13 +138,17 @@ public final class UninstallSweep {
             }
             this.dispatched.incrementAndGet();
             try {
-                villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> {
+                ScheduledTask scheduled = villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> {
                     try {
                         restore(villager);
                     } finally {
                         this.completed.incrementAndGet();
                     }
                 }), this.completed::incrementAndGet);
+                if (scheduled == null) {
+                    // Entity already gone, so neither callback will fire; do not wait on it.
+                    this.completed.incrementAndGet();
+                }
             } catch (Exception e) {
                 this.completed.incrementAndGet();
                 this.plugin.getLogger().log(Level.WARNING,

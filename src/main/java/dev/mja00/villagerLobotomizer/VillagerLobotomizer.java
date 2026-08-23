@@ -214,7 +214,7 @@ public class VillagerLobotomizer extends JavaPlugin {
     public void onDisable() {
         getLogger().info("Man guess I'll put my tools away now :(");
         if (this.storage != null) {
-            this.storage.flush();
+            this.storage.flush(LobotomizeStorage.FlushMode.SHUTDOWN);
         }
         if (this.markerStore != null) {
             // Drains before closing, so the last few marker changes are not lost.
@@ -602,7 +602,7 @@ public class VillagerLobotomizer extends JavaPlugin {
 
         if (previousStorage != null) {
             // Reload: plugin stays enabled, so dispatch wake work via the entity scheduler (Folia-safe).
-            previousStorage.flush(true);
+            previousStorage.flush(LobotomizeStorage.FlushMode.RELOAD);
         }
         this.storage = newStorage;
 

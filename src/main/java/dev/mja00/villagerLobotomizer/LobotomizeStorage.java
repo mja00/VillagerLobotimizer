@@ -52,6 +52,14 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public class LobotomizeStorage {
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
+    /** Why tracking is being torn down, which decides whether villager state is preserved. */
+    public enum FlushMode {
+        /** Server stopping. State and markers are preserved when persistence is enabled. */
+        SHUTDOWN,
+        /** Config reload. Always wakes and clears, because a replacement storage rescans immediately. */
+        RELOAD
+    }
+
     /** Shared so UninstallSweep can rebuild the key without depending on a live storage instance. */
     public static final String LOBOTOMIZED_KEY = "isLobotomized";
 
@@ -375,7 +383,15 @@ public class LobotomizeStorage {
      * Flushes all tracked villagers from storage, stops their processing tasks, and attempts to un-lobotomize them during shutdown.
      */
     public final void flush() {
-        flush(false);
+        flush(FlushMode.SHUTDOWN);
+    }
+
+    /**
+     * @deprecated use {@link #flush(FlushMode)}; kept because this is public API other plugins may call
+     */
+    @Deprecated
+    public final void flush(boolean reloading) {
+        flush(reloading ? FlushMode.RELOAD : FlushMode.SHUTDOWN);
     }
 
     /**
@@ -437,7 +453,8 @@ public class LobotomizeStorage {
      *                  where the scheduler may not run; in this case, mutations are attempted directly
      *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
      */
-    public final void flush(boolean reloading) {
+    public final void flush(@NotNull FlushMode mode) {
+        boolean reloading = mode == FlushMode.RELOAD;
         // Prevent new tasks from being scheduled past this point
         this.shuttingDown = true;
 
@@ -465,12 +482,22 @@ public class LobotomizeStorage {
             this.activeVillagers.clear();
         }
 
+        // Leave both the no-AI state and the marker in place across a restart, or every trading hall
+        // is un-lobotomized on boot and the lag spike comes back until check-interval elapses.
+        // '/lobotomy uninstall' is what undoes it all when the plugin is being removed for good.
+        if (mode == FlushMode.SHUTDOWN && this.persistLobotomizedState) {
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Preserved lobotomized state for " + toFlush.size() + " villager(s)");
+            }
+            return;
+        }
+
         // On a true shutdown the scheduler may not run, so cross-region (Folia) villagers can't be
-        // reliably woken; warn once. The persistent marker (when enabled) re-tracks them on next
-        // load so the normal check loop can wake them once their chunk is active again.
+        // reliably woken; say so once. Their marker is already gone, so the next check after a reload
+        // wakes them once their chunk is active again.
         if (!reloading && this.plugin.isFolia() && !toFlush.isEmpty()) {
             this.logger.info("Some Villagers may remain lobotomized after shutdown until their chunk next loads. "
-                    + "Enable persist-lobotomized-state so they are re-evaluated and woken once their chunk reloads.");
+                    + "Run '/lobotomy uninstall' before removing the plugin to restore every villager.");
         }
 
         for (Villager villager : toFlush) {

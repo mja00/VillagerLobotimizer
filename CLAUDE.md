@@ -5,9 +5,14 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 ## Commands
 - Build: `./gradlew build`
 - Test Server: `./gradlew runServer`
-- In-game: `/lobotomy info|debug|wake|reload`
+- In-game: `/lobotomy info|debug|wake|reload|uninstall`
 
 ## Architecture
+
+### Shutdown vs uninstall
+`flush(FlushMode.SHUTDOWN)` **preserves** no-AI state and markers when persistence is on, so a restart does not un-lobotomize every trading hall. `FlushMode.RELOAD` still wakes and clears, because the replacement storage rescans immediately. `quiesceForUninstall()` stops everything without touching a villager; `UninstallSweep` owns all entity work from there.
+
+Note `processVillager`'s active branch wakes on every check, not just on transition: a villager tracked active but left asleep would otherwise stay frozen and, with trade prevention on, untradeable.
 
 ### Threading
 - Per-entity tasks via `EntityScheduler` (thread-safe villager operations)
@@ -30,18 +35,22 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 - `BlockClassifier` - Material sets (`impassableRegular`, `impassableTall`, `impassableAll`, `cropBlocks`, `doorBlocks`, `professionBlocks`), built once via `fromServerRegistry()`
 - `BlockSnapshot` (type/passable/solid), `BlockGrid` (coord→snapshot, `null`=unloaded), `VillagerState` (villager properties)
 
-**EntityListener.java** - Events: `EntityAddToWorldEvent`, `EntityRemoveFromWorldEvent`, `BlockBreakEvent/PlaceEvent` (chunk updates), `InventoryOpenEvent` (optional trade prevention via merchant-inventory check)
+**storage/** - `LobotomizedMarkerStore` (SQLite `state.db`) records which villagers carry the PDC marker, so uninstall can reach ones in unloaded chunks. Invariant: **a row exists exactly when the marker is written**. Writes go through a single intent map mutated via `compute()` and drained on an async task every 5s; suppression in both directions keeps steady-state writes near zero. `org.sqlite` is shaded **unrelocated** (the bundled native has `org/sqlite/core/NativeDB` compiled into its JNI bindings) and opened via `SQLiteDataSource`, never `DriverManager`.
 
-**LobotomizeCommand.java** - Brigadier commands registered via `LifecycleEvents.COMMANDS`, permission `lobotomy.command` (op), raycasting for targeting. Wake command clears `isLobotomized` PDC marker.
+**UninstallSweep.java** - `/lobotomy uninstall confirm`: quiesces storage, restores every loaded villager via its `EntityScheduler`, then walks remaining rows chunk-by-chunk (`getChunkAtAsync` with `generate=false`, 8 in flight, `isOwnedByCurrentRegion` guard then a `RegionScheduler` hop) plus a 3x3 second pass for stale coords. Keeps `state.db` and stays enabled if anything is skipped or unresolved; otherwise deletes it and self-disables.
+
+**EntityListener.java** - Events: `EntityAddToWorldEvent`, `EntityRemoveFromWorldEvent`, `EntityRemoveEvent` (drops the tracking row for non-`UNLOAD` causes; `isDead()`/`isValid()` cannot tell death from unload), `BlockBreakEvent/PlaceEvent` (chunk updates), `InventoryOpenEvent` (optional trade prevention via merchant-inventory check)
+
+**LobotomizeCommand.java** - Brigadier commands registered via `LifecycleEvents.COMMANDS`, permission `lobotomy.command` (op), raycasting for targeting. Wake command clears `isLobotomized` PDC marker. `uninstall` requires an explicit `confirm` literal.
 
 **VillagerUtils.java** - Maps: `PROFESSION_TO_STATION`, `PROFESSION_TO_SOUND`. Methods: `isJobSiteNearby()` (3x3x3 box), `shouldRestock()` (PDC+day-time logic)
 
 ### Config (read in constructors)
-`check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `disable-chunk-villager-updates`, `persist-lobotomized-state`
+`check-interval`, `inactive-check-interval`, `restock-interval`, `restock-random-range`, `restock-sound`, `level-up-sound`, `debug`, `chunk-debug`, `create-debug-teams` (Folia-incompatible), `check-roof`, `ignore-non-solid-blocks`, `disable-chunk-villager-updates`, `persist-lobotomized-state` (also gates opening `state.db`; forced off for the session if it cannot be opened)
 
 ### PDC Keys
 - `lastRestock` (LONG): Last trade refresh timestamp
-- `isLobotomized` (BYTE): Persistence marker (when `persist-lobotomized-state: true`)
+- `isLobotomized` (BYTE): Persistence marker (when `persist-lobotomized-state: true`). Survives restarts; mirrored by a row in `state.db`. Only ever written/cleared via `setLobotomizedMarker`/`clearLobotomizedMarker`, which keep the row in sync
 - `lastRestockCheckDayTime` (LONG): Full game time (absolute ticks) at last restock check; used for day-rollover detection
 
 ## Development
