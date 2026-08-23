@@ -39,6 +39,7 @@ import dev.mja00.villagerLobotomizer.policy.BlockGrid;
 import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
 import dev.mja00.villagerLobotomizer.policy.VillagerActivityPolicy;
 import dev.mja00.villagerLobotomizer.policy.VillagerState;
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import dev.mja00.villagerLobotomizer.utils.StringUtils;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
@@ -51,7 +52,11 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 public class LobotomizeStorage {
     private final VillagerLobotomizer plugin;
     private final NamespacedKey key;
+    /** Shared so UninstallSweep can rebuild the key without depending on a live storage instance. */
+    public static final String LOBOTOMIZED_KEY = "isLobotomized";
+
     private final NamespacedKey lobotomizedKey;
+    private final LobotomizedMarkerStore markerStore;
     private final NamespacedKey lastRestockCheckDayTimeKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
@@ -103,7 +108,11 @@ public class LobotomizeStorage {
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
-        this.persistLobotomizedState = plugin.getConfig().getBoolean("persist-lobotomized-state", true);
+        this.markerStore = plugin.getMarkerStore();
+        // Without a row per marker the uninstall sweep cannot find these villagers, so when the state
+        // file is unusable we must not write markers at all.
+        this.persistLobotomizedState = plugin.getConfig().getBoolean("persist-lobotomized-state", true)
+                && this.markerStore != null && this.markerStore.isUsable();
         String soundName = plugin.getConfig().getString("restock-sound", "");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
@@ -177,7 +186,7 @@ public class LobotomizeStorage {
         }
 
         this.key = new NamespacedKey(plugin, "lastRestock");
-        this.lobotomizedKey = new NamespacedKey(plugin, "isLobotomized");
+        this.lobotomizedKey = new NamespacedKey(plugin, LOBOTOMIZED_KEY);
         this.lastRestockCheckDayTimeKey = new NamespacedKey(plugin, "lastRestockCheckDayTime");
         // Use Paper's GlobalRegionScheduler for chunk processing. It never touches entities directly;
         // per-chunk entity access is dispatched to the owning region via getRegionScheduler() (see
@@ -260,6 +269,11 @@ public class LobotomizeStorage {
                 villager.setSilent(true);
             }
             setInactive(villager);
+            // Re-record the row: it may be missing (upgraded install, deleted state file) and the
+            // chunk may have changed since we last saw it.
+            if (this.markerStore != null) {
+                this.markerStore.markerWritten(villager);
+            }
 
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
@@ -339,6 +353,22 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
             }
         }
+        // Outside the guard on purpose: a row can outlive its marker when a chunk never saved, and
+        // clearing one we do not hold is free.
+        if (this.markerStore != null) {
+            this.markerStore.markerCleared(villager.getUniqueId());
+        }
+    }
+
+    /**
+     * Writes the persistent lobotomized marker and records where to find the villager again, so
+     * {@code /lobotomy uninstall} can reach it even from an unloaded chunk.
+     */
+    private void setLobotomizedMarker(@NotNull Villager villager) {
+        villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+        if (this.markerStore != null) {
+            this.markerStore.markerWritten(villager);
+        }
     }
 
     /**
@@ -346,6 +376,39 @@ public class LobotomizeStorage {
      */
     public final void flush() {
         flush(false);
+    }
+
+    /**
+     * Stops all plugin activity and hands back everything that was tracked, without touching a single
+     * villager. Unlike {@link #flush()} this neither wakes villagers nor clears markers, because the
+     * uninstall sweep owns that work and must be the only writer from here on.
+     *
+     * @return every villager that was being tracked when activity stopped
+     */
+    public final @NotNull List<Villager> quiesceForUninstall() {
+        this.shuttingDown = true;
+
+        this.safeCancel(this.chunkProcessingTask);
+        this.safeCancel(this.watchdogTask);
+
+        synchronized (this.stateLock) {
+            for (ScheduledTask task : this.villagerTasks.values()) {
+                this.safeCancel(task);
+            }
+            this.villagerTasks.clear();
+            this.villagerTaskIntervals.clear();
+
+            List<Villager> tracked = new ArrayList<>(this.inactiveVillagers.size() + this.activeVillagers.size());
+            tracked.addAll(this.inactiveVillagers);
+            for (Villager villager : this.activeVillagers) {
+                if (!this.inactiveVillagers.contains(villager)) {
+                    tracked.add(villager);
+                }
+            }
+            this.inactiveVillagers.clear();
+            this.activeVillagers.clear();
+            return tracked;
+        }
     }
 
     /**
@@ -571,7 +634,7 @@ public class LobotomizeStorage {
                     villager.setSilent(true);
                 }
                 if (this.persistLobotomizedState) {
-                    villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                    setLobotomizedMarker(villager);
                     if (this.plugin.isDebugging()) {
                         this.logger.info("[Debug] Set persistent lobotomized marker for " + villager.getUniqueId());
                     }
@@ -590,8 +653,13 @@ public class LobotomizeStorage {
                     villager.setSilent(true);
                 }
                 if (this.persistLobotomizedState) {
-                    villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                    setLobotomizedMarker(villager);
                 }
+            }
+            // A lobotomized villager can still be pushed across a chunk border, which would send the
+            // uninstall sweep to the wrong chunk. The store ignores this when the chunk is unchanged.
+            if (this.persistLobotomizedState && this.markerStore != null) {
+                this.markerStore.markerWritten(villager);
             }
             if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
                 this.plugin.getInactiveVillagersTeam().addEntity(villager);
@@ -633,6 +701,11 @@ public class LobotomizeStorage {
     private void reconcile(@NotNull Villager v) {
         try {
             v.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((t) -> {
+                // Already queued when flush ran: re-asserting a marker now would outlive the
+                // uninstall sweep that just cleared it.
+                if (this.shuttingDown) {
+                    return;
+                }
                 if (!v.isValid() || v.isDead()) {
                     untrack(v);
                     return;
@@ -644,9 +717,7 @@ public class LobotomizeStorage {
                     if (this.silentLobotomizedVillagers) {
                         v.setSilent(false);
                     }
-                    if (this.persistLobotomizedState) {
-                        v.getPersistentDataContainer().remove(this.lobotomizedKey);
-                    }
+                    clearLobotomizedMarker(v);
                 } else {
                     setInactive(v);
                     v.setAware(false);
@@ -654,8 +725,7 @@ public class LobotomizeStorage {
                         v.setSilent(true);
                     }
                     if (this.persistLobotomizedState) {
-                        v.getPersistentDataContainer().set(
-                                this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                        setLobotomizedMarker(v);
                     }
                 }
                 this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()
@@ -866,7 +936,7 @@ public class LobotomizeStorage {
         try {
             Bukkit.getRegionScheduler().run(this.plugin, world, cx, cz, SentryTaskWrapper.wrap((scheduledTask) -> {
                 // Re-check liveness: the region task runs a tick or more after we were scheduled.
-                if (!chunk.isLoaded()) {
+                if (this.shuttingDown || !chunk.isLoaded()) {
                     return;
                 }
                 for (Entity entity : chunk.getEntities()) {

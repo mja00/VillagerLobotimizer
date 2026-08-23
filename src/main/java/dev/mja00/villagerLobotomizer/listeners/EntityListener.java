@@ -12,6 +12,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
@@ -21,6 +22,7 @@ import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 
 import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
@@ -81,6 +83,23 @@ public class EntityListener implements Listener {
             if (this.plugin.isDebugging()) {
                 this.plugin.getLogger().log(Level.INFO, "[Debug] Caught {0} for villager {1} ({2}); The villager should have been removed from the storage", new Object[]{event.getEventName(), event.getEntity(), event.getEntity().getUniqueId()});
             }
+        }
+    }
+
+    /**
+     * Drops the tracking row when the villager itself is gone. {@code isDead()} and {@code isValid()}
+     * are both false for a merely unloaded entity, so the removal cause is the only reliable signal
+     * that the marker died with it. Unloads must keep their row, or the state survives on disk with
+     * nothing recording where to find it.
+     */
+    @EventHandler
+    public final void onEntityRemove(EntityRemoveEvent event) {
+        if (event.getCause() == EntityRemoveEvent.Cause.UNLOAD || !(event.getEntity() instanceof Villager villager)) {
+            return;
+        }
+        LobotomizedMarkerStore store = this.plugin.getMarkerStore();
+        if (store != null) {
+            store.markerCleared(villager.getUniqueId());
         }
     }
 
