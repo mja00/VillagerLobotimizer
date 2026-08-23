@@ -265,6 +265,14 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
             }
         } else {
+            // A villager can load asleep with no valid marker (persistence off, or an unusable state
+            // file); processVillager only wakes on transition, so repair it here instead of leaving it frozen.
+            if (!villager.isAware()) {
+                villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
+            }
             setActive(villager);
 
             if (this.plugin.isDebugging()) {
@@ -532,12 +540,16 @@ public class LobotomizeStorage {
             // Clear any stale marker whenever the villager should be active, not just on transition,
             // so a marker left by a prior persist-enabled run can't re-lobotomize it after a config flip.
             clearLobotomizedMarker(villager);
-            if (!active) {
+            // Wake on every check rather than only on transition: a villager tracked active but asleep
+            // would otherwise never be woken, leaving it frozen and untradeable.
+            if (!villager.isAware()) {
                 // Already running on entity thread, safe to modify villager
                 villager.setAware(true);
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(false);
                 }
+            }
+            if (!active) {
                 setActive(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");
