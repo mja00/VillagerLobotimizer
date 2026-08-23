@@ -417,8 +417,9 @@ public final class UninstallSweep {
                 report(Component.text(this.unresolvedCount + " villager(s) could not be found and were dropped.")
                         .color(NamedTextColor.YELLOW));
             }
-            report(Component.text("Uninstall incomplete, so the state file was kept. "
-                    + "Run '/lobotomy uninstall confirm' again to finish.").color(NamedTextColor.YELLOW));
+            report(Component.text("Uninstall incomplete, so the state file was kept. No villagers are "
+                    + "being tracked until the server restarts: run '/lobotomy uninstall confirm' again to "
+                    + "finish, or restart to resume normal operation.").color(NamedTextColor.YELLOW));
         }
 
         ScheduledTask task = this.pumpTask;

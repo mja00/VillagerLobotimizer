@@ -93,6 +93,20 @@ class LobotomizeStorageFlushTest extends MockBukkitTestBase {
     }
 
     @Test
+    void shutdownWakesVillagersWhenTheStoreDiedMidSession() {
+        load(true);
+        Villager villager = lobotomizedVillager();
+
+        // As the store looks after repeated write failures. Preserving state now would strand
+        // villagers with a marker but no row, which the uninstall sweep could never find.
+        plugin.getMarkerStore().close();
+        plugin.getStorage().flush(LobotomizeStorage.FlushMode.SHUTDOWN);
+
+        assertTrue(villager.isAware(), "an unusable store must fall back to waking villagers");
+        assertFalse(hasMarker(villager), "and leave no marker it cannot track");
+    }
+
+    @Test
     void reloadStillWakesAndClears() {
         load(true);
         Villager villager = lobotomizedVillager();

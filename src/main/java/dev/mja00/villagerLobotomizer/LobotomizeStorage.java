@@ -81,7 +81,7 @@ public class LobotomizeStorage {
     private final boolean lobotomizePassengers;
     private final boolean checkRoof;
     private final boolean silentLobotomizedVillagers;
-    private final boolean persistLobotomizedState;
+    private final boolean persistConfigured;
     private final boolean ignoreStuckInDoors;
     private final VillagerActivityPolicy activityPolicy;
     private Sound restockSound;
@@ -117,10 +117,7 @@ public class LobotomizeStorage {
         this.checkRoof = plugin.getConfig().getBoolean("check-roof");
         this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
         this.markerStore = plugin.getMarkerStore();
-        // Without a row per marker the uninstall sweep cannot find these villagers, so when the state
-        // file is unusable we must not write markers at all.
-        this.persistLobotomizedState = plugin.getConfig().getBoolean("persist-lobotomized-state", true)
-                && this.markerStore != null && this.markerStore.isUsable();
+        this.persistConfigured = plugin.getConfig().getBoolean("persist-lobotomized-state", true);
         String soundName = plugin.getConfig().getString("restock-sound", "");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
@@ -265,7 +262,7 @@ public class LobotomizeStorage {
         }
 
         boolean wasLobotomized = false;
-        if (this.persistLobotomizedState) {
+        if (persistLobotomizedState()) {
             PersistentDataContainer pdc = villager.getPersistentDataContainer();
             wasLobotomized = pdc.has(this.lobotomizedKey, PersistentDataType.BYTE);
         }
@@ -366,6 +363,14 @@ public class LobotomizeStorage {
         if (this.markerStore != null) {
             this.markerStore.markerCleared(villager.getUniqueId());
         }
+    }
+
+    /**
+     * Whether markers may be written right now. Checked live rather than cached at construction: the
+     * store can degrade mid-session, and a marker without a row is invisible to the uninstall sweep.
+     */
+    private boolean persistLobotomizedState() {
+        return this.persistConfigured && this.markerStore != null && this.markerStore.isUsable();
     }
 
     /**
@@ -484,7 +489,7 @@ public class LobotomizeStorage {
         // Leave both the no-AI state and the marker in place across a restart, or every trading hall
         // is un-lobotomized on boot and the lag spike comes back until check-interval elapses.
         // '/lobotomy uninstall' is what undoes it all when the plugin is being removed for good.
-        if (mode == FlushMode.SHUTDOWN && this.persistLobotomizedState) {
+        if (mode == FlushMode.SHUTDOWN && persistLobotomizedState()) {
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Preserved lobotomized state for " + toFlush.size() + " villager(s)");
             }
@@ -659,7 +664,7 @@ public class LobotomizeStorage {
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(true);
                 }
-                if (this.persistLobotomizedState) {
+                if (persistLobotomizedState()) {
                     setLobotomizedMarker(villager);
                     if (this.plugin.isDebugging()) {
                         this.logger.info("[Debug] Set persistent lobotomized marker for " + villager.getUniqueId());
@@ -678,13 +683,13 @@ public class LobotomizeStorage {
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(true);
                 }
-                if (this.persistLobotomizedState) {
+                if (persistLobotomizedState()) {
                     setLobotomizedMarker(villager);
                 }
             }
             // A lobotomized villager can still be pushed across a chunk border, which would send the
             // uninstall sweep to the wrong chunk. The store ignores this when the chunk is unchanged.
-            if (this.persistLobotomizedState && this.markerStore != null) {
+            if (persistLobotomizedState()) {
                 this.markerStore.markerWritten(villager);
             }
             if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
@@ -750,7 +755,7 @@ public class LobotomizeStorage {
                     if (this.silentLobotomizedVillagers) {
                         v.setSilent(true);
                     }
-                    if (this.persistLobotomizedState) {
+                    if (persistLobotomizedState()) {
                         setLobotomizedMarker(v);
                     }
                 }
