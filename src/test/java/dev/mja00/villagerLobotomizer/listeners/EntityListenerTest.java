@@ -85,7 +85,7 @@ class EntityListenerTest extends MockBukkitTestBase {
         server.getPluginManager().callEvent(new ChunkUnloadEvent(villager.getChunk()));
 
         assertTrue(villager.isAware(), "chunk unload should serialize the villager with AI enabled");
-        assertTrue(villager.getPersistentDataContainer().has(marker, PersistentDataType.BYTE),
-                "chunk unload should retain the marker for immediate restoration on load");
+        assertTrue(villager.getPersistentDataContainer().has(marker, PersistentDataType.STRING),
+                "chunk unload should retain and migrate the marker for immediate restoration on load");
     }
 }

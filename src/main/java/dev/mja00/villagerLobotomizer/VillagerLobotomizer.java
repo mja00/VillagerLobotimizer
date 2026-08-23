@@ -15,6 +15,7 @@ import org.bstats.charts.MultiLineChart;
 import org.bstats.charts.SimplePie;
 import org.bstats.charts.SingleLineChart;
 import org.bukkit.Bukkit;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Villager;
 import org.bukkit.plugin.Plugin;
@@ -24,6 +25,8 @@ import org.bukkit.World;
 import org.bukkit.scoreboard.ScoreboardManager;
 import org.bukkit.scoreboard.Team;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -34,6 +37,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class VillagerLobotomizer extends JavaPlugin {
+    private static final String STATE_FILE_NAME = "state.yml";
+    private static final String LOBOTOMY_GENERATION_PATH = "lobotomy-generation";
+    private static final String ACCEPT_LEGACY_MARKERS_PATH = "accept-legacy-markers";
     private boolean debugging = false;
     private boolean chunkDebugging = false;
     private LobotomizeStorage storage;
@@ -48,6 +54,8 @@ public class VillagerLobotomizer extends JavaPlugin {
     private final String inactiveVillagersTeamName = "lobotomy_inactive_villagers";
     private boolean disableChunkVillagerUpdate;
     private boolean sentryEnabled = false;
+    private volatile String lobotomyGeneration;
+    private volatile boolean acceptLegacyLobotomyMarkers;
 
     /**
      * Initializes the plugin, loading configuration, storage, listeners, commands, and debug features.
@@ -56,6 +64,7 @@ public class VillagerLobotomizer extends JavaPlugin {
     public void onEnable() {
         ConfigMigrator migrator = new ConfigMigrator(this);
         migrator.migrateConfig();
+        this.loadLobotomyState();
         boolean disableUpdateCheck = this.getConfig().getBoolean("disable-update-checker", false);
         if (!disableUpdateCheck) {
             this.checkForUpdates();
@@ -214,6 +223,9 @@ public class VillagerLobotomizer extends JavaPlugin {
         if (this.storage != null) {
             this.storage.flush();
         }
+        if (this.getConfig().getBoolean("uninstall", false)) {
+            this.invalidateLobotomyMarkers();
+        }
         // No need to cancel tasks manually - Paper handles this automatically on disable
         // Clean up debug teams (non-Folia only)
         if (!this.isFolia) {
@@ -238,6 +250,57 @@ public class VillagerLobotomizer extends JavaPlugin {
                 this.getLogger().log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
             }
         }
+    }
+
+    /**
+     * Loads the generation used to distinguish current PDC markers from markers invalidated by an
+     * uninstall. Legacy byte markers are accepted until the first uninstall after this upgrade.
+     */
+    private void loadLobotomyState() {
+        File stateFile = new File(this.getDataFolder(), STATE_FILE_NAME);
+        YamlConfiguration state = YamlConfiguration.loadConfiguration(stateFile);
+        String storedGeneration = state.getString(LOBOTOMY_GENERATION_PATH);
+
+        if (storedGeneration == null || storedGeneration.isBlank()) {
+            this.lobotomyGeneration = UUID.randomUUID().toString();
+            this.acceptLegacyLobotomyMarkers = true;
+            this.saveLobotomyState();
+            return;
+        }
+
+        this.lobotomyGeneration = storedGeneration;
+        this.acceptLegacyLobotomyMarkers = state.getBoolean(ACCEPT_LEGACY_MARKERS_PATH, true);
+    }
+
+    /**
+     * Rotates the marker generation so entity data in unloaded chunks is inert if the plugin is
+     * installed again later.
+     */
+    private void invalidateLobotomyMarkers() {
+        this.lobotomyGeneration = UUID.randomUUID().toString();
+        this.acceptLegacyLobotomyMarkers = false;
+        this.saveLobotomyState();
+    }
+
+    private void saveLobotomyState() {
+        YamlConfiguration state = new YamlConfiguration();
+        state.set(LOBOTOMY_GENERATION_PATH, this.lobotomyGeneration);
+        state.set(ACCEPT_LEGACY_MARKERS_PATH, this.acceptLegacyLobotomyMarkers);
+
+        try {
+            state.save(new File(this.getDataFolder(), STATE_FILE_NAME));
+        } catch (IOException e) {
+            this.getLogger().log(java.util.logging.Level.SEVERE,
+                    "Failed to save persistent lobotomy marker state.", e);
+        }
+    }
+
+    String getLobotomyGeneration() {
+        return this.lobotomyGeneration;
+    }
+
+    boolean acceptsLegacyLobotomyMarkers() {
+        return this.acceptLegacyLobotomyMarkers;
     }
 
     /**

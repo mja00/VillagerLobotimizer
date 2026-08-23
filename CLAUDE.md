@@ -41,8 +41,10 @@ Note: The project is misspelled on purpose. You'll need to use VillagerLobotomiz
 
 ### PDC Keys
 - `lastRestock` (LONG): Last trade refresh timestamp
-- `isLobotomized` (BYTE): Persistence marker (when `persist-lobotomized-state: true`)
+- `isLobotomized` (STRING): Installation-generation persistence marker (when `persist-lobotomized-state: true`); legacy BYTE markers are migrated on load
 - `lastRestockCheckDayTime` (LONG): Full game time (absolute ticks) at last restock check; used for day-rollover detection
+
+`state.yml` stores the current marker generation and legacy-marker migration state. Uninstall cleanup rotates the generation so markers belonging to unloaded entities are ignored after a later reinstall.
 
 ## Development
 

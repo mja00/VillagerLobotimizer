@@ -249,8 +249,7 @@ public class LobotomizeStorage {
 
         boolean wasLobotomized = false;
         if (this.persistLobotomizedState) {
-            PersistentDataContainer pdc = villager.getPersistentDataContainer();
-            wasLobotomized = pdc.has(this.lobotomizedKey, PersistentDataType.BYTE);
+            wasLobotomized = hasCurrentLobotomizedMarker(villager);
         }
 
         if (wasLobotomized) {
@@ -341,12 +340,50 @@ public class LobotomizeStorage {
         // previously-enabled config must not survive to re-lobotomize a woken villager if the feature
         // is toggled back on. has() keeps this cheap when there is nothing to remove.
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        if (pdc.has(this.lobotomizedKey, PersistentDataType.BYTE)) {
+        if (pdc.has(this.lobotomizedKey, PersistentDataType.STRING)
+                || pdc.has(this.lobotomizedKey, PersistentDataType.BYTE)) {
             pdc.remove(this.lobotomizedKey);
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
             }
         }
+    }
+
+    /**
+     * Accepts markers from the current installation generation and migrates legacy byte markers.
+     * Markers invalidated by an uninstall are removed instead of being honored on reinstall.
+     */
+    private boolean hasCurrentLobotomizedMarker(@NotNull Villager villager) {
+        PersistentDataContainer pdc = villager.getPersistentDataContainer();
+        String markerGeneration = pdc.get(this.lobotomizedKey, PersistentDataType.STRING);
+        if (markerGeneration != null) {
+            if (markerGeneration.equals(this.plugin.getLobotomyGeneration())) {
+                return true;
+            }
+            pdc.remove(this.lobotomizedKey);
+            if (this.plugin.isDebugging()) {
+                this.logger.info("[Debug] Removed stale lobotomized marker from " + villager.getUniqueId());
+            }
+            return false;
+        }
+
+        if (!pdc.has(this.lobotomizedKey, PersistentDataType.BYTE)) {
+            return false;
+        }
+        if (this.plugin.acceptsLegacyLobotomyMarkers()) {
+            setLobotomizedMarker(villager);
+            return true;
+        }
+
+        pdc.remove(this.lobotomizedKey);
+        return false;
+    }
+
+    private void setLobotomizedMarker(@NotNull Villager villager) {
+        villager.getPersistentDataContainer().set(
+                this.lobotomizedKey,
+                PersistentDataType.STRING,
+                this.plugin.getLobotomyGeneration());
     }
 
     /**
@@ -625,7 +662,7 @@ public class LobotomizeStorage {
                     villager.setSilent(true);
                 }
                 if (this.persistLobotomizedState) {
-                    villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                    setLobotomizedMarker(villager);
                     if (this.plugin.isDebugging()) {
                         this.logger.info("[Debug] Set persistent lobotomized marker for " + villager.getUniqueId());
                     }
@@ -644,7 +681,7 @@ public class LobotomizeStorage {
                     villager.setSilent(true);
                 }
                 if (this.persistLobotomizedState) {
-                    villager.getPersistentDataContainer().set(this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                    setLobotomizedMarker(villager);
                 }
             }
             if (this.plugin.isDebugging() && !this.plugin.isFolia() && this.plugin.getInactiveVillagersTeam() != null) {
@@ -699,7 +736,7 @@ public class LobotomizeStorage {
                         v.setSilent(false);
                     }
                     if (this.persistLobotomizedState) {
-                        v.getPersistentDataContainer().remove(this.lobotomizedKey);
+                        clearLobotomizedMarker(v);
                     }
                 } else {
                     setInactive(v);
@@ -708,8 +745,7 @@ public class LobotomizeStorage {
                         v.setSilent(true);
                     }
                     if (this.persistLobotomizedState) {
-                        v.getPersistentDataContainer().set(
-                                this.lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+                        setLobotomizedMarker(v);
                     }
                 }
                 this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()

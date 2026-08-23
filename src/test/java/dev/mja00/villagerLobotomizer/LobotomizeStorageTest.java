@@ -13,7 +13,9 @@ import org.mockbukkit.mockbukkit.world.WorldMock;
 import java.io.File;
 import java.io.IOException;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LobotomizeStorageTest extends MockBukkitTestBase {
@@ -123,10 +125,49 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
         assertFalse(plugin.getStorage().getLobotomized().contains(villager));
     }
 
+    @Test
+    void uninstallInvalidatesMarkerFromPreviouslyUnloadedVillager() {
+        Villager villager = trackedLobotomizedVillager();
+        String markerGeneration = villager.getPersistentDataContainer().get(
+                lobotomizedKey, PersistentDataType.STRING);
+        plugin.getStorage().prepareVillagerForUnload(villager);
+        plugin.getStorage().removeVillager(villager);
+        plugin.getConfig().set("uninstall", true);
+        plugin.saveConfig();
+
+        server.getPluginManager().disablePlugin(plugin);
+
+        assertEquals(markerGeneration, villager.getPersistentDataContainer().get(
+                lobotomizedKey, PersistentDataType.STRING),
+                "precondition: an unloaded entity marker cannot be removed during shutdown");
+        assertNotEquals(markerGeneration, plugin.getLobotomyGeneration(),
+                "uninstall should rotate the generation so the unloaded marker becomes stale");
+        YamlConfiguration state = YamlConfiguration.loadConfiguration(
+                new File(plugin.getDataFolder(), "state.yml"));
+        assertEquals(plugin.getLobotomyGeneration(), state.getString("lobotomy-generation"),
+                "the rotated generation must survive a later reinstall");
+    }
+
+    @Test
+    void staleGenerationMarkerIsIgnoredOnLaterLoad() {
+        Villager villager = trackedMarkerlessVillager();
+        plugin.getStorage().removeVillager(villager);
+        villager.getPersistentDataContainer().set(
+                lobotomizedKey, PersistentDataType.STRING, "invalidated-generation");
+        villager.setAware(false);
+
+        plugin.getStorage().addVillager(villager);
+
+        assertTrue(villager.isAware(), "stale uninstall markers must not restore NoAI");
+        assertFalse(hasLobotomizedMarker(villager), "stale uninstall markers should be removed on load");
+        assertTrue(plugin.getStorage().getActive().contains(villager));
+    }
+
     private Villager trackedLobotomizedVillager() {
         Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
         plugin.getStorage().removeVillager(villager);
-        villager.getPersistentDataContainer().set(lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+        villager.getPersistentDataContainer().set(
+                lobotomizedKey, PersistentDataType.STRING, plugin.getLobotomyGeneration());
         plugin.getStorage().addVillager(villager);
         return villager;
     }
@@ -138,7 +179,8 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
     }
 
     private boolean hasLobotomizedMarker(Villager villager) {
-        return villager.getPersistentDataContainer().has(lobotomizedKey, PersistentDataType.BYTE);
+        return villager.getPersistentDataContainer().has(lobotomizedKey, PersistentDataType.STRING)
+                || villager.getPersistentDataContainer().has(lobotomizedKey, PersistentDataType.BYTE);
     }
 
     private void writeConfigValue(String key, Object value) throws IOException {
