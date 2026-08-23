@@ -265,6 +265,13 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
             }
         } else {
+            // Repair markerless NoAI left by interrupted or older shutdowns before tracking as active.
+            if (!villager.isAware()) {
+                villager.setAware(true);
+                if (this.silentLobotomizedVillagers) {
+                    villager.setSilent(false);
+                }
+            }
             setActive(villager);
 
             if (this.plugin.isDebugging()) {
@@ -297,13 +304,22 @@ public class LobotomizeStorage {
         boolean removed = wasActive || wasInactive;
 
         if (wasInactive) {
-            // Use Paper's EntityScheduler for thread safety
-            villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((scheduledTask) -> {
-                villager.setAware(true);
-                if (this.silentLobotomizedVillagers) {
-                    villager.setSilent(false);
+            // EntityRemoveFromWorldEvent is delivered on the owning thread, so restore immediately
+            // before the entity scheduler can retire. Keep the marker for immediate restoration if
+            // the entity is later loaded while the plugin is still installed.
+            try {
+                restoreVillagerActivity(villager);
+            } catch (IllegalStateException e) {
+                try {
+                    villager.getScheduler().run(this.plugin,
+                            SentryTaskWrapper.wrap((scheduledTask) -> restoreVillagerActivity(villager)), null);
+                } catch (Exception schedulerException) {
+                    if (this.plugin.isDebugging()) {
+                        this.logger.warning("Failed to restore villager " + villager.getUniqueId()
+                                + " while removing it from tracking: " + schedulerException.getMessage());
+                    }
                 }
-            }), null);
+            }
         }
 
         if (this.plugin.isDebugging()) {
@@ -334,8 +350,27 @@ public class LobotomizeStorage {
     }
 
     /**
+     * Restores an inactive villager before its chunk is serialized and unloaded. The PDC marker is
+     * intentionally retained so a future chunk load can immediately restore the lobotomized state.
+     *
+     * @param villager the villager whose chunk is about to unload
+     */
+    public void prepareVillagerForUnload(@NotNull Villager villager) {
+        if (!this.inactiveVillagers.contains(villager)) {
+            return;
+        }
+
+        try {
+            restoreVillagerActivity(villager);
+        } catch (IllegalStateException e) {
+            this.logger.warning("Failed to restore villager " + villager.getUniqueId()
+                    + " before chunk unload: " + e.getMessage());
+        }
+    }
+
+    /**
      * Flushes all tracked villagers from storage and stops their processing tasks during shutdown.
-     * Villager state is only restored when {@code uninstall} is enabled in the configuration.
+     * Villager state is restored when persistence is disabled or {@code uninstall} is enabled.
      */
     public final void flush() {
         flush(false);
@@ -365,7 +400,7 @@ public class LobotomizeStorage {
      * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
      *                  Wake operations are dispatched via each villager's {@code EntityScheduler}, 
      *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
-     *                  where villager state is preserved unless {@code uninstall} is enabled.
+     *                  where state is only preserved when persistent lobotomized state remains enabled.
      */
     public final void flush(boolean reloading) {
         // Prevent new tasks from being scheduled past this point
@@ -377,7 +412,13 @@ public class LobotomizeStorage {
         // Reloads must restore state before the replacement storage rescans villagers. During a normal
         // shutdown, preserve the state and PDC marker so villagers can be restored immediately on startup.
         // Administrators explicitly opt into cleanup before permanently removing the plugin.
-        boolean cleanupVillagerState = reloading || this.plugin.getConfig().getBoolean("uninstall", false);
+        boolean persistenceConfiguredAtShutdown = this.plugin.getConfig()
+                .getBoolean("persist-lobotomized-state", this.persistLobotomizedState);
+        boolean canPreserveLobotomizedState = this.persistLobotomizedState
+                && persistenceConfiguredAtShutdown;
+        boolean cleanupVillagerState = reloading
+                || this.plugin.getConfig().getBoolean("uninstall", false)
+                || !canPreserveLobotomizedState;
 
         // Take a snapshot of the union under stateLock — covers any villager stuck in both sets.
         // Cancel and clear per-villager tasks under the same lock that scheduleVillagerTask holds, so a
@@ -456,11 +497,18 @@ public class LobotomizeStorage {
      * that owns the entity (call directly only when already on it, otherwise via its EntityScheduler).
      */
     private void wakeVillager(@NotNull Villager villager) {
+        restoreVillagerActivity(villager);
+        clearLobotomizedMarker(villager);
+    }
+
+    /**
+     * Restores vanilla activity without changing the persistent lobotomy marker.
+     */
+    private void restoreVillagerActivity(@NotNull Villager villager) {
         villager.setAware(true);
         if (this.silentLobotomizedVillagers) {
             villager.setSilent(false);
         }
-        clearLobotomizedMarker(villager);
     }
     
     
@@ -548,12 +596,14 @@ public class LobotomizeStorage {
             // Clear any stale marker whenever the villager should be active, not just on transition,
             // so a marker left by a prior persist-enabled run can't re-lobotomize it after a config flip.
             clearLobotomizedMarker(villager);
-            if (!active) {
-                // Already running on entity thread, safe to modify villager
+            if (!villager.isAware()) {
                 villager.setAware(true);
                 if (this.silentLobotomizedVillagers) {
                     villager.setSilent(false);
                 }
+            }
+            if (!active) {
+                // Already running on entity thread, safe to modify villager
                 setActive(villager);
                 if (this.plugin.isDebugging()) {
                     this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");

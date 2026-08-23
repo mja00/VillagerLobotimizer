@@ -53,9 +53,13 @@ public class EntityListener implements Listener {
 
     @EventHandler
     public final void onUnload(ChunkUnloadEvent event) {
-        if (this.plugin.isChunkDebugging()) {
-            for (Entity entity : event.getChunk().getEntities()) {
-                if (entity instanceof Villager) {
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof Villager villager) {
+                // Entity-scheduler work queued from EntityRemoveFromWorldEvent may be retired before
+                // it executes. Restore AI now so the chunk serializes an aware villager while the PDC
+                // marker remains available to re-lobotomize it immediately on the next load.
+                this.plugin.getStorage().prepareVillagerForUnload(villager);
+                if (this.plugin.isChunkDebugging()) {
                     this.plugin.getLogger().log(Level.INFO, "[Debug] Caught {0} for villager {1} ({2}); The villager should have been removed from the storage", new Object[]{event.getEventName(), entity, entity.getUniqueId()});
                 }
             }

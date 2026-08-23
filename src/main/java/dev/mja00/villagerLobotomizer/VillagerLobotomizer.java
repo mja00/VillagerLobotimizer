@@ -203,6 +203,14 @@ public class VillagerLobotomizer extends JavaPlugin {
     @Override
     public void onDisable() {
         getLogger().info("Man guess I'll put my tools away now :(");
+        // Administrators may set uninstall directly in config.yml immediately before stopping.
+        // Refresh the file-backed configuration so shutdown does not rely on a stale cached value.
+        try {
+            this.reloadConfig();
+        } catch (Exception e) {
+            this.getLogger().log(java.util.logging.Level.WARNING,
+                    "Failed to reload config during shutdown; using the last loaded values.", e);
+        }
         if (this.storage != null) {
             this.storage.flush();
         }

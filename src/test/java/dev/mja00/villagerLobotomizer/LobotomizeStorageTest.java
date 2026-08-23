@@ -2,12 +2,16 @@ package dev.mja00.villagerLobotomizer;
 
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Villager;
 import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
+
+import java.io.File;
+import java.io.IOException;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,6 +47,7 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
     void uninstallCleanupWakesVillagerAndRemovesMarker() {
         Villager villager = trackedLobotomizedVillager();
         plugin.getConfig().set("uninstall", true);
+        plugin.saveConfig();
 
         server.getPluginManager().disablePlugin(plugin);
 
@@ -51,15 +56,95 @@ class LobotomizeStorageTest extends MockBukkitTestBase {
                 "uninstall cleanup should remove the persistent lobotomy marker");
     }
 
+    @Test
+    void shutdownReadsUninstallSettingDirectlyFromConfigFile() throws IOException {
+        Villager villager = trackedLobotomizedVillager();
+        writeConfigValue("uninstall", true);
+
+        assertFalse(plugin.getConfig().getBoolean("uninstall"),
+                "precondition: the in-memory config should still contain the stale value");
+
+        server.getPluginManager().disablePlugin(plugin);
+
+        assertTrue(villager.isAware(), "file-backed uninstall cleanup should restore villager AI");
+        assertFalse(hasLobotomizedMarker(villager),
+                "file-backed uninstall cleanup should remove the persistent marker");
+    }
+
+    @Test
+    void shutdownWakesMarkerlessVillagerWhenPersistenceIsDisabled() throws IOException {
+        writeConfigValue("persist-lobotomized-state", false);
+        plugin.reloadPluginState();
+
+        Villager villager = trackedMarkerlessVillager();
+        villager.setAware(false);
+
+        server.getPluginManager().disablePlugin(plugin);
+
+        assertTrue(villager.isAware(),
+                "shutdown must wake villagers when no marker can restore them on startup");
+        assertFalse(hasLobotomizedMarker(villager));
+    }
+
+    @Test
+    void addingMarkerlessVillagerRepairsStaleNoAiState() {
+        Villager villager = trackedMarkerlessVillager();
+        plugin.getStorage().removeVillager(villager);
+        villager.setAware(false);
+
+        plugin.getStorage().addVillager(villager);
+
+        assertTrue(villager.isAware(), "active villagers must not retain a stale NoAI state");
+        assertTrue(plugin.getStorage().getActive().contains(villager));
+    }
+
+    @Test
+    void chunkUnloadPreparationWakesVillagerButRetainsMarker() {
+        Villager villager = trackedLobotomizedVillager();
+
+        plugin.getStorage().prepareVillagerForUnload(villager);
+
+        assertTrue(villager.isAware(), "villager AI should be restored before chunk serialization");
+        assertTrue(hasLobotomizedMarker(villager),
+                "the marker should remain so a later chunk load can immediately restore NoAI");
+        assertTrue(plugin.getStorage().getLobotomized().contains(villager),
+                "unload preparation should not race entity-removal tracking");
+    }
+
+    @Test
+    void removingLobotomizedVillagerRestoresAiImmediately() {
+        Villager villager = trackedLobotomizedVillager();
+
+        plugin.getStorage().removeVillager(villager);
+
+        assertTrue(villager.isAware(), "entity removal should not depend on a next-tick callback");
+        assertTrue(hasLobotomizedMarker(villager),
+                "entity removal should retain the restart marker");
+        assertFalse(plugin.getStorage().getLobotomized().contains(villager));
+    }
+
     private Villager trackedLobotomizedVillager() {
         Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
-        plugin.getStorage().addVillager(villager);
-        villager.setAware(false);
+        plugin.getStorage().removeVillager(villager);
         villager.getPersistentDataContainer().set(lobotomizedKey, PersistentDataType.BYTE, (byte) 1);
+        plugin.getStorage().addVillager(villager);
+        return villager;
+    }
+
+    private Villager trackedMarkerlessVillager() {
+        Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
+        plugin.getStorage().addVillager(villager);
         return villager;
     }
 
     private boolean hasLobotomizedMarker(Villager villager) {
         return villager.getPersistentDataContainer().has(lobotomizedKey, PersistentDataType.BYTE);
+    }
+
+    private void writeConfigValue(String key, Object value) throws IOException {
+        File configFile = new File(plugin.getDataFolder(), "config.yml");
+        YamlConfiguration diskConfig = YamlConfiguration.loadConfiguration(configFile);
+        diskConfig.set(key, value);
+        diskConfig.save(configFile);
     }
 }

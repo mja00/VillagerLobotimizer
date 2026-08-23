@@ -5,7 +5,10 @@ import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 import dev.mja00.villagerLobotomizer.MockBukkitTestBase;
 import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Villager;
+import org.bukkit.event.world.ChunkUnloadEvent;
+import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
@@ -68,5 +71,21 @@ class EntityListenerTest extends MockBukkitTestBase {
         new EntityListener(plugin);
 
         assertTrue(isTracked(villager), "existing villagers should be picked up by the constructor scan");
+    }
+
+    @Test
+    void chunkUnloadRestoresAiBeforeEntityRemoval() {
+        Villager villager = world.spawn(new Location(world, 0, 64, 0), Villager.class);
+        NamespacedKey marker = new NamespacedKey(plugin, "isLobotomized");
+        plugin.getStorage().removeVillager(villager);
+        villager.getPersistentDataContainer().set(marker, PersistentDataType.BYTE, (byte) 1);
+        plugin.getStorage().addVillager(villager);
+        assertFalse(villager.isAware(), "precondition: marked villager is lobotomized");
+
+        server.getPluginManager().callEvent(new ChunkUnloadEvent(villager.getChunk()));
+
+        assertTrue(villager.isAware(), "chunk unload should serialize the villager with AI enabled");
+        assertTrue(villager.getPersistentDataContainer().has(marker, PersistentDataType.BYTE),
+                "chunk unload should retain the marker for immediate restoration on load");
     }
 }
