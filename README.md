@@ -237,7 +237,7 @@ You can publish to Hangar, Modrinth, and CurseForge using the same shaded artifa
 
   ```bash
   CURSEFORGE_TOKEN=… \
-  CURSEFORGE_GAME_VERSIONS="1.21.11,26.1,26.1.1,26.1.2,26.2" \
+  CURSEFORGE_GAME_VERSIONS="1.21.11,26.1,26.1.1,26.1.2,26.2,26.3" \
   CURSEFORGE_JAR="$(ls build/libs/VillagerLobotimizer-*.jar)" \
   ./scripts/publish-curseforge.sh
   ```
