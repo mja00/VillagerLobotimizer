@@ -4,7 +4,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Superseded runs waste metered runner minutes, so only the latest push to a PR builds.
+# Only the latest push to a PR needs to build, so cancel superseded runs.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubicloud-standard-2
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -33,11 +33,9 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x ./gradlew
       
-    - name: Run unit tests
-      run: ./gradlew test --no-daemon
-
-    - name: Build with Gradle
-      run: ./gradlew build --no-daemon -x test
+    # `build` depends on `check`, which depends on `test`, so this covers both in one Gradle invocation.
+    - name: Run unit tests and build
+      run: ./gradlew build --no-daemon
       
     - name: Upload build artifacts
       uses: actions/upload-artifact@v7
