@@ -2,6 +2,12 @@ name: PR Build
 
 on:
   pull_request:
+  workflow_dispatch:
+
+# Superseded runs waste metered runner minutes, so only the latest push to a PR builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2
     
     steps:
     - name: Checkout code

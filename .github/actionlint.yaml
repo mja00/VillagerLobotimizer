@@ -1,0 +1,4 @@
+# Ubicloud runner labels are not in actionlint's built-in list of GitHub-hosted labels.
+self-hosted-runner:
+  labels:
+    - ubicloud-standard-2
