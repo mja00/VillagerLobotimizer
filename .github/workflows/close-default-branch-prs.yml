@@ -16,7 +16,7 @@ jobs:
     if: github.event.pull_request.head.repo.fork == true && github.event.pull_request.head.ref == github.event.pull_request.head.repo.default_branch
     steps:
       - name: Close PR opened from fork's default branch
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
