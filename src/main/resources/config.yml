@@ -17,6 +17,9 @@ restock-interval: 540000
 #Range (in milliseconds) before restock-interval to start random restock checks. If set to 0, restocking is not randomized. If equal to or greater than restock-interval, restock will always occur.
 restock-random-range: 0
 
+#Maximum number of restocks a villager can perform in a single Minecraft day. Matches the vanilla default of 2. Set to 0 to disable restocking entirely.
+max-restocks-per-day: 2
+
 #Whether to only lobotomize villagers with jobs
 only-lobotomize-villagers-with-professions: false
 
@@ -25,6 +28,11 @@ only-lobotomize-villagers-with-experience: false
 
 #Whether to lobotomize villagers in boats/minecarts. Does not apply to villagers riding on non-vehicle entities like horses.
 always-lobotomize-villagers-in-vehicles: false
+
+#Watchdog cadence in ticks. The watchdog scans the active set for villagers that ended up in both
+#the active and lobotomized sets and reconciles them. Default 1200 ticks = 60s. Operators on very
+#large servers can increase this to reduce overhead at the cost of slower dupe-state recovery.
+watchdog-interval: 1200
 
 #Whether to make lobotomized villagers silent. When enabled, villagers will be muted when their AI is disabled.
 silent-lobotomized-villagers: false
@@ -60,6 +68,7 @@ create-debug-teams: false
 disable-update-checker: false
 
 #Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
+#Note: this only suppresses block-change-driven re-evaluation. The per-villager task tick (trade refresh, level-up) still runs.
 disable-chunk-villager-updates: false
 
 #Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.

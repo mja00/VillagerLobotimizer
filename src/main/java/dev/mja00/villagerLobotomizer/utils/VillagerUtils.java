@@ -2,19 +2,16 @@ package dev.mja00.villagerLobotomizer.utils;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Particle;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataContainer;
-import org.bukkit.util.BoundingBox;
 
 public class VillagerUtils {
     public static final Map<Villager.Profession, Material> PROFESSION_TO_STATION;
@@ -145,35 +142,15 @@ public class VillagerUtils {
     }
 
     /**
-     * Spawns a burst of particles around the villager.
-     */
-    public static void addParticlesAroundSelf(Particle particle, Villager villager) {
-        World world = villager.getWorld();
-        double scale = 1.0;
-        BoundingBox boundingBox = villager.getBoundingBox();
-        Random random = new Random();
-
-        for (int i = 0; i < 5; i++) {
-            double d = random.nextGaussian() * 0.02;
-            double d1 = random.nextGaussian() * 0.02;
-            double d2 = random.nextGaussian() * 0.02;
-            double randomY = villager.getY() + boundingBox.getHeight() * random.nextDouble();
-            double xScale = (2.0 * random.nextDouble() - 1.0) * scale;
-            double randomX = villager.getX() + boundingBox.getWidthX() * xScale;
-            double zScale = (2.0 * random.nextDouble() - 1.0) * scale;
-            double randomZ = villager.getZ() + boundingBox.getWidthZ() * zScale;
-            world.spawnParticle(particle, randomX, randomY, randomZ, 1, d, d1, d2, 0.0);
-        }
-    }
-
-    /**
      * Determines if a villager is allowed to restock.
      *
-     * @return true if the villager has fewer than 2 restocks today, false otherwise
+     * @param villager the villager to check
+     * @param maxRestocksPerDay the configured daily restock cap (matches the vanilla default of 2)
+     * @return true if the villager has fewer than {@code maxRestocksPerDay} restocks today, false otherwise
      */
-    public static boolean allowedToRestock(Villager villager) {
+    public static boolean allowedToRestock(Villager villager, int maxRestocksPerDay) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        return numberOfRestocksToday < 2;
+        return numberOfRestocksToday < maxRestocksPerDay;
     }
 
     /**
@@ -181,10 +158,11 @@ public class VillagerUtils {
      *
      * @param villager the villager to check
      * @param lastRestockCheckDayTimeKey the persistent data key for tracking the last full-time check
+     * @param maxRestocksPerDay the configured daily restock cap (matches the vanilla default of 2)
      * @return {@code true} if the villager is allowed to restock today and has recipes requiring restocking,
      *         {@code false} otherwise
      */
-    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey) {
+    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey, int maxRestocksPerDay) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         long fullTime = villager.getWorld().getFullTime();
@@ -200,6 +178,6 @@ public class VillagerUtils {
 
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
 
-        return allowedToRestock(villager) && needsToRestock(villager);
+        return allowedToRestock(villager, maxRestocksPerDay) && needsToRestock(villager);
     }
 }

@@ -68,11 +68,11 @@ class VillagerActivityPolicyTest {
         }
     }
 
-    private VillagerActivityPolicy policy(boolean lobotomizePassengers, boolean onlyProfessions,
+    private VillagerActivityPolicy policy(boolean alwaysLobotomizeVillagersInVehicles, boolean onlyProfessions,
                                           boolean onlyWithExperience, boolean checkRoof,
                                           boolean ignoreStuckInDoors, boolean ignoreNonSolidBlocks,
                                           Set<String> exemptNames) {
-        return new VillagerActivityPolicy(lobotomizePassengers, onlyProfessions, onlyWithExperience,
+        return new VillagerActivityPolicy(alwaysLobotomizeVillagersInVehicles, onlyProfessions, onlyWithExperience,
                 checkRoof, ignoreStuckInDoors, ignoreNonSolidBlocks, exemptNames, classifier());
     }
 
@@ -143,7 +143,7 @@ class VillagerActivityPolicyTest {
     @Test
     void vehicleForcesInactiveOnlyWhenConfigured() {
         VillagerState inVehicle = new VillagerState("", false, false, true, false, 10, 0, 64, 0);
-        // open space, but lobotomizePassengers + in a vehicle -> inactive
+        // open space, but alwaysLobotomizeVillagersInVehicles + in a vehicle -> inactive
         assertFalse(policy(true, false, false, false, false, false, Set.of())
                 .shouldBeActive(inVehicle, new TestGrid()));
         // same state, feature off -> falls through to movement -> active
