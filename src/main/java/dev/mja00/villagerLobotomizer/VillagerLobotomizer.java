@@ -254,15 +254,33 @@ public class VillagerLobotomizer extends JavaPlugin {
         if (!this.getConfig().getBoolean("persist-lobotomized-state", true)) {
             return;
         }
+        if (ensureMarkerStore() == null) {
+            return;
+        }
+        this.getLogger().info("Lobotomized villagers stay lobotomized across restarts. "
+                + "Run '/lobotomy uninstall' before removing the plugin so they get their AI back");
+    }
+
+    /**
+     * Opens and remembers the marker store if it is not open yet, even when persistence is off for
+     * the session: {@code state.db} may still hold rows from an earlier run that the uninstall sweep
+     * must read. Shared by the enable path, the info screen and the sweep so no caller ever sees an
+     * unopened store and no two callers open separate connections.
+     *
+     * @return the store, or {@code null} if it could not be opened
+     */
+    LobotomizedMarkerStore ensureMarkerStore() {
+        if (this.markerStore != null) {
+            return this.markerStore;
+        }
         LobotomizedMarkerStore store = new LobotomizedMarkerStore(
                 this.getDataFolder().toPath().resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME), this.getLogger());
         if (!store.open()) {
-            return;
+            return null;
         }
         store.startDrainTask(this, MARKER_STORE_DRAIN_SECONDS);
         this.markerStore = store;
-        this.getLogger().info("Lobotomized villagers stay lobotomized across restarts. "
-                + "Run '/lobotomy uninstall' before removing the plugin so they get their AI back.");
+        return store;
     }
 
     /**
@@ -288,12 +306,23 @@ public class VillagerLobotomizer extends JavaPlugin {
             return false;
         }
 
-        // An unopened store is a safe no-op stand-in: persistence may be off, in which case there are
-        // no rows to sweep and restoring the loaded villagers is the whole job.
-        LobotomizedMarkerStore store = this.markerStore != null ? this.markerStore
-                : new LobotomizedMarkerStore(
-                        this.getDataFolder().toPath().resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME),
-                        this.getLogger());
+        // An unreadable store must abort the sweep, not degrade into "no rows": rows from an earlier
+        // session exist even when persistence is off now, and sweeping past them reports a false
+        // clean while deleting the only record of villagers still frozen in unloaded chunks.
+        LobotomizedMarkerStore store = ensureMarkerStore();
+        if (store == null) {
+            this.uninstalling.set(false);
+            requester.sendMessage(Component.text("Could not open the state file, so the uninstall cannot "
+                    + "verify every lobotomized villager. Fix the error in console and try again.")
+                    .color(NamedTextColor.RED));
+            return false;
+        }
+        long unrecorded = store.getUnrecordedChangeCount();
+        if (unrecorded > 0) {
+            requester.sendMessage(Component.text(unrecorded + " villager(s) were marked while state writes "
+                    + "were failing and have no record; the sweep may not reach all of them in unloaded chunks.")
+                    .color(NamedTextColor.YELLOW));
+        }
         try {
             new UninstallSweep(this, store, requester instanceof Player player ? player.getUniqueId() : null,
                     UninstallSweep.paperChunkAccessor()).start();

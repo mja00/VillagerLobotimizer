@@ -12,6 +12,7 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -172,6 +173,30 @@ class LobotomizedMarkerStoreTest {
         store.drainNow();
         assertEquals(0, store.pendingCount(), "an unusable store should ignore writes rather than buffer them");
         store.close();
+    }
+
+    @Test
+    void healthyStoreDoesNotReportPendingWritesAsUnrecorded() {
+        LobotomizedMarkerStore store = openStore();
+        try {
+            // Between drains every fresh marker is pending; the uninstall screen must not warn about
+            // "lost" markers on a store that is about to write them.
+            store.markerWritten(UUID.randomUUID(), UUID.randomUUID(), 1, 1);
+            assertEquals(1, store.pendingCount(), "precondition: the write is still buffered");
+            assertEquals(0, store.getUnrecordedChangeCount(),
+                    "a pending write on a healthy store is not a lost marker");
+        } finally {
+            store.close();
+        }
+    }
+
+    @Test
+    void loadAllRefusesAClosedStore() {
+        LobotomizedMarkerStore store = openStore();
+        store.close();
+
+        // Callers use an empty result as "nothing left to restore"; a closed store must not look like that.
+        assertThrows(SQLException.class, store::loadAll);
     }
 
     @Test

@@ -200,6 +200,19 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
         return (int) this.intents.values().stream().filter((intent) -> !intent.absent()).count();
     }
 
+    /**
+     * Markers that will never get a row. Zero while the store is healthy, because pending writes
+     * are drained before anything reads the table; once the store has given up, this is how many
+     * villagers carry a marker the uninstall sweep cannot find in an unloaded chunk.
+     */
+    public int getUnrecordedChangeCount() {
+        if (isUsable()) {
+            return 0;
+        }
+        return (int) this.intents.values().stream()
+                .filter((intent) -> intent.dirty() && !intent.absent()).count();
+    }
+
     /** Applies every buffered change on the calling thread. Must not be called on a region thread. */
     public void drainNow() {
         if (!isUsable()) {
@@ -228,8 +241,14 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
                 // Leave the entries dirty so the next drain retries them.
                 if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                     this.usable = false;
+                    int unrecorded = getUnrecordedChangeCount();
                     this.logger.log(Level.SEVERE, "Giving up on " + this.databaseFile + " after "
-                            + this.consecutiveFailures + " failed writes; lobotomized state will not persist.", e);
+                            + this.consecutiveFailures + " failed writes; lobotomized state will not persist"
+                            + (unrecorded > 0
+                                    ? " and " + unrecorded + " marker(s) were written with no row, so "
+                                    + "'/lobotomy uninstall' cannot reach those villagers in unloaded chunks"
+                                    : "")
+                            + ".", e);
                 } else {
                     this.logger.log(Level.WARNING, "Failed to write lobotomy state; will retry.", e);
                 }
@@ -275,10 +294,11 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
         }
     }
 
+    /** @throws SQLException if the store is closed: an empty list would be mistaken for an empty table */
     public @NotNull List<MarkedVillager> loadAll() throws SQLException {
         synchronized (this.ioLock) {
             if (this.closed || this.connection == null) {
-                return List.of();
+                throw new SQLException(this.databaseFile + " is not open");
             }
             return readAll(this.connection);
         }

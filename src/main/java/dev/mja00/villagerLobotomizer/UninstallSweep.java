@@ -18,7 +18,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.sql.SQLException;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
@@ -28,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -56,7 +56,7 @@ public final class UninstallSweep {
     private static final int MAX_ATTEMPTS = 3;
     private static final long PROGRESS_EVERY_TICKS = 100L;
     private static final long PHASE_A_TIMEOUT_MILLIS = 10_000L;
-    private static final long STALL_TIMEOUT_MILLIS = 30_000L;
+    private static final long DEFAULT_STALL_TIMEOUT_MILLIS = 30_000L;
 
     private enum Stage { RESTORING_LOADED, SWEEPING_ROWS, FINISHED }
 
@@ -76,8 +76,19 @@ public final class UninstallSweep {
     private final Set<UUID> cleared = ConcurrentHashMap.newKeySet();
     /** Rows in worlds that are not loaded right now. Kept, never dropped. */
     private final Set<UUID> skippedIds = ConcurrentHashMap.newKeySet();
+    /**
+     * Villagers a second-pass chunk was swept for without finding them. Not on its own proof of
+     * absence: every one of the 3x3 neighbourhood chunks must have been searched.
+     */
+    private final Set<UUID> confirmedAbsent = ConcurrentHashMap.newKeySet();
+    /**
+     * Villagers with a second-pass chunk that was never searched (retries exhausted, load failed).
+     * Their neighbourhood was not fully covered, so their rows are kept for a re-run.
+     */
+    private final Set<UUID> searchIncomplete = ConcurrentHashMap.newKeySet();
     private final Map<UUID, MarkedVillager> rowsById = new HashMap<>();
-    private final Deque<ChunkTarget> queue = new ArrayDeque<>();
+    /** Concurrent so a region thread can requeue while still holding its in-flight slot. */
+    private final Deque<ChunkTarget> queue = new ConcurrentLinkedDeque<>();
 
     private Stage stage = Stage.RESTORING_LOADED;
     private ScheduledTask pumpTask;
@@ -88,6 +99,7 @@ public final class UninstallSweep {
     private long lastChangeAt;
     private boolean secondPassDone;
     private int unresolvedCount;
+    private long stallTimeoutMillis = DEFAULT_STALL_TIMEOUT_MILLIS;
 
     UninstallSweep(@NotNull VillagerLobotomizer plugin, @NotNull LobotomizedMarkerStore store,
                    @Nullable UUID requesterId, @NotNull ChunkAccessor chunkAccessor) {
@@ -191,23 +203,34 @@ public final class UninstallSweep {
         // Reading the table blocks briefly, which is fine here: it is one small local query during an
         // operation the admin asked for that is about to force-load chunks anyway.
         this.store.drainNow();
-        buildTargets(readRows());
+        List<MarkedVillager> rows = readRows();
+        if (rows == null) {
+            // A failed read must abort: continuing as if there were no rows would end in a "clean"
+            // report over a state file whose contents were never seen.
+            report(Component.text("Could not read the state file; rows for villagers not already "
+                    + "restored were kept.").color(NamedTextColor.YELLOW));
+            finish(false);
+            return;
+        }
+        buildTargets(rows);
+        this.lastChangeAt = System.currentTimeMillis();
         this.stage = Stage.SWEEPING_ROWS;
     }
 
-    private @NotNull List<MarkedVillager> readRows() {
+    /** @return the rows, or {@code null} if the state file could not be read */
+    private @Nullable List<MarkedVillager> readRows() {
         try {
             return this.store.loadAll();
         } catch (SQLException e) {
             this.plugin.getLogger().log(Level.SEVERE, "Could not read the marker store; "
                     + "villagers in unloaded chunks were not restored.", e);
-            return List.of();
+            return null;
         }
     }
 
-    /** Groups remaining rows by chunk, so a whole trading hall costs one chunk load. */
+    /** Groups remaining rows by world and chunk, so a whole trading hall costs one chunk load. */
     private void buildTargets(@NotNull List<MarkedVillager> rows) {
-        Map<Long, ChunkTarget> byChunk = new HashMap<>();
+        Map<ChunkKey, ChunkTarget> byChunk = new HashMap<>();
         for (MarkedVillager row : rows) {
             if (this.cleared.contains(row.entityId())) {
                 continue;
@@ -220,7 +243,9 @@ public final class UninstallSweep {
                 continue;
             }
             this.rowsById.put(row.entityId(), row);
-            byChunk.computeIfAbsent(Chunk.getChunkKey(row.chunkX(), row.chunkZ()),
+            // The world is part of the key: chunk coordinates are only unique within one world, and
+            // merging rows from two worlds would sweep one of them against the wrong world's chunk.
+            byChunk.computeIfAbsent(new ChunkKey(world.getUID(), row.chunkX(), row.chunkZ()),
                     (key) -> new ChunkTarget(world, row.chunkX(), row.chunkZ())).villagerIds.add(row.entityId());
         }
 
@@ -257,52 +282,67 @@ public final class UninstallSweep {
         finish(true);
     }
 
+    /**
+     * The in-flight slot is released only once the target has settled (swept, absent, requeued or
+     * abandoned). Releasing it earlier lets the pump see an empty queue with nothing in flight and
+     * finish while a hand-off or requeue is still pending, which is how a living villager gets
+     * confirmed absent by its neighbours before its own chunk was ever searched.
+     */
     private void requestChunk(@NotNull ChunkTarget target) {
         try {
             this.chunkAccessor.withChunk(target.world, target.chunkX, target.chunkZ, (chunk) -> {
-                try {
-                    if (chunk == null) {
-                        // generate=false and nothing on disk. Leave these outstanding: the second pass
-                        // may still find them in a neighbouring chunk.
-                        return;
+                if (chunk == null) {
+                    // generate=false and nothing on disk, so nothing can be here. Only the second pass
+                    // may treat that as absence: a first-pass miss may just be a stale recorded chunk.
+                    if (target.secondPass) {
+                        this.confirmedAbsent.addAll(target.villagerIds);
                     }
-                    if (Bukkit.isOwnedByCurrentRegion(target.world, target.chunkX, target.chunkZ)) {
-                        sweepChunk(target, chunk);
-                        return;
-                    }
-                    // Folia's thread confinement for this callback is undocumented, so hand off to the
-                    // scheduler that is documented to own the chunk rather than assume.
-                    Bukkit.getRegionScheduler().execute(this.plugin, target.world, target.chunkX, target.chunkZ, () -> {
-                        if (!target.world.isChunkLoaded(target.chunkX, target.chunkZ)) {
-                            requeue(target);
-                            return;
-                        }
-                        sweepChunk(target, target.world.getChunkAt(target.chunkX, target.chunkZ));
-                    });
-                } finally {
                     this.inFlight.decrementAndGet();
+                    return;
+                }
+                if (Bukkit.isOwnedByCurrentRegion(target.world, target.chunkX, target.chunkZ)) {
+                    settle(target, chunk);
+                    return;
+                }
+                // Folia's thread confinement for this callback is undocumented, so hand off to the
+                // scheduler that is documented to own the chunk rather than assume.
+                try {
+                    Bukkit.getRegionScheduler().execute(this.plugin, target.world, target.chunkX, target.chunkZ,
+                            () -> settle(target, target.world.isChunkLoaded(target.chunkX, target.chunkZ)
+                                    ? target.world.getChunkAt(target.chunkX, target.chunkZ) : null));
+                } catch (Exception e) {
+                    abandon(target, e);
                 }
             });
         } catch (Exception e) {
+            abandon(target, e);
+        }
+    }
+
+    /** Sweeps or requeues on the owning thread, then releases the in-flight slot. */
+    private void settle(@NotNull ChunkTarget target, @Nullable Chunk chunk) {
+        try {
+            if (chunk == null || !chunk.isEntitiesLoaded()) {
+                // Unloaded again, or getEntities() would return an empty array until the entity
+                // sections load, which would look like "no villagers here" and silently under-clean.
+                requeue(target);
+                return;
+            }
+            sweepChunk(target, chunk);
+        } finally {
             this.inFlight.decrementAndGet();
-            this.plugin.getLogger().log(Level.WARNING, "Could not load chunk "
-                    + target.chunkX + "," + target.chunkZ + " in " + target.world.getName(), e);
         }
     }
 
     private void sweepChunk(@NotNull ChunkTarget target, @NotNull Chunk chunk) {
-        if (!chunk.isEntitiesLoaded()) {
-            // getEntities() returns an empty array until the entity sections load, which would look
-            // like "no villagers here" and silently under-clean.
-            requeue(target);
-            return;
-        }
-
         Set<UUID> wanted = new HashSet<>(target.villagerIds);
         for (Entity entity : chunk.getEntities()) {
             if (entity instanceof Villager villager && wanted.remove(villager.getUniqueId())) {
                 restore(villager);
             }
+        }
+        if (target.secondPass) {
+            this.confirmedAbsent.addAll(wanted);
         }
         this.chunksSwept.incrementAndGet();
         this.lastChangeAt = System.currentTimeMillis();
@@ -310,10 +350,24 @@ public final class UninstallSweep {
 
     private void requeue(@NotNull ChunkTarget target) {
         if (++target.attempts >= MAX_ATTEMPTS) {
-            // Out of retries; whatever is still outstanding is reported at the end.
+            giveUp(target);
             return;
         }
-        Bukkit.getGlobalRegionScheduler().execute(this.plugin, () -> this.queue.add(target));
+        this.queue.add(target);
+    }
+
+    private void abandon(@NotNull ChunkTarget target, @NotNull Exception cause) {
+        this.plugin.getLogger().log(Level.WARNING, "Could not load chunk "
+                + target.chunkX + "," + target.chunkZ + " in " + target.world.getName(), cause);
+        giveUp(target);
+        this.inFlight.decrementAndGet();
+    }
+
+    /** A chunk that was never searched: its second-pass villagers cannot be confirmed absent. */
+    private void giveUp(@NotNull ChunkTarget target) {
+        if (target.secondPass) {
+            this.searchIncomplete.addAll(target.villagerIds);
+        }
     }
 
     /** Retries the 3x3 neighbourhood for villagers that were not in their recorded chunk. */
@@ -323,7 +377,7 @@ public final class UninstallSweep {
             return;
         }
 
-        Map<Long, ChunkTarget> byChunk = new HashMap<>();
+        Map<ChunkKey, ChunkTarget> byChunk = new HashMap<>();
         for (UUID entityId : stillMissing) {
             MarkedVillager row = this.rowsById.get(entityId);
             if (row == null) {
@@ -337,8 +391,10 @@ public final class UninstallSweep {
                 for (int dz = -1; dz <= 1; dz++) {
                     int chunkX = row.chunkX() + dx;
                     int chunkZ = row.chunkZ() + dz;
-                    byChunk.computeIfAbsent(Chunk.getChunkKey(chunkX, chunkZ),
-                            (key) -> new ChunkTarget(world, chunkX, chunkZ)).villagerIds.add(entityId);
+                    ChunkTarget target = byChunk.computeIfAbsent(
+                            new ChunkKey(world.getUID(), chunkX, chunkZ),
+                            (key) -> new ChunkTarget(world, chunkX, chunkZ, true));
+                    target.villagerIds.add(entityId);
                 }
             }
         }
@@ -360,7 +416,7 @@ public final class UninstallSweep {
             this.lastChangeAt = System.currentTimeMillis();
             return;
         }
-        if (System.currentTimeMillis() - this.lastChangeAt > STALL_TIMEOUT_MILLIS) {
+        if (System.currentTimeMillis() - this.lastChangeAt >= this.stallTimeoutMillis) {
             this.plugin.getLogger().warning("Uninstall stalled waiting on chunk loads; stopping here.");
             finish(false);
         }
@@ -385,11 +441,22 @@ public final class UninstallSweep {
      */
     private void finish(boolean completedNormally) {
         this.stage = Stage.FINISHED;
-        // Whatever is left could not be found: dead, converted, or its region file is gone. Drop the
-        // rows so a re-run does not chase them forever, but report how many.
-        Set<UUID> unresolvedIds = outstanding();
-        this.unresolvedCount = unresolvedIds.size();
-        this.cleared.addAll(unresolvedIds);
+        // Only drop rows for villagers whose whole 3x3 neighbourhood was searched without finding
+        // them: the entity is gone (dead, converted, region deleted). Anything less than that — a
+        // stalled load, a chunk whose entity sections never arrived, an aborted run — keeps its row
+        // so the advertised re-run can retry it. A stale dead row costs one extra chunk visit;
+        // deleting a living villager's only record is the unrecoverable error.
+        Set<UUID> outstandingIds = outstanding();
+        Set<UUID> droppable = new HashSet<>(outstandingIds);
+        droppable.retainAll(this.confirmedAbsent);
+        droppable.removeAll(this.searchIncomplete);
+        if (!completedNormally) {
+            droppable.clear();
+        }
+        Set<UUID> kept = new HashSet<>(outstandingIds);
+        kept.removeAll(droppable);
+        this.cleared.addAll(droppable);
+        this.unresolvedCount = droppable.size();
 
         try {
             this.store.deleteNow(this.cleared);
@@ -398,11 +465,16 @@ public final class UninstallSweep {
         }
         this.store.drainNow();
 
-        int outstanding = this.skippedIds.size() + this.unresolvedCount;
-        boolean clean = completedNormally && outstanding == 0;
+        // Dropped rows were fully searched for, so they leave nothing behind; only rows still on
+        // disk make the run incomplete.
+        boolean clean = completedNormally && this.skippedIds.isEmpty() && kept.isEmpty();
 
-        report(Component.text("Restored ").append(Component.text(this.restored.get()).color(NamedTextColor.GREEN))
+        report(Component.text("Restored ").append(Component.text(String.valueOf(this.restored.get())).color(NamedTextColor.GREEN))
                 .append(Component.text(" villager(s) across " + this.chunksSwept.get() + " chunk(s).")));
+        if (this.unresolvedCount > 0) {
+            report(Component.text(this.unresolvedCount + " villager(s) no longer exist; their stale rows were dropped.")
+                    .color(NamedTextColor.YELLOW));
+        }
 
         if (clean) {
             this.store.deleteDatabaseFiles();
@@ -413,9 +485,9 @@ public final class UninstallSweep {
                 report(Component.text(this.skippedIds.size() + " villager(s) are in worlds that are not loaded.")
                         .color(NamedTextColor.YELLOW));
             }
-            if (this.unresolvedCount > 0) {
-                report(Component.text(this.unresolvedCount + " villager(s) could not be found and were dropped.")
-                        .color(NamedTextColor.YELLOW));
+            if (!kept.isEmpty()) {
+                report(Component.text(kept.size() + " villager(s) were not reached before the sweep stopped; "
+                        + "their rows were kept so a re-run can retry them.").color(NamedTextColor.YELLOW));
             }
             report(Component.text("Uninstall incomplete, so the state file was kept. No villagers are "
                     + "being tracked until the server restarts: run '/lobotomy uninstall confirm' again to "
@@ -456,6 +528,11 @@ public final class UninstallSweep {
         pump();
     }
 
+    /** Test hook: a stall cannot otherwise be provoked without waiting out the real timeout. */
+    void setStallTimeoutForTesting(long millis) {
+        this.stallTimeoutMillis = millis;
+    }
+
     int getRestoredCount() {
         return this.restored.get();
     }
@@ -472,17 +549,28 @@ public final class UninstallSweep {
         return this.stage == Stage.FINISHED;
     }
 
+    /** Chunk coordinates plus the world they belong to; coordinates alone are not unique. */
+    private record ChunkKey(UUID worldId, int chunkX, int chunkZ) {
+    }
+
     private static final class ChunkTarget {
         private final World world;
         private final int chunkX;
         private final int chunkZ;
+        /** True for the 3x3 neighbourhood pass, whose misses may be confirmed as absent. */
+        private final boolean secondPass;
         private final List<UUID> villagerIds = new ArrayList<>();
         private int attempts;
 
         private ChunkTarget(World world, int chunkX, int chunkZ) {
+            this(world, chunkX, chunkZ, false);
+        }
+
+        private ChunkTarget(World world, int chunkX, int chunkZ, boolean secondPass) {
             this.world = world;
             this.chunkX = chunkX;
             this.chunkZ = chunkZ;
+            this.secondPass = secondPass;
         }
     }
 }

@@ -229,13 +229,25 @@ public class LobotomizeCommand {
      */
     private int uninstallCommand(CommandSourceStack source) {
         CommandSender sender = source.getSender();
-        LobotomizedMarkerStore store = this.plugin.getMarkerStore();
-        int tracked = store == null ? 0 : store.getKnownRowCount();
+        // Open the state file even when persistence is off: rows from an earlier session decide what
+        // the sweep will actually reach, so reporting 0 over an unreadable file would mislead.
+        LobotomizedMarkerStore store = this.plugin.ensureMarkerStore();
 
         sender.sendMessage(Component.text("This restores AI to every villager the plugin has lobotomized, "
                 + "removes its data from them, then disables the plugin.").color(NamedTextColor.YELLOW));
-        sender.sendMessage(Component.text("Villagers still marked: ")
-                .append(Component.text(String.valueOf(tracked)).color(NamedTextColor.GREEN)));
+        if (store == null) {
+            sender.sendMessage(Component.text("Villagers still marked: unknown — the state file could not "
+                    + "be opened. Check the console before confirming.").color(NamedTextColor.RED));
+        } else {
+            sender.sendMessage(Component.text("Villagers still marked: ")
+                    .append(Component.text(String.valueOf(store.getKnownRowCount())).color(NamedTextColor.GREEN)));
+            long unrecorded = store.getUnrecordedChangeCount();
+            if (unrecorded > 0) {
+                sender.sendMessage(Component.text(unrecorded + " of those were marked while state writes "
+                        + "were failing and may have no record; the sweep may not reach all of them.")
+                        .color(NamedTextColor.YELLOW));
+            }
+        }
         sender.sendMessage(Component.text("Chunks will be loaded to reach villagers that are not in memory, "
                 + "which also fires other plugins' chunk load handlers.").color(NamedTextColor.YELLOW));
         if (this.plugin.getConfig().getBoolean("prevent-trading-with-unlobotomized-villagers")) {
