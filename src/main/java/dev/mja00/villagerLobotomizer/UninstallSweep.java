@@ -489,9 +489,9 @@ public final class UninstallSweep {
                 report(Component.text(kept.size() + " villager(s) were not reached before the sweep stopped; "
                         + "their rows were kept so a re-run can retry them.").color(NamedTextColor.YELLOW));
             }
-            report(Component.text("Uninstall incomplete, so the state file was kept. No villagers are "
-                    + "being tracked until the server restarts: run '/lobotomy uninstall confirm' again to "
-                    + "finish, or restart to resume normal operation.").color(NamedTextColor.YELLOW));
+            report(Component.text("Uninstall incomplete, so the state file was kept. Villager tracking is "
+                    + "paused: run '/lobotomy uninstall confirm' again to finish, or '/lobotomy reload' "
+                    + "(or restart) to resume normal operation.").color(NamedTextColor.YELLOW));
         }
 
         ScheduledTask task = this.pumpTask;

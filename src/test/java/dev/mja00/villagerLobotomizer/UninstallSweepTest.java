@@ -196,10 +196,15 @@ class UninstallSweepTest extends MockBukkitTestBase {
         pumpUntilFinished(sweep);
         server.getScheduler().performTicks(5);
 
-        assertTrue(plugin.getDataFolder().toPath()
-                        .resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME).toFile().exists(),
-                "an incomplete sweep must keep the only record of what is left");
+        assertTrue(stateFileExists(), "an incomplete sweep must keep the only record of what is left");
         assertTrue(plugin.isEnabled(), "and stay enabled so the command can be re-run");
+
+        // The sweep quiesced storage; the advertised way back to normal operation is a reload.
+        assertTrue(plugin.reloadPluginState() >= 0, "reload must be accepted once the sweep has stopped");
+        Villager villager = markedVillager();
+        assertTrue(plugin.getStorage().getActive().contains(villager)
+                        || plugin.getStorage().getLobotomized().contains(villager),
+                "the rebuilt storage tracks villagers again");
     }
 
     @Test
