@@ -16,6 +16,7 @@ permissions:
       lobotomy.command.wake: true
       lobotomy.command.reload: true
       lobotomy.command.config: true
+      lobotomy.command.uninstall: true
   lobotomy.command.info:
     description: "Allows viewing villager statistics"
     default: op
@@ -30,4 +31,7 @@ permissions:
     default: op
   lobotomy.command.config:
     description: "Allows viewing and modifying config values"
+    default: op
+  lobotomy.command.uninstall:
+    description: "Allows restoring every lobotomized villager and disabling the plugin"
     default: op

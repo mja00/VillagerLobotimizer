@@ -3,8 +3,10 @@ package dev.mja00.villagerLobotomizer;
 import com.google.gson.Gson;
 import dev.mja00.villagerLobotomizer.listeners.EntityListener;
 import dev.mja00.villagerLobotomizer.objects.Modrinth;
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import dev.mja00.villagerLobotomizer.utils.ConfigMigrator;
 import dev.mja00.villagerLobotomizer.utils.SentryContextProvider;
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import io.sentry.Sentry;
@@ -15,7 +17,9 @@ import org.bstats.charts.MultiLineChart;
 import org.bstats.charts.SimplePie;
 import org.bstats.charts.SingleLineChart;
 import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
@@ -31,6 +35,7 @@ import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 
 public class VillagerLobotomizer extends JavaPlugin {
@@ -47,7 +52,11 @@ public class VillagerLobotomizer extends JavaPlugin {
     private final String activeVillagersTeamName = "lobotomy_active_villagers";
     private final String inactiveVillagersTeamName = "lobotomy_inactive_villagers";
     private boolean disableChunkVillagerUpdate;
+    /** How often buffered marker changes are written; short enough that a crash loses little. */
+    private static final long MARKER_STORE_DRAIN_SECONDS = 5L;
     private boolean sentryEnabled = false;
+    private LobotomizedMarkerStore markerStore;
+    private final AtomicBoolean uninstalling = new AtomicBoolean();
 
     /**
      * Initializes the plugin, loading configuration, storage, listeners, commands, and debug features.
@@ -56,6 +65,7 @@ public class VillagerLobotomizer extends JavaPlugin {
     public void onEnable() {
         ConfigMigrator migrator = new ConfigMigrator(this);
         migrator.migrateConfig();
+        this.openMarkerStore();
         boolean disableUpdateCheck = this.getConfig().getBoolean("disable-update-checker", false);
         if (!disableUpdateCheck) {
             this.checkForUpdates();
@@ -70,16 +80,19 @@ public class VillagerLobotomizer extends JavaPlugin {
         // Initialize Sentry to match config (also handles enable/disable transitions on reload)
         this.applySentryConfig();
 
+        // Read before storage and the listener exist: both log through isDebugging() while adopting
+        // villagers in already-loaded chunks, which would otherwise be silent on boot.
+        this.debugging = this.getConfig().getBoolean("debug");
+        this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
+        this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
+        boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
+
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);
         this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, command -> {
             command.registrar().register(lobotomizeCommand.createCommand("lobotomy"));
         });
-        this.debugging = this.getConfig().getBoolean("debug");
-        this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
-        this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
-        boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
 
         // Metrics must never take down plugin enable; bStats throws IllegalStateException when running
         // unrelocated (tests) and a LinkageError if shaded wrong. Don't catch fatal Errors like OOM.
@@ -204,7 +217,11 @@ public class VillagerLobotomizer extends JavaPlugin {
     public void onDisable() {
         getLogger().info("Man guess I'll put my tools away now :(");
         if (this.storage != null) {
-            this.storage.flush();
+            this.storage.flush(LobotomizeStorage.FlushMode.SHUTDOWN);
+        }
+        if (this.markerStore != null) {
+            // Drains before closing, so the last few marker changes are not lost.
+            this.markerStore.close();
         }
         // No need to cancel tasks manually - Paper handles this automatically on disable
         // Clean up debug teams (non-Folia only)
@@ -230,6 +247,108 @@ public class VillagerLobotomizer extends JavaPlugin {
                 this.getLogger().log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
             }
         }
+    }
+
+    /**
+     * Opens the marker store when persistence is enabled. A failure is not fatal: storage forces
+     * persistence off for the session so no marker is written that the uninstall sweep could not find.
+     */
+    private void openMarkerStore() {
+        if (!this.getConfig().getBoolean("persist-lobotomized-state", true)) {
+            return;
+        }
+        if (ensureMarkerStore() == null) {
+            return;
+        }
+        this.getLogger().info("Lobotomized villagers stay lobotomized across restarts. "
+                + "Run '/lobotomy uninstall' before removing the plugin so they get their AI back");
+    }
+
+    /**
+     * Opens and remembers the marker store if it is not open yet, even when persistence is off for
+     * the session: {@code state.db} may still hold rows from an earlier run that the uninstall sweep
+     * must read. Shared by the enable path, the info screen and the sweep so no caller ever sees an
+     * unopened store and no two callers open separate connections.
+     *
+     * @return the store, or {@code null} if it could not be opened
+     */
+    LobotomizedMarkerStore ensureMarkerStore() {
+        if (this.markerStore != null) {
+            return this.markerStore;
+        }
+        LobotomizedMarkerStore store = new LobotomizedMarkerStore(
+                this.getDataFolder().toPath().resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME), this.getLogger());
+        if (!store.open()) {
+            return null;
+        }
+        store.startDrainTask(this, MARKER_STORE_DRAIN_SECONDS);
+        this.markerStore = store;
+        return store;
+    }
+
+    /**
+     * @return the marker store, or {@code null} when persistence is disabled or unavailable
+     */
+    public LobotomizedMarkerStore getMarkerStore() {
+        return this.markerStore;
+    }
+
+    public boolean isUninstalling() {
+        return this.uninstalling.get();
+    }
+
+    /**
+     * Starts the one-shot uninstall sweep: restores every villager the plugin has lobotomized and,
+     * when nothing is left outstanding, disables the plugin.
+     *
+     * @param requester who asked, for progress messages; console messages go to the log
+     * @return {@code false} when a sweep is already running or could not be started
+     */
+    public boolean startUninstall(CommandSender requester) {
+        if (!this.uninstalling.compareAndSet(false, true)) {
+            return false;
+        }
+
+        // An unreadable store must abort the sweep, not degrade into "no rows": rows from an earlier
+        // session exist even when persistence is off now, and sweeping past them reports a false
+        // clean while deleting the only record of villagers still frozen in unloaded chunks.
+        LobotomizedMarkerStore store = ensureMarkerStore();
+        if (store == null) {
+            this.uninstalling.set(false);
+            requester.sendMessage(Component.text("Could not open the state file, so the uninstall cannot "
+                    + "verify every lobotomized villager. Fix the error in console and try again.")
+                    .color(NamedTextColor.RED));
+            return false;
+        }
+        long unrecorded = store.getUnrecordedChangeCount();
+        if (unrecorded > 0) {
+            requester.sendMessage(Component.text(unrecorded + " villager(s) were marked while state writes "
+                    + "were failing and have no record; the sweep may not reach all of them in unloaded chunks.")
+                    .color(NamedTextColor.YELLOW));
+        }
+        try {
+            new UninstallSweep(this, store, requester instanceof Player player ? player.getUniqueId() : null,
+                    UninstallSweep.paperChunkAccessor()).start();
+            return true;
+        } catch (Exception e) {
+            this.uninstalling.set(false);
+            this.getLogger().log(java.util.logging.Level.SEVERE, "Could not start the uninstall sweep.", e);
+            return false;
+        }
+    }
+
+    /**
+     * Called by the sweep when it stops. An incomplete run stays enabled so the command can be
+     * re-run; a clean one disables a tick later, once the sweep's own task has been cancelled.
+     */
+    void finishUninstall(boolean cleanedEverything) {
+        if (!cleanedEverything) {
+            this.uninstalling.set(false);
+            return;
+        }
+        this.markerStore = null;
+        Bukkit.getGlobalRegionScheduler().runDelayed(this,
+                SentryTaskWrapper.wrap((task) -> Bukkit.getPluginManager().disablePlugin(this)), 1L);
     }
 
     /**
@@ -486,6 +605,12 @@ public class VillagerLobotomizer extends JavaPlugin {
      * @return the number of villagers added to storage, or -1 if storage recreation fails
      */
     public int reloadPluginState() {
+        if (this.uninstalling.get()) {
+            // A reload would build a fresh storage and re-lobotomize villagers the sweep is clearing,
+            // leaving markers behind with no state file to find them by.
+            this.getLogger().warning("Refusing to reload while an uninstall is in progress.");
+            return -1;
+        }
         this.reloadConfig();
         // Apply enable-sentry transitions on reload (init if newly enabled, close if newly disabled).
         this.applySentryConfig();
@@ -509,7 +634,7 @@ public class VillagerLobotomizer extends JavaPlugin {
 
         if (previousStorage != null) {
             // Reload: plugin stays enabled, so dispatch wake work via the entity scheduler (Folia-safe).
-            previousStorage.flush(true);
+            previousStorage.flush(LobotomizeStorage.FlushMode.RELOAD);
         }
         this.storage = newStorage;
 

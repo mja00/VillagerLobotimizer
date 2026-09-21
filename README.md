@@ -29,12 +29,14 @@ A Minecraft Paper plugin that improves server performance by turning off village
 - `/lobotomy debug toggle` - Toggles debug mode
 - `/lobotomy wake` - Manually restores AI to the villager you're looking at
 - `/lobotomy reload` - Reloads the configuration and applies changes to all villagers
+- `/lobotomy uninstall` - Explains what removing the plugin will do, without doing it
+- `/lobotomy uninstall confirm` - Restores AI to every villager the plugin has lobotomized, clears its data from them, then disables the plugin
 
 ## Configuration
 
 ```yaml
 #Configuration version - DO NOT MODIFY MANUALLY
-config-version: 4
+config-version: 6
 
 #List of names that will always keep villagers active (case-insensitive)
 always-active-names:
@@ -91,6 +93,7 @@ check-roof: true
 create-debug-teams: false
 
 #Disable the update checker. You can disable this if you don't want to be notified about updates.
+#Note: this is only read when the plugin loads; changing it requires a server restart (a /lobotomy reload will not re-run the update check).
 disable-update-checker: false
 
 #Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
@@ -99,11 +102,41 @@ disable-chunk-villager-updates: false
 #Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.
 prevent-trading-with-unlobotomized-villagers: false
 
-#Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
-#This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
+#Message that is sent to players when they try to trade with an unlobotomized villager. Supports MiniMessage.
+unlobotomized-villager-trade-message: "<red>You cannot trade with unlobotomized villagers!</red> <yellow>This villager needs to be lobotomized first.</yellow>"
+
+#Persist lobotomized state across chunk unloads and server restarts. When enabled, lobotomized villagers stay lobotomized, so there is no lag spike while they are re-evaluated after a chunk load or a reboot.
+#Run '/lobotomy uninstall' before removing the plugin. Deleting the jar on its own leaves those villagers without AI, because nothing is left to restore them.
 persist-lobotomized-state: true
 
-#Enable Sentry error tracking to help developers identify and fix bugs. See "Privacy & Telemetry" section below for details.
+# ===== SENTRY ERROR TRACKING =====
+# Sentry is an error monitoring service that helps developers identify and fix bugs proactively.
+# When enabled, the plugin will automatically report crashes and exceptions to the developers.
+#
+# WHAT DATA IS COLLECTED:
+#   - Exception stack traces and error messages
+#   - Server type and version (Paper, Purpur, Folia, etc.)
+#   - Minecraft version and Bukkit API version
+#   - Java version
+#   - Plugin version
+#   - Thread information and task scheduling context
+#
+# WHAT DATA IS NOT COLLECTED:
+#   - Player names, UUIDs, or any player-identifiable information
+#   - Chat messages or commands
+#   - World data, coordinates, or block information
+#   - Server IP address or hostname
+#   - Server configuration (beyond this plugin's settings)
+#
+# WHY KEEP THIS ENABLED:
+#   - Helps developers discover and fix bugs you might not even report
+#   - Provides context to fix issues specific to your server setup (Folia vs Paper, Java version, etc.)
+#   - Errors are sent automatically - no need to manually report bugs
+#   - All data is anonymized and used solely for debugging purposes
+#
+# PRIVACY: No personally identifiable information (PII) is collected. Only technical error data is sent.
+#
+# Set to false if you prefer not to share error reports with developers.
 enable-sentry: true
 ```
 
@@ -169,6 +202,15 @@ All error data is anonymized and used solely for debugging purposes.
 2. Place the .jar file in your server's plugins folder
 3. Restart your server or use a plugin manager to load the plugin
 4. Configure the plugin settings in `plugins/VillagerLobotimizer/config.yml` if needed
+
+### Uninstalling
+
+Run `/lobotomy uninstall confirm` before deleting the jar.
+
+Lobotomized villagers have their AI disabled on disk, so they stay that way whether or not the plugin
+is installed. The command restores every villager the plugin has touched, loading chunks as needed to
+reach the ones that are not in memory, removes its data from them, and then disables itself. Deleting
+the jar without running it leaves those villagers without AI and nothing left to fix them.
 
 ## Development
 

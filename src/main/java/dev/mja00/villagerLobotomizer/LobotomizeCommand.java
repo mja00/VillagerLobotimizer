@@ -12,6 +12,8 @@ import org.bukkit.entity.Villager;
 import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -50,6 +52,11 @@ public class LobotomizeCommand {
                 .then(Commands.literal("reload")
                         .requires((command) -> command.getSender().hasPermission("lobotomy.command.reload"))
                         .executes((command) -> reloadCommand(command.getSource())))
+                .then(Commands.literal("uninstall")
+                        .requires((command) -> command.getSender().hasPermission("lobotomy.command.uninstall"))
+                        .executes((command) -> uninstallCommand(command.getSource()))
+                        .then(Commands.literal("confirm")
+                                .executes((command) -> uninstallConfirmCommand(command.getSource()))))
                 .then(Commands.literal("config")
                         .requires((command) -> command.getSender().hasPermission("lobotomy.command.config"))
                         .then(Commands.argument("key", StringArgumentType.string()).suggests(LobotomizeCommand::getConfigKeySuggestions)
@@ -70,7 +77,8 @@ public class LobotomizeCommand {
                 || sender.hasPermission("lobotomy.command.debug")
                 || sender.hasPermission("lobotomy.command.wake")
                 || sender.hasPermission("lobotomy.command.reload")
-                || sender.hasPermission("lobotomy.command.config");
+                || sender.hasPermission("lobotomy.command.config")
+                || sender.hasPermission("lobotomy.command.uninstall");
     }
 
     /**
@@ -212,6 +220,53 @@ public class LobotomizeCommand {
         this.plugin.getStorage().removeVillager(villager);
         this.plugin.getStorage().clearLobotomizedMarker(villager);
         source.getSender().sendMessage(Component.text("This villager will now be unaffected by the plugin until the chunk is reloaded."));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * Explains what the sweep does without running it. Requiring an explicit confirm keeps a mistyped
+     * command from force-loading chunks across every world.
+     */
+    private int uninstallCommand(CommandSourceStack source) {
+        CommandSender sender = source.getSender();
+        // Open the state file even when persistence is off: rows from an earlier session decide what
+        // the sweep will actually reach, so reporting 0 over an unreadable file would mislead.
+        LobotomizedMarkerStore store = this.plugin.ensureMarkerStore();
+
+        sender.sendMessage(Component.text("This restores AI to every villager the plugin has lobotomized, "
+                + "removes its data from them, then disables the plugin.").color(NamedTextColor.YELLOW));
+        if (store == null) {
+            sender.sendMessage(Component.text("Villagers still marked: unknown — the state file could not "
+                    + "be opened. Check the console before confirming.").color(NamedTextColor.RED));
+        } else {
+            sender.sendMessage(Component.text("Villagers still marked: ")
+                    .append(Component.text(String.valueOf(store.getKnownRowCount())).color(NamedTextColor.GREEN)));
+            long unrecorded = store.getUnrecordedChangeCount();
+            if (unrecorded > 0) {
+                sender.sendMessage(Component.text(unrecorded + " of those were marked while state writes "
+                        + "were failing and may have no record; the sweep may not reach all of them.")
+                        .color(NamedTextColor.YELLOW));
+            }
+        }
+        sender.sendMessage(Component.text("Chunks will be loaded to reach villagers that are not in memory, "
+                + "which also fires other plugins' chunk load handlers.").color(NamedTextColor.YELLOW));
+        if (this.plugin.getConfig().getBoolean("prevent-trading-with-unlobotomized-villagers")) {
+            sender.sendMessage(Component.text("Trading will be blocked while the sweep runs.")
+                    .color(NamedTextColor.YELLOW));
+        }
+        sender.sendMessage(Component.text("Run '/lobotomy uninstall confirm' to proceed.").color(NamedTextColor.RED));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int uninstallConfirmCommand(CommandSourceStack source) {
+        CommandSender sender = source.getSender();
+        if (!this.plugin.startUninstall(sender)) {
+            sender.sendMessage(Component.text("Could not start the uninstall; one may already be running. "
+                    + "Check the console for details.").color(NamedTextColor.RED));
+            return 0;
+        }
+        sender.sendMessage(Component.text("Uninstall started. Progress is reported here and in the console.")
+                .color(NamedTextColor.GREEN));
         return Command.SINGLE_SUCCESS;
     }
 

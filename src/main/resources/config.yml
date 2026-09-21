@@ -68,8 +68,8 @@ prevent-trading-with-unlobotomized-villagers: false
 #Message that is sent to players when they try to trade with an unlobotomized villager. Supports MiniMessage.
 unlobotomized-villager-trade-message: "<red>You cannot trade with unlobotomized villagers!</red> <yellow>This villager needs to be lobotomized first.</yellow>"
 
-#Persist lobotomized state across chunk unloads. When enabled, villagers that are lobotomized will remain lobotomized when their chunk is unloaded and reloaded.
-#This prevents lag spikes from villagers needing to be re-evaluated and re-lobotomized after chunk loads.
+#Persist lobotomized state across chunk unloads and server restarts. When enabled, lobotomized villagers stay lobotomized, so there is no lag spike while they are re-evaluated after a chunk load or a reboot.
+#Run '/lobotomy uninstall' before removing the plugin. Deleting the jar on its own leaves those villagers without AI, because nothing is left to restore them.
 persist-lobotomized-state: true
 
 # ===== SENTRY ERROR TRACKING =====
