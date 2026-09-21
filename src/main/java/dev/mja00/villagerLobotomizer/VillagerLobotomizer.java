@@ -80,16 +80,19 @@ public class VillagerLobotomizer extends JavaPlugin {
         // Initialize Sentry to match config (also handles enable/disable transitions on reload)
         this.applySentryConfig();
 
+        // Read before storage and the listener exist: both log through isDebugging() while adopting
+        // villagers in already-loaded chunks, which would otherwise be silent on boot.
+        this.debugging = this.getConfig().getBoolean("debug");
+        this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
+        this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
+        boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
+
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
         LobotomizeCommand lobotomizeCommand = new LobotomizeCommand(this);
         this.getLifecycleManager().registerEventHandler(LifecycleEvents.COMMANDS, command -> {
             command.registrar().register(lobotomizeCommand.createCommand("lobotomy"));
         });
-        this.debugging = this.getConfig().getBoolean("debug");
-        this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
-        this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
-        boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
 
         // Metrics must never take down plugin enable; bStats throws IllegalStateException when running
         // unrelocated (tests) and a LinkageError if shaded wrong. Don't catch fatal Errors like OOM.
