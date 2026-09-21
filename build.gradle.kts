@@ -84,7 +84,7 @@ tasks {
 
     runServer {
         dependsOn(shadowJar)
-        minecraftVersion("26.2")
+        minecraftVersion("26.3")
 
         // Set system property to mark this as a development environment for Sentry
         systemProperty("villagerlobotimizer.dev", "true")
@@ -151,10 +151,10 @@ tasks {
 }
 
 // Targeting 1.21.11+; support for 1.21.6-1.21.10 was dropped to align with MockBukkit's tested API
-val supportedVersions = listOf("1.21.11-26.2")
+val supportedVersions = listOf("1.21.11-26.3")
 
 // Modrinth requires discrete game versions rather than a range
-val modrinthGameVersions = listOf("1.21.11", "26.1", "26.1.1", "26.1.2", "26.2")
+val modrinthGameVersions = listOf("1.21.11", "26.1", "26.1.1", "26.1.2", "26.2", "26.3")
 
 hangarPublish {
     publications.register("plugin") {
