@@ -228,6 +228,8 @@ public class LobotomizeCommand {
         // after an incomplete uninstall) can still be frozen, so restore it on its own scheduler regardless.
         boolean silent = this.plugin.getConfig().getBoolean("silent-lobotomized-villagers");
         villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(task -> {
+            // Untrack again here: an add queued by a reload in this tick runs before this task and would re-track it.
+            this.plugin.getStorage().removeVillager(villager);
             // Only undo our own freeze, so a villager silenced on purpose elsewhere keeps its Silent flag.
             if (!villager.isAware()) {
                 villager.setAware(true);

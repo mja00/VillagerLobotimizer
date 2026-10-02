@@ -43,6 +43,21 @@ class LobotomizeCommandWakeTest extends MockBukkitTestBase {
     }
 
     @Test
+    void wakeInTheSameTickAsReloadStillUntracksTheVillager() {
+        Villager villager = world.spawn(new Location(world, 24, 64, 40), Villager.class);
+        server.getScheduler().performTicks(2);
+
+        // Reload queues the new storage's add on the entity scheduler; wake lands before it runs.
+        plugin.reloadPluginState();
+        new LobotomizeCommand(plugin).wakeVillager(villager);
+        server.getScheduler().performTicks(2);
+
+        assertFalse(plugin.getStorage().getActive().contains(villager)
+                        || plugin.getStorage().getLobotomized().contains(villager),
+                "a queued reload add must not re-track a villager the player just woke");
+    }
+
+    @Test
     void wakeKeepsAnAwareVillagerSilencedElsewhere() {
         plugin.getConfig().set("silent-lobotomized-villagers", true);
         Villager villager = world.spawn(new Location(world, 24, 64, 40), Villager.class);
