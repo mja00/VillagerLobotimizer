@@ -3,6 +3,7 @@ package dev.mja00.villagerLobotomizer.utils;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Locale;
+import java.util.stream.Stream;
 
 public class StringUtils {
     /**
@@ -38,14 +39,18 @@ public class StringUtils {
     }
 
     /**
-     * Converts legacy sound names from uppercase with underscores to lowercase with dots.
+     * Converts a legacy enum-style sound name (e.g. ENTITY_VILLAGER_WORK_LIBRARIAN) to the matching key in knownKeys.
      *
-     * Only converts if the input is entirely uppercase; returns the input unchanged otherwise.
+     * Returns the input unchanged if it is not entirely uppercase or no known key matches.
      */
-    public static String convertLegacySoundNameFormat(String soundName) {
-        if (soundName != null && soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
-            return soundName.toLowerCase(Locale.ROOT).replace('_', '.');
+    public static String convertLegacySoundNameFormat(String soundName, @NotNull Stream<String> knownKeys) {
+        if (soundName == null || soundName.isEmpty() || !soundName.equals(soundName.toUpperCase(Locale.ROOT))) {
+            return soundName;
         }
-        return soundName;
+        // Underscores can sit inside a key segment (work_librarian), so match against real keys instead of rewriting.
+        return knownKeys
+                .filter(key -> key.toUpperCase(Locale.ROOT).replace('.', '_').equals(soundName))
+                .findFirst()
+                .orElse(soundName);
     }
 }

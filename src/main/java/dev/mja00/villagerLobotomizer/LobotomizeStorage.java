@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -122,8 +123,9 @@ public class LobotomizeStorage {
         String soundName = plugin.getConfig().getString("restock-sound", "");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
-        soundName = convertLegacySoundName(soundName, "restock-sound");
-        levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
+        Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
+        soundName = convertLegacySoundName(soundName, "restock-sound", soundRegistry);
+        levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound", soundRegistry);
 
         if (soundName == null) {
             soundName = "";
@@ -159,8 +161,6 @@ public class LobotomizeStorage {
                 plugin.getConfig().getBoolean("ignore-non-solid-blocks"),
                 this.exemptNames,
                 BlockClassifier.fromServerRegistry());
-
-        Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
 
         try {
             if (!soundName.isEmpty()) {
@@ -1093,10 +1093,14 @@ public class LobotomizeStorage {
      *
      * @param soundName the sound name to convert
      * @param configKey the configuration key to update if conversion occurs
-     * @return the converted sound name, or an empty string if the conversion fails
+     * @param soundRegistry the registry legacy names are resolved against
+     * @return the converted sound name, or an empty string if the input is null
      */
-    private String convertLegacySoundName(String soundName, String configKey) {
-        String converted = StringUtils.convertLegacySoundNameFormat(soundName);
+    private String convertLegacySoundName(String soundName, String configKey, Registry<@NotNull Sound> soundRegistry) {
+        Stream<String> knownKeys = soundRegistry.keyStream()
+                .filter(key -> key.getNamespace().equals(NamespacedKey.MINECRAFT))
+                .map(NamespacedKey::getKey);
+        String converted = StringUtils.convertLegacySoundNameFormat(soundName, knownKeys);
         if (converted == null) {
             return "";
         }
