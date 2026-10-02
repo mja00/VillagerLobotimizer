@@ -147,6 +147,20 @@ class LobotomizeStorageFlushTest extends MockBukkitTestBase {
     }
 
     @Test
+    void enablingPersistenceThenReloadingPreservesStateOnShutdown() {
+        load(false);
+        plugin.getConfig().set("persist-lobotomized-state", true);
+        plugin.saveConfig();
+
+        plugin.reloadPluginState();
+        Villager villager = lobotomizedVillager();
+        plugin.getStorage().flush(LobotomizeStorage.FlushMode.SHUTDOWN);
+
+        assertFalse(villager.isAware(), "persistence enabled via reload must take effect without a restart");
+        assertTrue(hasMarker(villager), "and keep the marker so the villager is re-tracked on load");
+    }
+
+    @Test
     void quiesceForUninstallLeavesVillagersUntouched() {
         load(true);
         Villager villager = lobotomizedVillager();

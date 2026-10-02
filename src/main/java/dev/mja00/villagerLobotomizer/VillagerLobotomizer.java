@@ -400,7 +400,7 @@ public class VillagerLobotomizer extends JavaPlugin {
                 }
                 this.activeVillagersTeam = null;
                 this.inactiveVillagersTeam = null;
-            } else {
+            } else if (this.getConfig().getBoolean("create-debug-teams", false)) {
                 createDebuggingTeams();
             }
         } else if (debugging) {
@@ -588,6 +588,8 @@ public class VillagerLobotomizer extends JavaPlugin {
 
                 // Privacy: disable PII
                 options.setSendDefaultPii(false);
+                // sendDefaultPii does not gate the hostname, which the config.yml privacy notice promises is not sent
+                options.setAttachServerName(false);
 
                 options.setEnableUncaughtExceptionHandler(false);
             });
@@ -612,6 +614,10 @@ public class VillagerLobotomizer extends JavaPlugin {
             return -1;
         }
         this.reloadConfig();
+        if (this.markerStore == null) {
+            // Persistence turned on after boot needs the store open before the new storage captures it.
+            this.openMarkerStore();
+        }
         // Apply enable-sentry transitions on reload (init if newly enabled, close if newly disabled).
         this.applySentryConfig();
         this.debugging = this.getConfig().getBoolean("debug");
