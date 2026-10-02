@@ -831,6 +831,8 @@ public class LobotomizeStorage {
         if (intervalPassed && shouldRestock(villager)) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
+            // Demand is computed from this period's uses, so it must run before they are reset (as vanilla restock does).
+            villager.updateDemand();
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
 
             for (MerchantRecipe recipe : recipes) {
@@ -839,9 +841,7 @@ public class LobotomizeStorage {
 
             villager.setRecipes(recipes);
             villager.setRestocksToday(villager.getRestocksToday() + 1);
-            // Tell the villager to update pricing of their trades
-            villager.updateDemand();
-            
+
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: " + villager.getRestocksToday());
             }
@@ -975,6 +975,8 @@ public class LobotomizeStorage {
                         if (this.inactiveVillagers.contains(villager) || this.activeVillagers.contains(villager)) {
                             boolean isActive = this.activeVillagers.contains(villager);
                             if (this.processVillager(villager, isActive)) {
+                                // Later periodic checks see no transition, so only this path can move the task to the new state's interval.
+                                this.rescheduleVillagerTask(villager, isActive ? this.inactiveCheckInterval : this.checkInterval);
                                 if (this.plugin.isDebugging()) {
                                     this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + cx + ", " + cz);
                                 }
@@ -1166,6 +1168,12 @@ public class LobotomizeStorage {
                         interval,
                         interval
                 );
+                // A removed entity's retired scheduler returns null; drop it rather than leave it tracked with no task.
+                if (task == null) {
+                    untrack(villager);
+                    this.villagerTaskIntervals.remove(id);
+                    return;
+                }
                 this.villagerTasks.put(id, task);
                 this.villagerTaskIntervals.put(id, interval);
             } catch (IllegalPluginAccessException e) {
