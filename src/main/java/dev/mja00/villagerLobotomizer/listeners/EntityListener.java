@@ -13,6 +13,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.event.entity.EntityTransformEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
@@ -104,6 +105,23 @@ public class EntityListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public final void onTransform(EntityTransformEvent event) {
+        if (!(event.getEntity() instanceof Villager villager)) {
+            return;
+        }
+        if (!this.plugin.getConfig().getBoolean("silent-lobotomized-villagers", false)) {
+            return;
+        }
+        // Conversion copies isSilent onto a mob we never track, so our mute would outlive the villager and uninstall.
+        if (!this.plugin.getStorage().getLobotomized().contains(villager)) {
+            return;
+        }
+        for (Entity converted : event.getTransformedEntities()) {
+            converted.setSilent(false);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public final void onBlockBreak(BlockBreakEvent event) {
         this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
@@ -136,6 +154,12 @@ public class EntityListener implements Listener {
 
         // active set == tracked, unlobotomized villagers
         if (!this.plugin.getStorage().getActive().contains(villager)) {
+            return;
+        }
+
+        // Trading is the only way to gain xp, so blocking 0-xp villagers would keep them from ever qualifying for lobotomy.
+        if (this.plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience", false)
+                && villager.getVillagerExperience() == 0) {
             return;
         }
 
