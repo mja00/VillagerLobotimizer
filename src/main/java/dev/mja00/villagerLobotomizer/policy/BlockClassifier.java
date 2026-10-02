@@ -3,6 +3,7 @@ package dev.mja00.villagerLobotomizer.policy;
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
 import org.bukkit.Material;
 import org.bukkit.Registry;
+import org.bukkit.Tag;
 import org.bukkit.block.data.Ageable;
 
 import java.util.EnumSet;
@@ -38,7 +39,8 @@ public record BlockClassifier(
             if (m.name().contains("_CARPET")) {
                 impassableFloor.add(m);
             }
-            if (m.name().contains("_WALL") || m.name().contains("_FENCE")) {
+            // Tags, not name matching, so wall-mounted signs, torches and banners are not counted as tall.
+            if (Tag.WALLS.isTagged(m) || Tag.FENCES.isTagged(m) || Tag.FENCE_GATES.isTagged(m)) {
                 impassableTall.add(m);
             }
             if (m.name().contains("_DOOR")) {

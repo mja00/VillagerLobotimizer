@@ -51,7 +51,8 @@ Note `processVillager`'s active branch wakes on every check, not just on transit
 ### PDC Keys
 - `lastRestock` (LONG): Last trade refresh timestamp
 - `isLobotomized` (BYTE): Persistence marker (when `persist-lobotomized-state: true`). Survives restarts; mirrored by a row in `state.db`. Only ever written/cleared via `setLobotomizedMarker`/`clearLobotomizedMarker`, which keep the row in sync
-- `lastRestockCheckDayTime` (LONG): Full game time (absolute ticks) at last restock check; used for day-rollover detection
+- `lastRestockCheckDayTime` (LONG): `getFullTime()` (absolute day time, freezes with `doDaylightCycle` off) at last restock check; used for day-rollover detection
+- `lastRestockGameTime` (LONG): `getGameTime()` at last restock counter reset; vanilla's 12000-tick fallback reset when day time is frozen
 
 ## Development
 

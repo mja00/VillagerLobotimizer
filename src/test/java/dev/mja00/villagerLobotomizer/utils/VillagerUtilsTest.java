@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class VillagerUtilsTest extends MockBukkitTestBase {
 
     private static final NamespacedKey LAST_RESTOCK_KEY = NamespacedKey.fromString("vltest:last_restock_check");
+    private static final NamespacedKey LAST_RESET_GAME_TIME_KEY = NamespacedKey.fromString("vltest:last_restock_game_time");
 
     private Villager spawnVillager() {
         WorldMock world = server.addSimpleWorld("test");
@@ -72,6 +73,7 @@ class VillagerUtilsTest extends MockBukkitTestBase {
         Villager villager = spawnVillager();
         villager.setProfession(Villager.Profession.FARMER); // station = COMPOSTER
         WorldMock world = (WorldMock) villager.getWorld();
+        world.loadChunk(0, 0);
 
         // No station nearby yet
         assertFalse(VillagerUtils.isJobSiteNearby(villager));
@@ -79,6 +81,33 @@ class VillagerUtilsTest extends MockBukkitTestBase {
         // Place the composter one block away (within the 3x3x3 box)
         world.getBlockAt(1, 64, 0).setType(Material.COMPOSTER);
         assertTrue(VillagerUtils.isJobSiteNearby(villager));
+    }
+
+    @Test
+    void isJobSiteNearbyAcceptsFilledCauldronForLeatherworker() {
+        Villager villager = spawnVillager();
+        villager.setProfession(Villager.Profession.LEATHERWORKER);
+        villager.getWorld().loadChunk(0, 0);
+
+        villager.getWorld().getBlockAt(1, 64, 0).setType(Material.WATER_CAULDRON);
+        assertTrue(VillagerUtils.isJobSiteNearby(villager), "a filled cauldron is a valid leatherworker job site");
+    }
+
+    @Test
+    void isJobSiteNearbySkipsUnloadedNeighbourChunks() {
+        Villager villager = spawnVillager();
+        villager.setProfession(Villager.Profession.FARMER);
+        WorldMock world = (WorldMock) villager.getWorld();
+        world.loadChunk(0, 0);
+
+        // x = -1 lives in chunk -1, which must not be read (and thereby sync-loaded) while unloaded
+        world.getBlockAt(-1, 64, 0).setType(Material.COMPOSTER);
+        world.unloadChunk(-1, 0);
+        assertFalse(world.isChunkLoaded(-1, 0), "precondition: neighbour chunk is unloaded");
+        assertFalse(VillagerUtils.isJobSiteNearby(villager));
+
+        world.loadChunk(-1, 0);
+        assertTrue(VillagerUtils.isJobSiteNearby(villager), "a station in a loaded neighbour chunk is found");
     }
 
     @Test
@@ -99,10 +128,35 @@ class VillagerUtilsTest extends MockBukkitTestBase {
 
         // Advance to day 1 (fullTime / 24000 increments)
         world.setFullTime(24_000L + 50L);
-        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY);
+        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY);
 
         assertEquals(0, villager.getRestocksToday(), "crossing a day boundary resets the restock counter");
         assertEquals(24_050L, villager.getPersistentDataContainer()
                 .getOrDefault(LAST_RESTOCK_KEY, PersistentDataType.LONG, 0L), "PDC updated to current full time");
+    }
+
+    @Test
+    void shouldRestockResetsCounterByGameTimeWhenDayTimeIsFrozen() {
+        Villager villager = spawnVillager();
+        WorldMock world = (WorldMock) villager.getWorld();
+        MerchantRecipe used = new MerchantRecipe(new ItemStack(Material.EMERALD), 16);
+        used.setUses(1);
+        villager.setRecipes(List.of(used));
+
+        // Day time frozen at noon (doDaylightCycle false); counter already at the daily cap
+        world.setFullTime(6_000L);
+        world.setGameTime(50_000L);
+        villager.getPersistentDataContainer().set(LAST_RESTOCK_KEY, PersistentDataType.LONG, 6_000L);
+        villager.getPersistentDataContainer().set(LAST_RESET_GAME_TIME_KEY, PersistentDataType.LONG, 45_000L);
+        villager.setRestocksToday(2);
+
+        assertFalse(VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
+                "within 12000 game ticks of the last reset the cap still applies");
+        assertEquals(2, villager.getRestocksToday());
+
+        world.setGameTime(57_001L);
+        assertTrue(VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
+                "12000 game ticks after the last reset the counter resets even though day time is frozen");
+        assertEquals(0, villager.getRestocksToday());
     }
 }

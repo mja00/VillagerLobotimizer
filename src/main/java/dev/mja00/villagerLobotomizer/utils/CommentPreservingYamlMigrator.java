@@ -325,11 +325,13 @@ public class CommentPreservingYamlMigrator {
     private String formatValue(Object value) {
         if (value == null) return "null";
         if (value instanceof String str) {
-            // Quote strings that need quoting
-            if (str.contains(":") || str.contains("#") || str.contains("\"") || str.trim().isEmpty()) {
-                return "\"" + str.replace("\"", "\\\"") + "\"";
-            }
-            return str;
+            // Always quote: plain scalars starting with [ & * etc. break parsing, and yes/null/123 change type
+            String escaped = str.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
+            return "\"" + escaped + "\"";
         }
         return value.toString();
     }

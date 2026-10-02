@@ -12,6 +12,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
@@ -66,6 +67,7 @@ public class LobotomizeStorage {
     private final NamespacedKey lobotomizedKey;
     private final LobotomizedMarkerStore markerStore;
     private final NamespacedKey lastRestockCheckDayTimeKey;
+    private final NamespacedKey lastRestockGameTimeKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
@@ -121,8 +123,9 @@ public class LobotomizeStorage {
         String soundName = plugin.getConfig().getString("restock-sound", "");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
-        soundName = convertLegacySoundName(soundName, "restock-sound");
-        levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound");
+        Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
+        soundName = convertLegacySoundName(soundName, "restock-sound", soundRegistry);
+        levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound", soundRegistry);
 
         if (soundName == null) {
             soundName = "";
@@ -159,8 +162,6 @@ public class LobotomizeStorage {
                 this.exemptNames,
                 BlockClassifier.fromServerRegistry());
 
-        Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
-
         try {
             if (!soundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, soundName);
@@ -193,6 +194,7 @@ public class LobotomizeStorage {
         this.key = new NamespacedKey(plugin, "lastRestock");
         this.lobotomizedKey = new NamespacedKey(plugin, LOBOTOMIZED_KEY);
         this.lastRestockCheckDayTimeKey = new NamespacedKey(plugin, "lastRestockCheckDayTime");
+        this.lastRestockGameTimeKey = new NamespacedKey(plugin, "lastRestockGameTime");
         // Use Paper's GlobalRegionScheduler for chunk processing. It never touches entities directly;
         // per-chunk entity access is dispatched to the owning region via getRegionScheduler() (see
         // scheduleChunkVillagerProcessing), keeping this Folia thread-ownership safe.
@@ -773,7 +775,7 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager should restock, {@code false} otherwise
      */
     private boolean shouldRestock(@NotNull Villager villager) {
-        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey);
+        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey, this.lastRestockGameTimeKey);
     }
 
     /**
@@ -831,6 +833,8 @@ public class LobotomizeStorage {
         if (intervalPassed && shouldRestock(villager)) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
+            // Demand is computed from this period's uses, so it must run before they are reset (as vanilla restock does).
+            villager.updateDemand();
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
 
             for (MerchantRecipe recipe : recipes) {
@@ -839,9 +843,9 @@ public class LobotomizeStorage {
 
             villager.setRecipes(recipes);
             villager.setRestocksToday(villager.getRestocksToday() + 1);
-            // Tell the villager to update pricing of their trades
-            villager.updateDemand();
-            
+            // Vanilla's frozen-time fallback counts 12000 ticks from the last restock, not the last reset.
+            pdc.set(this.lastRestockGameTimeKey, PersistentDataType.LONG, villager.getWorld().getGameTime());
+
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: " + villager.getRestocksToday());
             }
@@ -975,6 +979,8 @@ public class LobotomizeStorage {
                         if (this.inactiveVillagers.contains(villager) || this.activeVillagers.contains(villager)) {
                             boolean isActive = this.activeVillagers.contains(villager);
                             if (this.processVillager(villager, isActive)) {
+                                // Later periodic checks see no transition, so only this path can move the task to the new state's interval.
+                                this.rescheduleVillagerTask(villager, isActive ? this.inactiveCheckInterval : this.checkInterval);
                                 if (this.plugin.isDebugging()) {
                                     this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + cx + ", " + cz);
                                 }
@@ -1089,10 +1095,14 @@ public class LobotomizeStorage {
      *
      * @param soundName the sound name to convert
      * @param configKey the configuration key to update if conversion occurs
-     * @return the converted sound name, or an empty string if the conversion fails
+     * @param soundRegistry the registry legacy names are resolved against
+     * @return the converted sound name, or an empty string if the input is null
      */
-    private String convertLegacySoundName(String soundName, String configKey) {
-        String converted = StringUtils.convertLegacySoundNameFormat(soundName);
+    private String convertLegacySoundName(String soundName, String configKey, Registry<@NotNull Sound> soundRegistry) {
+        Stream<String> knownKeys = soundRegistry.keyStream()
+                .filter(key -> key.getNamespace().equals(NamespacedKey.MINECRAFT))
+                .map(NamespacedKey::getKey);
+        String converted = StringUtils.convertLegacySoundNameFormat(soundName, knownKeys);
         if (converted == null) {
             return "";
         }
@@ -1166,6 +1176,12 @@ public class LobotomizeStorage {
                         interval,
                         interval
                 );
+                // A removed entity's retired scheduler returns null; drop it rather than leave it tracked with no task.
+                if (task == null) {
+                    untrack(villager);
+                    this.villagerTaskIntervals.remove(id);
+                    return;
+                }
                 this.villagerTasks.put(id, task);
                 this.villagerTaskIntervals.put(id, interval);
             } catch (IllegalPluginAccessException e) {

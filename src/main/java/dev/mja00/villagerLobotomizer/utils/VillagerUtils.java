@@ -10,6 +10,7 @@ import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.MerchantRecipe;
@@ -96,16 +97,30 @@ public class VillagerUtils {
         int baseY = loc.getBlockY();
         int baseZ = loc.getBlockZ();
 
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
-                for (int dz = -1; dz <= 1; dz++) {
-                    if (world.getBlockAt(baseX + dx, baseY + dy, baseZ + dz).getType() == jobSite) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int x = baseX + dx;
+                int z = baseZ + dz;
+                // Reading an unloaded neighbour would force a synchronous chunk load.
+                if (!world.isChunkLoaded(x >> 4, z >> 4)) {
+                    continue;
+                }
+                for (int dy = -1; dy <= 1; dy++) {
+                    if (isJobSiteMaterial(world.getBlockAt(x, baseY + dy, z).getType(), jobSite)) {
                         return true;
                     }
                 }
             }
         }
         return false;
+    }
+
+    private static boolean isJobSiteMaterial(Material type, Material jobSite) {
+        if (type == jobSite) {
+            return true;
+        }
+        // Vanilla's leatherworker POI accepts filled cauldrons too, which are separate materials.
+        return jobSite == Material.CAULDRON && Tag.CAULDRONS.isTagged(type);
     }
 
     /**
@@ -181,24 +196,29 @@ public class VillagerUtils {
      *
      * @param villager the villager to check
      * @param lastRestockCheckDayTimeKey the persistent data key for tracking the last full-time check
+     * @param lastRestockGameTimeKey the persistent data key for tracking the game time of the last counter reset
      * @return {@code true} if the villager is allowed to restock today and has recipes requiring restocking,
      *         {@code false} otherwise
      */
-    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey) {
+    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey, NamespacedKey lastRestockGameTimeKey) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
         long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        long fullTime = villager.getWorld().getFullTime();
+        long lastRestockGameTime = pdc.getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
+        World world = villager.getWorld();
+        long fullTime = world.getFullTime();
+        long gameTime = world.getGameTime();
 
-        // Check for new day using Full Time (absolute ticks) to avoid wrapping issues
-        if (lastRestockCheckDayTime > 0L) {
-            long lastDay = lastRestockCheckDayTime / 24000L;
-            long currentDay = fullTime / 24000L;
-            if (currentDay > lastDay) {
-                villager.setRestocksToday(0);
-            }
+        // Mirrors vanilla: day time freezes with doDaylightCycle off, so game time is the fallback reset.
+        boolean reset = gameTime > lastRestockGameTime + 12000L;
+        if (lastRestockCheckDayTime > 0L && fullTime / 24000L > lastRestockCheckDayTime / 24000L) {
+            reset = true;
         }
 
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
+        if (reset) {
+            pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, gameTime);
+            villager.setRestocksToday(0);
+        }
 
         return allowedToRestock(villager) && needsToRestock(villager);
     }

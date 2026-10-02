@@ -82,7 +82,7 @@ public final class VillagerActivityPolicy {
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
         BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
 
-        if (this.checkRoof && (roof == null || roof.type() == Material.AIR)) {
+        if (this.checkRoof && (roof == null || isAir(roof.type()))) {
             return true;
         }
 
@@ -164,5 +164,10 @@ public final class VillagerActivityPolicy {
      */
     private static boolean isWater(BlockSnapshot b) {
         return b != null && b.type() == Material.WATER;
+    }
+
+    // Material#isAir resolves through the server registry, which this pure policy must not depend on.
+    private static boolean isAir(Material type) {
+        return type == Material.AIR || type == Material.CAVE_AIR || type == Material.VOID_AIR;
     }
 }

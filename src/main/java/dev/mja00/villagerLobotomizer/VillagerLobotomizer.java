@@ -400,7 +400,7 @@ public class VillagerLobotomizer extends JavaPlugin {
                 }
                 this.activeVillagersTeam = null;
                 this.inactiveVillagersTeam = null;
-            } else {
+            } else if (this.getConfig().getBoolean("create-debug-teams", false)) {
                 createDebuggingTeams();
             }
         } else if (debugging) {
@@ -588,6 +588,8 @@ public class VillagerLobotomizer extends JavaPlugin {
 
                 // Privacy: disable PII
                 options.setSendDefaultPii(false);
+                // sendDefaultPii does not gate the hostname, which the config.yml privacy notice promises is not sent
+                options.setAttachServerName(false);
 
                 options.setEnableUncaughtExceptionHandler(false);
             });
@@ -612,6 +614,10 @@ public class VillagerLobotomizer extends JavaPlugin {
             return -1;
         }
         this.reloadConfig();
+        if (this.markerStore == null) {
+            // Persistence turned on after boot needs the store open before the new storage captures it.
+            this.openMarkerStore();
+        }
         // Apply enable-sentry transitions on reload (init if newly enabled, close if newly disabled).
         this.applySentryConfig();
         this.debugging = this.getConfig().getBoolean("debug");
@@ -662,10 +668,21 @@ public class VillagerLobotomizer extends JavaPlugin {
         int villagers = 0;
         for (World world : Bukkit.getWorlds()) {
             for (Villager villager : world.getEntitiesByClass(Villager.class)) {
-                this.storage.addVillager(villager);
-                villagers++;
+                if (queueAddVillager(newStorage, villager)) {
+                    villagers++;
+                }
             }
         }
         return villagers;
+    }
+
+    /**
+     * Tracks a villager on its owning region thread. Being FIFO on the entity scheduler, this also
+     * runs after any wake a previous storage queued for it during a reload.
+     *
+     * @return false if the villager was already removed and its scheduler retired
+     */
+    public boolean queueAddVillager(LobotomizeStorage target, Villager villager) {
+        return villager.getScheduler().run(this, SentryTaskWrapper.wrap(task -> target.addVillager(villager)), null) != null;
     }
 }

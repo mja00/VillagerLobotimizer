@@ -13,6 +13,7 @@ import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -216,11 +217,28 @@ public class LobotomizeCommand {
     private int wakeCommand(CommandSourceStack source) throws CommandSyntaxException {
         Entity target = getLookedTarget(source);
         if (target == null) return 0;
-        Villager villager = (Villager) target;
-        this.plugin.getStorage().removeVillager(villager);
-        this.plugin.getStorage().clearLobotomizedMarker(villager);
-        source.getSender().sendMessage(Component.text("This villager will now be unaffected by the plugin until the chunk is reloaded."));
+        wakeVillager((Villager) target);
+        source.getSender().sendMessage(Component.text("This villager will now be unaffected by the plugin until its chunk or the plugin is reloaded."));
         return Command.SINGLE_SUCCESS;
+    }
+
+    void wakeVillager(Villager villager) {
+        this.plugin.getStorage().removeVillager(villager);
+        // removeVillager only wakes tracked-inactive villagers, but an untracked one (e.g. tracking paused
+        // after an incomplete uninstall) can still be frozen, so restore it on its own scheduler regardless.
+        boolean silent = this.plugin.getConfig().getBoolean("silent-lobotomized-villagers");
+        villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(task -> {
+            // Untrack again here: an add queued by a reload in this tick runs before this task and would re-track it.
+            this.plugin.getStorage().removeVillager(villager);
+            // Only undo our own freeze, so a villager silenced on purpose elsewhere keeps its Silent flag.
+            if (!villager.isAware()) {
+                villager.setAware(true);
+                if (silent) {
+                    villager.setSilent(false);
+                }
+            }
+            this.plugin.getStorage().clearLobotomizedMarker(villager);
+        }), null);
     }
 
     /**

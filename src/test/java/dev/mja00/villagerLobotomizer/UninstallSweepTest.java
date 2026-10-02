@@ -201,6 +201,7 @@ class UninstallSweepTest extends MockBukkitTestBase {
 
         // The sweep quiesced storage; the advertised way back to normal operation is a reload.
         assertTrue(plugin.reloadPluginState() >= 0, "reload must be accepted once the sweep has stopped");
+        server.getScheduler().performTicks(1);
         Villager villager = markedVillager();
         assertTrue(plugin.getStorage().getActive().contains(villager)
                         || plugin.getStorage().getLobotomized().contains(villager),
