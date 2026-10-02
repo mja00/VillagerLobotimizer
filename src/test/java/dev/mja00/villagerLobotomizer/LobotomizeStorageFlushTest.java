@@ -132,6 +132,21 @@ class LobotomizeStorageFlushTest extends MockBukkitTestBase {
     }
 
     @Test
+    void fullReloadNeverLeavesAnAwakeVillagerTrackedAsLobotomized() {
+        load(true);
+        Villager villager = lobotomizedVillager();
+
+        // The old storage queues a wake; the new storage's rescan must run after it, not before.
+        plugin.reloadPluginState();
+        server.getScheduler().performTicks(TICKS_FOR_SCHEDULED_WAKE);
+
+        assertTrue(villager.isAware(), "the reload wake should have run");
+        assertFalse(plugin.getStorage().getLobotomized().contains(villager),
+                "an awake villager must not be tracked as lobotomized, or it is never re-checked as a transition");
+        assertTrue(plugin.getStorage().getActive().contains(villager), "it is re-tracked as active instead");
+    }
+
+    @Test
     void quiesceForUninstallLeavesVillagersUntouched() {
         load(true);
         Villager villager = lobotomizedVillager();

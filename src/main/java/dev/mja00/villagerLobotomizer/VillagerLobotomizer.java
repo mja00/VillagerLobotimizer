@@ -662,10 +662,21 @@ public class VillagerLobotomizer extends JavaPlugin {
         int villagers = 0;
         for (World world : Bukkit.getWorlds()) {
             for (Villager villager : world.getEntitiesByClass(Villager.class)) {
-                this.storage.addVillager(villager);
-                villagers++;
+                if (queueAddVillager(newStorage, villager)) {
+                    villagers++;
+                }
             }
         }
         return villagers;
+    }
+
+    /**
+     * Tracks a villager on its owning region thread. Being FIFO on the entity scheduler, this also
+     * runs after any wake a previous storage queued for it during a reload.
+     *
+     * @return false if the villager was already removed and its scheduler retired
+     */
+    public boolean queueAddVillager(LobotomizeStorage target, Villager villager) {
+        return villager.getScheduler().run(this, SentryTaskWrapper.wrap(task -> target.addVillager(villager)), null) != null;
     }
 }

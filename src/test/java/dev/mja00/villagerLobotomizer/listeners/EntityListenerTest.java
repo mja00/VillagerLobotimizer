@@ -122,6 +122,8 @@ class EntityListenerTest extends MockBukkitTestBase {
 
         // A fresh listener scans loaded worlds and registers existing villagers
         new EntityListener(plugin);
+        // The scan hands each villager to its own entity scheduler rather than touching it inline.
+        server.getScheduler().performTicks(1);
 
         assertTrue(isTracked(villager), "existing villagers should be picked up by the constructor scan");
     }

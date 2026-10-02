@@ -21,6 +21,7 @@ import org.bukkit.inventory.MerchantInventory;
 import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 
+import dev.mja00.villagerLobotomizer.LobotomizeStorage;
 import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import net.kyori.adventure.text.Component;
@@ -33,11 +34,10 @@ public class EntityListener implements Listener {
 
     public EntityListener(VillagerLobotomizer plugin) {
         this.plugin = plugin;
+        LobotomizeStorage storage = plugin.getStorage();
         for (World world : Bukkit.getWorlds()) {
-            for (Entity entity : world.getEntities()) {
-                if (entity instanceof Villager) {
-                    plugin.getStorage().addVillager((Villager)entity);
-                }
+            for (Villager villager : world.getEntitiesByClass(Villager.class)) {
+                plugin.queueAddVillager(storage, villager);
             }
         }
     }
