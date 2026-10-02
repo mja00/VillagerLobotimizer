@@ -66,6 +66,7 @@ public class LobotomizeStorage {
     private final NamespacedKey lobotomizedKey;
     private final LobotomizedMarkerStore markerStore;
     private final NamespacedKey lastRestockCheckDayTimeKey;
+    private final NamespacedKey lastRestockGameTimeKey;
     private final Set<Villager> activeVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Set<Villager> inactiveVillagers = Collections.newSetFromMap(new ConcurrentHashMap<>(128));
     private final Map<Chunk, Long> changedChunks = new ConcurrentHashMap<>();
@@ -193,6 +194,7 @@ public class LobotomizeStorage {
         this.key = new NamespacedKey(plugin, "lastRestock");
         this.lobotomizedKey = new NamespacedKey(plugin, LOBOTOMIZED_KEY);
         this.lastRestockCheckDayTimeKey = new NamespacedKey(plugin, "lastRestockCheckDayTime");
+        this.lastRestockGameTimeKey = new NamespacedKey(plugin, "lastRestockGameTime");
         // Use Paper's GlobalRegionScheduler for chunk processing. It never touches entities directly;
         // per-chunk entity access is dispatched to the owning region via getRegionScheduler() (see
         // scheduleChunkVillagerProcessing), keeping this Folia thread-ownership safe.
@@ -773,7 +775,7 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager should restock, {@code false} otherwise
      */
     private boolean shouldRestock(@NotNull Villager villager) {
-        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey);
+        return VillagerUtils.shouldRestock(villager, this.lastRestockCheckDayTimeKey, this.lastRestockGameTimeKey);
     }
 
     /**
