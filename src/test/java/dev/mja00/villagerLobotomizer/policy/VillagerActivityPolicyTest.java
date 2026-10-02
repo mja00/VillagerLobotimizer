@@ -210,6 +210,16 @@ class VillagerActivityPolicyTest {
     }
 
     @Test
+    void checkRoofTreatsCaveAndVoidAirAsOpen() {
+        // Worldgen fills caves with CAVE_AIR and world bounds with VOID_AIR; both are open sky for the roof check.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        for (Material air : new Material[] {Material.CAVE_AIR, Material.VOID_AIR}) {
+            TestGrid grid = sealedBox(0, 64, 0).set(0, 66, 0, new BlockSnapshot(air, true, false));
+            assertTrue(p.shouldBeActive(villager("", 0, 64, 0), grid), air.name());
+        }
+    }
+
+    @Test
     void honeyBlockFloorActsAsRoofAndBlocksMovementOverTallBlocks() {
         // A honey block under the villager sets hasRoof=true, which makes canMoveThrough also
         // require the block UNDER each neighbour's feet to be passable. With fences (tall/impassable)
