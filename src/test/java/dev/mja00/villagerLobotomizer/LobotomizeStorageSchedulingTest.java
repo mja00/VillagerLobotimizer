@@ -116,6 +116,10 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
         villager.setRecipes(List.of(recipe));
         world.getBlockAt(9, 64, 8).setType(Material.LECTERN);
         world.setTime(1000L);
+        // A counter reset just before this restock, so only the restock itself can move the key forward.
+        NamespacedKey gameTimeKey = new NamespacedKey(plugin, "lastRestockGameTime");
+        long seededReset = world.getGameTime();
+        villager.getPersistentDataContainer().set(gameTimeKey, PersistentDataType.LONG, seededReset);
         markLobotomized(villager);
         plugin.getStorage().addVillager(villager);
 
@@ -124,6 +128,8 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
         assertEquals(List.of(12), villager.usesSeenByUpdateDemand,
                 "demand must be computed from the uses traded since the last restock");
         assertEquals(0, villager.getRecipes().get(0).getUses(), "and the restock must still reset uses");
+        assertTrue(villager.getPersistentDataContainer().get(gameTimeKey, PersistentDataType.LONG) > seededReset,
+                "the frozen-time reset window must restart from this restock, as vanilla's does");
     }
 
     private static final class TestVillager extends VillagerMock {

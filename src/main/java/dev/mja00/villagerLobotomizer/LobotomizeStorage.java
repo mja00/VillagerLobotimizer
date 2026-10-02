@@ -843,6 +843,8 @@ public class LobotomizeStorage {
 
             villager.setRecipes(recipes);
             villager.setRestocksToday(villager.getRestocksToday() + 1);
+            // Vanilla's frozen-time fallback counts 12000 ticks from the last restock, not the last reset.
+            pdc.set(this.lastRestockGameTimeKey, PersistentDataType.LONG, villager.getWorld().getGameTime());
 
             if (this.plugin.isDebugging()) {
                 this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: " + villager.getRestocksToday());
