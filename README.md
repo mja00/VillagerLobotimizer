@@ -24,9 +24,9 @@ A Minecraft Paper plugin that improves server performance by turning off village
 ## Commands
 
 - `/lobotomy info` - Shows statistics about lobotomized and active villagers
-- `/lobotomy debug` - Shows detailed information about the villager you're looking at
-- `/lobotomy debug <entity>` - Shows detailed information about a specific villager
-- `/lobotomy debug toggle` - Toggles debug mode
+- `/lobotomy debug` - Shows detailed information about the villager you're looking at, including which lobotomy rules passed, decided, or were skipped, and why each neighbouring block counts as open or blocked. The report is also written to the console so it can be pasted into a bug report
+- `/lobotomy debug <entity>` - Shows the same report for a specific villager
+- `/lobotomy debug toggle` - Toggles debug mode. While on, every activate/lobotomize transition in the console names the rule that caused it
 - `/lobotomy wake` - Manually restores AI to the villager you're looking at
 - `/lobotomy reload` - Reloads the configuration and applies changes to all villagers
 - `/lobotomy uninstall` - Explains what removing the plugin will do, without doing it

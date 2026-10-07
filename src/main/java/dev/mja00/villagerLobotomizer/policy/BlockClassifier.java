@@ -67,4 +67,13 @@ public record BlockClassifier(
         return new BlockClassifier(impassableRegular, impassableTall,
                 impassableAll, cropBlocks, doorBlocks, professionBlocks);
     }
+
+    /** Set sizes, for debug output: an empty or tiny set points at a registry/version problem. */
+    public String summary() {
+        return this.impassableRegular.size() + " impassable, "
+                + this.impassableTall.size() + " walls/fences/gates, "
+                + this.cropBlocks.size() + " crops, "
+                + this.doorBlocks.size() + " doors, "
+                + this.professionBlocks.size() + " job sites";
+    }
 }

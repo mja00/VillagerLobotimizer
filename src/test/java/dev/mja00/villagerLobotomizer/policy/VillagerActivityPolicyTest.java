@@ -1,14 +1,22 @@
 package dev.mja00.villagerLobotomizer.policy;
 
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.BlockVerdict;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillagerActivityPolicyTest {
@@ -274,5 +282,104 @@ class VillagerActivityPolicyTest {
                 .set(0, 65, 1, STONE)
                 .set(0, 65, -1, STONE);
         assertFalse(defaultPolicy().shouldBeActive(villager("", 0, 64, 0), grid));
+    }
+
+    @Test
+    void traceRecordsEveryRuleInOrderForTrappedVillager() {
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), sealedBox(0, 64, 0));
+
+        assertFalse(d.active());
+        assertEquals(Rule.MOVEMENT, d.decidingRule());
+        assertEquals(Rule.values().length, d.checks().size());
+        for (int i = 0; i < Rule.values().length; i++) {
+            assertEquals(Rule.values()[i], d.checks().get(i).rule());
+        }
+        assertEquals(Outcome.PASSED, outcomeOf(d, Rule.NOBRAIN_NAME));
+        assertEquals(Outcome.DISABLED, outcomeOf(d, Rule.IN_VEHICLE));
+        assertEquals(Outcome.DISABLED, outcomeOf(d, Rule.ROOF));
+        assertEquals(Outcome.LOBOTOMIZED, outcomeOf(d, Rule.MOVEMENT));
+        assertTrue(d.summary().contains("trapped"), d.summary());
+
+        assertNotNull(d.movement());
+        assertFalse(d.movement().roofed());
+        assertEquals(4, d.movement().directions().size());
+        for (DirectionTrace dir : d.movement().directions()) {
+            assertFalse(dir.open(), dir.direction());
+            assertEquals(BlockVerdict.LISTED_IMPASSABLE, dir.feetVerdict(), dir.direction());
+            assertEquals(BlockVerdict.PASSABLE, dir.headVerdict(), dir.direction());
+        }
+    }
+
+    @Test
+    void traceNamesTheOpenDirection() {
+        TestGrid grid = sealedBox(0, 64, 0).set(1, 64, 0, AIR);
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), grid);
+
+        assertTrue(d.active());
+        assertEquals(Outcome.KEPT_ACTIVE, outcomeOf(d, Rule.MOVEMENT));
+        assertTrue(d.decidingCheck().detail().contains("+X (east)"), d.decidingCheck().detail());
+        assertTrue(d.movement().directions().get(0).open());
+    }
+
+    @Test
+    void earlyDecisionMarksLaterRulesNotReachedAndSkipsMovement() {
+        ActivityDecision d = policy(false, false, false, true, false, false, Set.of())
+                .evaluate(villager("", 0, 64, 0), sealedBox(0, 64, 0));
+
+        assertTrue(d.active());
+        assertEquals(Rule.ROOF, d.decidingRule());
+        assertEquals(Outcome.KEPT_ACTIVE, outcomeOf(d, Rule.ROOF));
+        assertEquals(Outcome.NOT_REACHED, outcomeOf(d, Rule.MOVEMENT));
+        assertNull(d.movement());
+    }
+
+    @Test
+    void nobrainTraceSkipsEverythingElse() {
+        ActivityDecision d = defaultPolicy().evaluate(villager("mr nobrain", 0, 64, 0), new TestGrid());
+
+        assertEquals(Rule.NOBRAIN_NAME, d.decidingRule());
+        assertEquals(Outcome.LOBOTOMIZED, outcomeOf(d, Rule.NOBRAIN_NAME));
+        for (int i = 1; i < d.checks().size(); i++) {
+            assertEquals(Outcome.NOT_REACHED, d.checks().get(i).outcome(), d.checks().get(i).rule().name());
+        }
+    }
+
+    @Test
+    void traceExplainsWhyEachNeighbourIsOpen() {
+        TestGrid grid = new TestGrid()
+                .set(1, 64, 0, CARPET)
+                .set(-1, 64, 0, DOOR)
+                .set(0, 64, 1, NON_SOLID)
+                .unload(0, -1);
+        ActivityDecision d = policy(false, false, false, false, true, true, Set.of())
+                .evaluate(villager("", 0, 64, 0), grid);
+
+        List<DirectionTrace> dirs = d.movement().directions();
+        assertEquals(BlockVerdict.BYPASS, dirs.get(0).feetVerdict());
+        assertEquals(BlockVerdict.DOOR_IGNORED, dirs.get(1).feetVerdict());
+        assertEquals(BlockVerdict.NON_SOLID_IGNORED, dirs.get(2).feetVerdict());
+        assertEquals(BlockVerdict.UNLOADED, dirs.get(3).feetVerdict());
+        assertFalse(dirs.get(3).open());
+    }
+
+    @Test
+    void honeyFloorTraceReportsRoofAndBlockingUnderFeet() {
+        TestGrid roofed = new TestGrid()
+                .set(0, 63, 0, HONEY)
+                .set(1, 63, 0, FENCE)
+                .set(-1, 63, 0, FENCE)
+                .set(0, 63, 1, FENCE)
+                .set(0, 63, -1, FENCE);
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), roofed);
+
+        assertTrue(d.movement().roofed());
+        assertTrue(d.movement().roofReason().contains("honey"), d.movement().roofReason());
+        for (DirectionTrace dir : d.movement().directions()) {
+            assertEquals(BlockVerdict.LISTED_IMPASSABLE, dir.underFeetVerdict(), dir.direction());
+        }
+    }
+
+    private static Outcome outcomeOf(ActivityDecision d, Rule rule) {
+        return d.checks().stream().filter(c -> c.rule() == rule).findFirst().orElseThrow().outcome();
     }
 }

@@ -35,6 +35,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
 
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
 import dev.mja00.villagerLobotomizer.policy.BlockClassifier;
 import dev.mja00.villagerLobotomizer.policy.BlockGrid;
 import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
@@ -161,6 +162,9 @@ public class LobotomizeStorage {
                 plugin.getConfig().getBoolean("ignore-non-solid-blocks"),
                 this.exemptNames,
                 BlockClassifier.fromServerRegistry());
+        if (this.plugin.isDebugging()) {
+            this.logger.info("[Debug] Block classification: " + this.activityPolicy.blocks().summary());
+        }
 
         try {
             if (!soundName.isEmpty()) {
@@ -630,7 +634,8 @@ public class LobotomizeStorage {
         }
 
         // Reuse the coordinates already computed above instead of cloning the location again.
-        boolean shouldBeActive = this.shouldBeActive(villager, blockX, blockY, blockZ);
+        ActivityDecision decision = this.evaluate(villager, blockX, blockY, blockZ);
+        boolean shouldBeActive = decision.active();
 
         if (shouldBeActive) {
             // Clear any stale marker whenever the villager should be active, not just on transition,
@@ -648,7 +653,8 @@ public class LobotomizeStorage {
             if (!active) {
                 setActive(villager);
                 if (this.plugin.isDebugging()) {
-                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active");
+                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active, "
+                            + decision.summary());
                 }
                 return true; // Transitioned: caller may want to reschedule at new interval
             }
@@ -674,7 +680,8 @@ public class LobotomizeStorage {
                 }
                 setInactive(villager);
                 if (this.plugin.isDebugging()) {
-                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now inactive");
+                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now inactive, "
+                            + decision.summary());
                 }
                 return true; // Transitioned: caller may want to reschedule at new interval
             }
@@ -743,7 +750,8 @@ public class LobotomizeStorage {
                     untrack(v);
                     return;
                 }
-                boolean shouldBeActive = this.shouldBeActive(v);
+                ActivityDecision decision = this.evaluate(v);
+                boolean shouldBeActive = decision.active();
                 if (shouldBeActive) {
                     setActive(v);
                     v.setAware(true);
@@ -762,7 +770,7 @@ public class LobotomizeStorage {
                     }
                 }
                 this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()
-                        + " to " + (shouldBeActive ? "active" : "inactive"));
+                        + " to " + (shouldBeActive ? "active" : "inactive") + ", " + decision.summary());
             }), null);
         } catch (IllegalPluginAccessException e) {
             // plugin disabling
@@ -999,24 +1007,46 @@ public class LobotomizeStorage {
 
 
     /**
-     * Determines if a villager should be considered active.
-     *
-     * @return {@code true} if the villager should be active, {@code false} otherwise.
+     * Evaluates the villager at its current location, as a periodic check would.
      */
-    private boolean shouldBeActive(Villager villager) {
+    private ActivityDecision evaluate(Villager villager) {
         Location loc = villager.getLocation().add(0.0F, 0.51, 0.0F);
-        return shouldBeActive(villager, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+        return evaluate(villager, loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
     }
 
     /**
-     * Determines whether a villager should be active at the given block location.
-     *
-     * @return {@code true} if the villager should be active at the given location, {@code false} otherwise
+     * Evaluates whether a villager should be active at the given block location, with the reason.
      */
-    private boolean shouldBeActive(Villager villager, int blockX, int blockY, int blockZ) {
-        return this.activityPolicy.shouldBeActive(
+    private ActivityDecision evaluate(Villager villager, int blockX, int blockY, int blockZ) {
+        return this.activityPolicy.evaluate(
                 villagerStateOf(villager, blockX, blockY, blockZ),
                 gridOf(villager.getWorld()));
+    }
+
+    /**
+     * Explains which rules would keep this villager active or lobotomize it right now, without
+     * changing its state. Must run on the villager's owning thread (its {@code EntityScheduler}).
+     */
+    public @NotNull ActivityDecision explain(@NotNull Villager villager) {
+        return evaluate(villager);
+    }
+
+    /** Block-set sizes the policy classifies against, for diagnosing registry/version issues. */
+    public @NotNull String blockClassificationSummary() {
+        return this.activityPolicy.blocks().summary();
+    }
+
+    /** Whether the villager carries the persistent lobotomized marker. Entity-thread only. */
+    public boolean hasLobotomizedMarker(@NotNull Villager villager) {
+        return villager.getPersistentDataContainer().has(this.lobotomizedKey, PersistentDataType.BYTE);
+    }
+
+    public long getCheckInterval() {
+        return this.checkInterval;
+    }
+
+    public long getInactiveCheckInterval() {
+        return this.inactiveCheckInterval;
     }
 
     /**

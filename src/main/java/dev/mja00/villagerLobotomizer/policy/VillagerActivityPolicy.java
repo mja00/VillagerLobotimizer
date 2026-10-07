@@ -1,8 +1,16 @@
 package dev.mja00.villagerLobotomizer.policy;
 
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.BlockVerdict;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.MovementTrace;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.RuleCheck;
 import org.bukkit.Material;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -38,6 +46,10 @@ public final class VillagerActivityPolicy {
         this.blocks = blocks;
     }
 
+    public BlockClassifier blocks() {
+        return this.blocks;
+    }
+
     /**
      * Determines whether a villager should be active based on its state and environment.
      *
@@ -46,114 +58,174 @@ public final class VillagerActivityPolicy {
      * @return {@code true} if the villager should be active, {@code false} if it should be lobotomized
      */
     public boolean shouldBeActive(VillagerState v, BlockGrid grid) {
+        return evaluate(v, grid).active();
+    }
+
+    /**
+     * Evaluates every rule in order and records why the villager should be active or lobotomized.
+     * The first rule that decides wins; later rules are recorded as {@link Outcome#NOT_REACHED}.
+     */
+    public ActivityDecision evaluate(VillagerState v, BlockGrid grid) {
+        Trace trace = new Trace();
+
         String name = v.name();
         if (name.contains("nobrain")) {
-            return false;
-        } else if (this.exemptNames.contains(name)) {
-            return true;
+            return trace.decide(Rule.NOBRAIN_NAME, false, "name \"" + name + "\" contains \"nobrain\"");
         }
+        trace.pass(Rule.NOBRAIN_NAME, name.isEmpty() ? "no custom name" : "name \"" + name + "\" has no \"nobrain\"");
+
+        if (this.exemptNames.contains(name)) {
+            return trace.decide(Rule.EXEMPT_NAME, true, "name \"" + name + "\" is listed");
+        }
+        trace.pass(Rule.EXEMPT_NAME, name.isEmpty() ? "no custom name" : "name not listed");
 
         if (v.swimming()) {
-            return true;
+            return trace.decide(Rule.SWIMMING, true, "villager is swimming");
         }
+        trace.pass(Rule.SWIMMING, "not swimming");
 
         BlockSnapshot feet = grid.at(v.blockX(), v.blockY(), v.blockZ());
         BlockSnapshot head = grid.at(v.blockX(), v.blockY() + 1, v.blockZ());
         if (isWater(feet) || isWater(head)) {
-            return true;
+            return trace.decide(Rule.IN_WATER, true, "water at " + (isWater(feet) ? "feet" : "head"));
         }
+        trace.pass(Rule.IN_WATER, "feet " + describe(feet) + ", head " + describe(head));
 
         if (v.sleeping()) {
-            return true;
+            return trace.decide(Rule.SLEEPING, true, "villager is sleeping in a bed");
+        }
+        trace.pass(Rule.SLEEPING, "not sleeping");
+
+        if (!this.lobotomizePassengers) {
+            trace.disabled(Rule.IN_VEHICLE, v.hasVehicle() ? "option off (villager is in a vehicle)" : "option off");
+        } else if (v.hasVehicle()) {
+            return trace.decide(Rule.IN_VEHICLE, false, "villager is in a boat/minecart");
+        } else {
+            trace.pass(Rule.IN_VEHICLE, "not in a vehicle");
         }
 
-        if (this.lobotomizePassengers && v.hasVehicle()) {
-            return false;
+        if (!this.onlyProfessions) {
+            trace.disabled(Rule.NO_PROFESSION, "option off");
+        } else if (v.professionNone()) {
+            return trace.decide(Rule.NO_PROFESSION, true, "villager has no profession");
+        } else {
+            trace.pass(Rule.NO_PROFESSION, "has a profession");
         }
 
-        if (this.onlyProfessions && v.professionNone()) {
-            return true;
-        }
-
-        if (this.onlyWithExperience && v.experience() == 0) {
-            return true;
+        if (!this.onlyWithExperience) {
+            trace.disabled(Rule.NO_EXPERIENCE, "option off");
+        } else if (v.experience() == 0) {
+            return trace.decide(Rule.NO_EXPERIENCE, true, "experience is 0 (never traded with)");
+        } else {
+            trace.pass(Rule.NO_EXPERIENCE, "experience is " + v.experience());
         }
 
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
         BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
+        int roofY = v.blockY() + 2;
 
-        if (this.checkRoof && (roof == null || isAir(roof.type()))) {
-            return true;
+        if (!this.checkRoof) {
+            trace.disabled(Rule.ROOF, "option off");
+        } else if (roof == null || isAir(roof.type())) {
+            return trace.decide(Rule.ROOF, true, "no block above head (y=" + roofY + " is " + describe(roof) + ")");
+        } else {
+            trace.pass(Rule.ROOF, "roof at y=" + roofY + " is " + describe(roof));
         }
 
         Material floorMaterial = floor == null ? Material.AIR : floor.type();
-        boolean hasRoof = floorMaterial == Material.HONEY_BLOCK
-                || testImpassable(this.blocks.impassableAll(), roof, false);
+        boolean honeyFloor = floorMaterial == Material.HONEY_BLOCK;
+        BlockVerdict roofVerdict = classify(this.blocks.impassableAll(), roof, false);
+        boolean roofBlocks = roof != null && roofVerdict.blocking();
+        boolean hasRoof = honeyFloor || roofBlocks;
+        String roofReason;
+        if (honeyFloor) {
+            roofReason = "standing on a honey block";
+        } else if (roofBlocks) {
+            roofReason = "roof " + describe(roof) + " is " + roofVerdict.description();
+        } else {
+            roofReason = "roof " + describe(roof) + " does not block (" + roofVerdict.description() + ")";
+        }
 
-        return canMoveCardinally(grid, v.blockX(), v.blockY(), v.blockZ(), hasRoof);
+        List<DirectionTrace> directions = List.of(
+                traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof),
+                traceDirection("-X (west)", grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof),
+                traceDirection("+Z (south)", grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof),
+                traceDirection("-Z (north)", grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof));
+        MovementTrace movement = new MovementTrace(floor, roof, hasRoof, roofReason, directions);
+
+        List<String> open = new ArrayList<>();
+        for (DirectionTrace d : directions) {
+            if (d.open()) {
+                open.add(d.direction());
+            }
+        }
+        String detail = open.isEmpty()
+                ? "trapped, all 4 directions blocked"
+                : "can walk out " + String.join(", ", open);
+        return trace.finish(Rule.MOVEMENT, !open.isEmpty(), detail, movement);
     }
 
     /**
-     * Determines whether the villager can move in any cardinal direction from the specified position.
+     * Traces whether a villager can move through a given block position.
      *
-     * @return true if at least one cardinal direction is passable, false otherwise
-     */
-    private boolean canMoveCardinally(BlockGrid grid, int x, int y, int z, boolean roof) {
-        boolean xPlus = canMoveThrough(grid, x + 1, y, z, roof);
-        boolean xMinus = canMoveThrough(grid, x - 1, y, z, roof);
-        boolean zPlus = canMoveThrough(grid, x, y, z + 1, roof);
-        boolean zMinus = canMoveThrough(grid, x, y, z - 1, roof);
-        return xPlus || xMinus || zPlus || zMinus;
-    }
-
-    /**
-     * Determines whether a villager can move through a given block position.
-     *
-     * @param grid the block grid to query
      * @param roof whether the under-feet block must be passable
-     * @return `true` if the villager can pass through the position, `false` otherwise
      */
-    private boolean canMoveThrough(BlockGrid grid, int x, int y, int z, boolean roof) {
+    private DirectionTrace traceDirection(String direction, BlockGrid grid, int x, int y, int z, boolean roof) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
         BlockSnapshot underFeet = grid.at(x, y - 1, z);
         if (head == null || feet == null || underFeet == null) {
-            return false;
+            return new DirectionTrace(direction, x, y, z,
+                    head, BlockVerdict.UNLOADED, feet, BlockVerdict.UNLOADED, underFeet, BlockVerdict.UNLOADED, false);
         }
-        boolean isHeadImpassable = testImpassable(this.blocks.impassableRegular(), head, false);
-        boolean isFeetImpassable = testImpassable(this.blocks.impassableRegular(), feet, false);
-        boolean isUnderFeetImpassable = testImpassable(this.blocks.impassableTall(), underFeet, true);
-        return !isHeadImpassable && !isFeetImpassable && (!roof || !isUnderFeetImpassable);
+        BlockVerdict headVerdict = classify(this.blocks.impassableRegular(), head, false);
+        BlockVerdict feetVerdict = classify(this.blocks.impassableRegular(), feet, false);
+        BlockVerdict underFeetVerdict = classify(this.blocks.impassableTall(), underFeet, true);
+        boolean open = !headVerdict.blocking() && !feetVerdict.blocking()
+                && (!roof || !underFeetVerdict.blocking());
+        return new DirectionTrace(direction, x, y, z,
+                head, headVerdict, feet, feetVerdict, underFeet, underFeetVerdict, open);
     }
 
     /**
-     * Determines whether a block should be treated as impassable.
+     * Classifies a block as blocking or open for movement, recording which test decided it.
      *
      * @param set             materials to classify as impassable
-     * @param b               the block to evaluate
+     * @param b               the block to evaluate; {@code null} means its chunk is unloaded
      * @param onlyTallBlocks  if true, blocks not in the set are never considered impassable
-     * @return                true if the block is impassable, false otherwise
      */
-    private boolean testImpassable(EnumSet<Material> set, BlockSnapshot b, boolean onlyTallBlocks) {
+    private BlockVerdict classify(EnumSet<Material> set, BlockSnapshot b, boolean onlyTallBlocks) {
         if (b == null) {
-            return false;
+            return BlockVerdict.UNLOADED;
         }
         Material type = b.type();
         if (set.contains(type)) {
-            return true;
+            return BlockVerdict.LISTED_IMPASSABLE;
         }
         if (onlyTallBlocks) {
-            return false;
+            return BlockVerdict.NOT_TALL;
         }
-        boolean isCarpet = type.name().contains("_CARPET");
-        boolean isBed = type.name().contains("_BED");
-        boolean isWater = type == Material.WATER;
-        boolean isCrop = this.blocks.cropBlocks().contains(type);
-        boolean isABypassBlock = (isCrop || isBed || isCarpet
-                || (this.ignoreStuckInDoors && this.blocks.doorBlocks().contains(type)));
-        boolean isNonSolid = !b.solid() && this.ignoreNonSolidBlocks
-                && !this.blocks.professionBlocks().contains(type);
-        return !isWater && !b.passable() && !isABypassBlock && !isNonSolid;
+        if (type == Material.WATER) {
+            return BlockVerdict.WATER;
+        }
+        if (b.passable()) {
+            return BlockVerdict.PASSABLE;
+        }
+        if (this.blocks.cropBlocks().contains(type) || type.name().contains("_BED")
+                || type.name().contains("_CARPET")) {
+            return BlockVerdict.BYPASS;
+        }
+        if (this.ignoreStuckInDoors && this.blocks.doorBlocks().contains(type)) {
+            return BlockVerdict.DOOR_IGNORED;
+        }
+        if (!b.solid() && this.ignoreNonSolidBlocks && !this.blocks.professionBlocks().contains(type)) {
+            return BlockVerdict.NON_SOLID_IGNORED;
+        }
+        return BlockVerdict.NOT_PASSABLE;
+    }
+
+    private static String describe(BlockSnapshot b) {
+        return b == null ? "unloaded" : b.type().name();
     }
 
     /**
@@ -169,5 +241,31 @@ public final class VillagerActivityPolicy {
     // Material#isAir resolves through the server registry, which this pure policy must not depend on.
     private static boolean isAir(Material type) {
         return type == Material.AIR || type == Material.CAVE_AIR || type == Material.VOID_AIR;
+    }
+
+    /** Accumulates one {@link RuleCheck} per rule, in {@link Rule} order. */
+    private static final class Trace {
+        private final List<RuleCheck> checks = new ArrayList<>(Rule.values().length);
+
+        void pass(Rule rule, String detail) {
+            this.checks.add(new RuleCheck(rule, Outcome.PASSED, detail));
+        }
+
+        void disabled(Rule rule, String detail) {
+            this.checks.add(new RuleCheck(rule, Outcome.DISABLED, detail));
+        }
+
+        ActivityDecision decide(Rule rule, boolean active, String detail) {
+            return finish(rule, active, detail, null);
+        }
+
+        ActivityDecision finish(Rule rule, boolean active, String detail, MovementTrace movement) {
+            this.checks.add(new RuleCheck(rule, active ? Outcome.KEPT_ACTIVE : Outcome.LOBOTOMIZED, detail));
+            Rule[] rules = Rule.values();
+            for (int i = rule.ordinal() + 1; i < rules.length; i++) {
+                this.checks.add(new RuleCheck(rules[i], Outcome.NOT_REACHED, ""));
+            }
+            return new ActivityDecision(active, rule, this.checks, movement);
+        }
     }
 }
