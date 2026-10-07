@@ -111,7 +111,7 @@ After making changes, ALWAYS run through these validation steps:
 ### Dependencies and Versions
 - **Minecraft**: 1.21.11 and 26.1–26.3 (`supportedVersions` and `modrinthGameVersions` in `build.gradle.kts`)
 - **Java**: compiled for 21; servers on Minecraft 26.x run Java 25
-- **Gradle**: 9.4.1
+- **Gradle**: 9.8.1
 - **Paper Dev Bundle**: 1.21.11-R0.1-SNAPSHOT (compile against the oldest supported version so the jar runs on all of them)
 - **Tests**: JUnit 6 + MockBukkit 4.110 (`mockbukkit-v1.21`) against `paper-api` 1.21.11
 - **Key Libraries**:
@@ -143,7 +143,7 @@ java -version  # Should show 21 or newer
 
 # Test Gradle wrapper
 chmod +x ./gradlew
-./gradlew --version  # Should show "Gradle 9.4.1"
+./gradlew --version  # Should show "Gradle 9.8.1"
 
 # Test network connectivity (will fail in restricted environments)
 curl -I https://repo.papermc.io/repository/maven-public/
