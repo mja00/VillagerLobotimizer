@@ -1,14 +1,22 @@
 package dev.mja00.villagerLobotomizer.policy;
 
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.BlockVerdict;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
 import org.bukkit.Material;
 import org.junit.jupiter.api.Test;
 
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillagerActivityPolicyTest {
@@ -37,7 +45,7 @@ class VillagerActivityPolicyTest {
     }
 
     /** A mutable grid of snapshots; any coordinate not set defaults to AIR. */
-    private static final class TestGrid implements BlockGrid {
+    private static class TestGrid implements BlockGrid {
         private final Map<Long, BlockSnapshot> blocks = new HashMap<>();
         private final Set<Long> unloadedColumns = new java.util.HashSet<>();
 
@@ -274,5 +282,215 @@ class VillagerActivityPolicyTest {
                 .set(0, 65, 1, STONE)
                 .set(0, 65, -1, STONE);
         assertFalse(defaultPolicy().shouldBeActive(villager("", 0, 64, 0), grid));
+    }
+
+    @Test
+    void traceRecordsEveryRuleInOrderForTrappedVillager() {
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), sealedBox(0, 64, 0));
+
+        assertFalse(d.active());
+        assertEquals(Rule.MOVEMENT, d.decidingRule());
+        assertEquals(Rule.values().length, d.checks().size());
+        for (int i = 0; i < Rule.values().length; i++) {
+            assertEquals(Rule.values()[i], d.checks().get(i).rule());
+        }
+        assertEquals(Outcome.PASSED, outcomeOf(d, Rule.NOBRAIN_NAME));
+        assertEquals(Outcome.DISABLED, outcomeOf(d, Rule.IN_VEHICLE));
+        assertEquals(Outcome.DISABLED, outcomeOf(d, Rule.ROOF));
+        assertEquals(Outcome.LOBOTOMIZED, outcomeOf(d, Rule.MOVEMENT));
+        assertTrue(d.summary().contains("trapped"), d.summary());
+
+        assertNotNull(d.movement());
+        assertFalse(d.movement().roofed());
+        assertEquals(4, d.movement().directions().size());
+        for (DirectionTrace dir : d.movement().directions()) {
+            assertFalse(dir.open(), dir.direction());
+            assertEquals(BlockVerdict.LISTED_IMPASSABLE, dir.feetVerdict(), dir.direction());
+            assertEquals(BlockVerdict.PASSABLE, dir.headVerdict(), dir.direction());
+        }
+    }
+
+    @Test
+    void traceNamesTheOpenDirection() {
+        TestGrid grid = sealedBox(0, 64, 0).set(1, 64, 0, AIR);
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), grid);
+
+        assertTrue(d.active());
+        assertEquals(Outcome.KEPT_ACTIVE, outcomeOf(d, Rule.MOVEMENT));
+        assertTrue(d.decidingCheck().detail().contains("+X (east)"), d.decidingCheck().detail());
+        assertTrue(d.movement().directions().get(0).open());
+    }
+
+    @Test
+    void earlyDecisionMarksLaterRulesNotReachedAndSkipsMovement() {
+        ActivityDecision d = policy(false, false, false, true, false, false, Set.of())
+                .evaluate(villager("", 0, 64, 0), sealedBox(0, 64, 0));
+
+        assertTrue(d.active());
+        assertEquals(Rule.ROOF, d.decidingRule());
+        assertEquals(Outcome.KEPT_ACTIVE, outcomeOf(d, Rule.ROOF));
+        assertEquals(Outcome.NOT_REACHED, outcomeOf(d, Rule.MOVEMENT));
+        assertNull(d.movement());
+    }
+
+    @Test
+    void nobrainTraceSkipsEverythingElse() {
+        ActivityDecision d = defaultPolicy().evaluate(villager("mr nobrain", 0, 64, 0), new TestGrid());
+
+        assertEquals(Rule.NOBRAIN_NAME, d.decidingRule());
+        assertEquals(Outcome.LOBOTOMIZED, outcomeOf(d, Rule.NOBRAIN_NAME));
+        for (int i = 1; i < d.checks().size(); i++) {
+            assertEquals(Outcome.NOT_REACHED, d.checks().get(i).outcome(), d.checks().get(i).rule().name());
+        }
+    }
+
+    @Test
+    void traceExplainsWhyEachNeighbourIsOpen() {
+        TestGrid grid = new TestGrid()
+                .set(1, 64, 0, CARPET)
+                .set(-1, 64, 0, DOOR)
+                .set(0, 64, 1, NON_SOLID)
+                .unload(0, -1);
+        ActivityDecision d = policy(false, false, false, false, true, true, Set.of())
+                .evaluate(villager("", 0, 64, 0), grid);
+
+        List<DirectionTrace> dirs = d.movement().directions();
+        assertEquals(BlockVerdict.BYPASS, dirs.get(0).feetVerdict());
+        assertEquals(BlockVerdict.DOOR_IGNORED, dirs.get(1).feetVerdict());
+        assertEquals(BlockVerdict.NON_SOLID_IGNORED, dirs.get(2).feetVerdict());
+        assertEquals(BlockVerdict.UNLOADED, dirs.get(3).feetVerdict());
+        assertFalse(dirs.get(3).open());
+    }
+
+    @Test
+    void honeyFloorTraceReportsRoofAndBlockingUnderFeet() {
+        TestGrid roofed = new TestGrid()
+                .set(0, 63, 0, HONEY)
+                .set(1, 63, 0, FENCE)
+                .set(-1, 63, 0, FENCE)
+                .set(0, 63, 1, FENCE)
+                .set(0, 63, -1, FENCE);
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), roofed);
+
+        assertTrue(d.movement().roofed());
+        assertTrue(d.movement().roofReason().contains("honey"), d.movement().roofReason());
+        for (DirectionTrace dir : d.movement().directions()) {
+            assertEquals(BlockVerdict.LISTED_IMPASSABLE, dir.underFeetVerdict(), dir.direction());
+        }
+    }
+
+    private static Outcome outcomeOf(ActivityDecision d, Rule rule) {
+        return d.checks().stream().filter(c -> c.rule() == rule).findFirst().orElseThrow().outcome();
+    }
+
+    /**
+     * shouldBeActive and evaluate implement the same rules twice (one allocation-free for the
+     * periodic checks, one traced for debugging), so they must never disagree.
+     */
+    @Test
+    void booleanPathAlwaysAgreesWithTrace() {
+        BlockSnapshot[] palette = {AIR, AIR, AIR, STONE, STONE, WATER, CARPET, HONEY, DOOR, FENCE, NON_SOLID, LECTERN,
+                new BlockSnapshot(Material.CAVE_AIR, true, false), new BlockSnapshot(Material.WHEAT, true, false),
+                new BlockSnapshot(Material.WHITE_BED, false, true)};
+        String[] names = {"", "", "keepme", "mr nobrain", "bob"};
+        double[] bodyTops = {64 + 1.95, 64 + 0.0625 + 1.95, 64 + 0.5 + 1.95, 64 + 2.0};
+        java.util.Random random = new java.util.Random(1234);
+
+        for (int i = 0; i < 20_000; i++) {
+            VillagerActivityPolicy p = policy(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(),
+                    random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), Set.of("keepme"));
+            VillagerState v = new VillagerState(names[random.nextInt(names.length)],
+                    random.nextInt(8) == 0, random.nextInt(8) == 0, random.nextInt(4) == 0, random.nextInt(4) == 0,
+                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)]);
+
+            Map<Long, Double> collisionBottoms = new HashMap<>();
+            TestGrid grid = new TestGrid() {
+                @Override
+                public double collisionBottomAt(int x, int y, int z) {
+                    Double bottom = collisionBottoms.get(TestGrid.key(x, y, z));
+                    return bottom != null ? bottom : super.collisionBottomAt(x, y, z);
+                }
+            };
+            for (int x = -1; x <= 1; x++) {
+                for (int z = -1; z <= 1; z++) {
+                    if ((x != 0 || z != 0) && random.nextInt(12) == 0) {
+                        grid.unload(x, z);
+                    }
+                    for (int y = 63; y <= 66; y++) {
+                        grid.set(x, y, z, palette[random.nextInt(palette.length)]);
+                        if (random.nextInt(4) == 0) {
+                            collisionBottoms.put(TestGrid.key(x, y, z), random.nextBoolean() ? 0.5 : 0.0);
+                        }
+                    }
+                }
+            }
+
+            assertEquals(p.evaluate(v, grid).active(), p.shouldBeActive(v, grid), "case " + i + ": " + v);
+        }
+    }
+
+    /** Standing on a carpet: feet 1/16 up, so a 1.95-tall hitbox tops out 0.0125 into the y+2 layer. */
+    private static VillagerState onCarpet(int x, int y, int z) {
+        return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95);
+    }
+
+    /** Sealed on three sides; +X is clear at feet and head height but has a block one layer higher. */
+    private static TestGrid openEastUnderLowCeiling(BlockSnapshot ceiling) {
+        return new TestGrid()
+                .set(-1, 64, 0, STONE)
+                .set(0, 64, 1, STONE)
+                .set(0, 64, -1, STONE)
+                .set(1, 66, 0, ceiling);
+    }
+
+    @Test
+    void carpetRaisedVillagerIsTrappedByBlockAboveNeighbourHeadHeight() {
+        ActivityDecision d = defaultPolicy().evaluate(onCarpet(0, 64, 0), openEastUnderLowCeiling(STONE));
+
+        assertFalse(d.active());
+        DirectionTrace east = d.movement().directions().get(0);
+        assertEquals(BlockVerdict.PASSABLE, east.feetVerdict());
+        assertEquals(BlockVerdict.PASSABLE, east.headVerdict());
+        assertEquals(BlockVerdict.HITBOX_OVERLAP, east.overheadVerdict());
+        assertFalse(east.open());
+        assertTrue(d.movement().overhang() > 0.012 && d.movement().overhang() < 0.013, "overhang");
+    }
+
+    @Test
+    void unraisedVillagerIgnoresBlockAboveNeighbourHeadHeight() {
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), openEastUnderLowCeiling(STONE));
+
+        assertTrue(d.active());
+        assertEquals(0.0, d.movement().overhang());
+        assertNull(d.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
+    void villagerStandingOnFullBlockIsNotRaised() {
+        VillagerState onGround = new VillagerState("", false, false, false, false, 10, 0, 64, 0, 64 + 1.95);
+        assertTrue(defaultPolicy().shouldBeActive(onGround, openEastUnderLowCeiling(STONE)));
+    }
+
+    @Test
+    void raisedVillagerCanPassUnderHighCollisionBlock() {
+        // A top slab's collision starts halfway up the block, clear of a hitbox poking 0.0125 into the layer.
+        TestGrid grid = new TestGrid() {
+            @Override
+            public double collisionBottomAt(int x, int y, int z) {
+                return x == 1 && y == 66 && z == 0 ? 0.5 : super.collisionBottomAt(x, y, z);
+            }
+        };
+        grid.set(-1, 64, 0, STONE).set(0, 64, 1, STONE).set(0, 64, -1, STONE)
+                .set(1, 66, 0, new BlockSnapshot(Material.OAK_SLAB, false, true));
+
+        ActivityDecision d = defaultPolicy().evaluate(onCarpet(0, 64, 0), grid);
+
+        assertTrue(d.active());
+        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
+    void raisedVillagerIsNotBlockedByPassableBlockAboveNeighbour() {
+        assertTrue(defaultPolicy().shouldBeActive(onCarpet(0, 64, 0), openEastUnderLowCeiling(AIR)));
     }
 }

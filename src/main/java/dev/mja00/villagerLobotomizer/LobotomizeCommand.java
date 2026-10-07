@@ -1,18 +1,23 @@
 package dev.mja00.villagerLobotomizer;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Villager;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import dev.mja00.villagerLobotomizer.utils.ActivityDecisionFormatter;
 import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 
 import com.mojang.brigadier.Command;
@@ -27,8 +32,11 @@ import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public class LobotomizeCommand {
     private final VillagerLobotomizer plugin;
@@ -169,30 +177,129 @@ public class LobotomizeCommand {
     }
 
     /**
-     * Sends detailed status information about a villager to the command source.
+     * Sends detailed status information about a villager, including a trace of every lobotomy rule,
+     * to the command source and the console.
      *
      * @return {@code Command.SINGLE_SUCCESS}
      */
     private int getVillagerDetails(CommandSourceStack source, Villager villager) {
-        boolean lobotomized = this.plugin.getStorage().getLobotomized().contains(villager);
-        boolean active = this.plugin.getStorage().getActive().contains(villager);
+        CommandSender sender = source.getSender();
+        // Read the villager on its own thread: on Folia it can live in a different region than the executor.
+        ScheduledTask task;
+        try {
+            task = villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(t -> {
+                List<Component> lines = buildVillagerDetails(villager);
+                Component report = Component.join(JoinConfiguration.newlines(), lines);
+                if (sender instanceof Player player) {
+                    player.getScheduler().run(this.plugin,
+                            SentryTaskWrapper.wrap(ignored -> player.sendMessage(report)), null);
+                } else {
+                    sender.sendMessage(report);
+                }
+                this.plugin.getLogger().info("[Debug] Lobotomy decision for villager " + villager.getUniqueId() + ":");
+                for (Component line : lines) {
+                    this.plugin.getLogger().info("[Debug]   " + PlainTextComponentSerializer.plainText().serialize(line));
+                }
+            }), () -> {
+                Component unavailable = Component.text("That villager was removed before it could be inspected.")
+                        .color(NamedTextColor.RED);
+                if (sender instanceof Player player) {
+                    player.getScheduler().run(this.plugin,
+                            SentryTaskWrapper.wrap(ignored -> player.sendMessage(unavailable)), null);
+                } else {
+                    sender.sendMessage(unavailable);
+                }
+            });
+        } catch (IllegalPluginAccessException e) {
+            return 0;
+        }
+        if (task == null) {
+            sender.sendMessage(Component.text("That villager is no longer available.").color(NamedTextColor.RED));
+            return 0;
+        }
+        return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * Builds the debug report for a villager. Must run on the villager's owning thread.
+     */
+    List<Component> buildVillagerDetails(Villager villager) {
+        LobotomizeStorage storage = this.plugin.getStorage();
+        boolean lobotomized = storage.getLobotomized().contains(villager);
+        boolean active = storage.getActive().contains(villager);
+        boolean marker = storage.hasLobotomizedMarker(villager);
         // isAware false implies no AI regardless of hasAI
         boolean hasAI = villager.isAware() && villager.hasAI();
-        Component message = Component.text("Is Awareness enabled: ")
-                .append(Component.text(villager.isAware()).color(villager.isAware() ? NamedTextColor.GREEN : NamedTextColor.RED));
-        message = message.append(Component.text("\nIs AI enabled: "))
-                .append(Component.text(hasAI).color(hasAI ? NamedTextColor.GREEN : NamedTextColor.RED));
-        message = message.append(Component.text("\nIs marked as Lobotomized: "))
-                .append(Component.text(lobotomized).color(lobotomized ? NamedTextColor.GREEN : NamedTextColor.RED));
-        message = message.append(Component.text("\nIs marked as Active: "))
-                .append(Component.text(active).color(active ? NamedTextColor.GREEN : NamedTextColor.RED));
-        message = message.append(Component.text("\nVillager level: "))
-                .append(Component.text(villager.getVillagerLevel()).color(NamedTextColor.GREEN));
-        message = message.append(Component.text("\nVillager experience: "))
-                .append(Component.text(villager.getVillagerExperience()).color(NamedTextColor.GREEN));
-        source.getSender().sendMessage(message);
+        Location loc = villager.getLocation();
 
-        return Command.SINGLE_SUCCESS;
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.text("Villager " + villager.getUniqueId()).color(NamedTextColor.GOLD)
+                .append(Component.text(" at " + loc.getWorld().getName() + " "
+                        + loc.getBlockX() + " " + loc.getBlockY() + " " + loc.getBlockZ()).color(NamedTextColor.GRAY)));
+        lines.add(flag("Is Awareness enabled: ", villager.isAware()));
+        lines.add(flag("Is AI enabled: ", hasAI));
+        lines.add(flag("Is marked as Lobotomized: ", lobotomized));
+        lines.add(flag("Is marked as Active: ", active));
+        lines.add(flag("Has persistent lobotomized marker: ", marker));
+        lines.add(Component.text("Profession: ")
+                .append(Component.text(villager.getProfession().key().asString()).color(NamedTextColor.GREEN))
+                .append(Component.text(", level "))
+                .append(Component.text(villager.getVillagerLevel()).color(NamedTextColor.GREEN))
+                .append(Component.text(", experience "))
+                .append(Component.text(villager.getVillagerExperience()).color(NamedTextColor.GREEN)));
+
+        ActivityDecision decision = storage.explain(villager);
+        lines.addAll(ActivityDecisionFormatter.format(decision));
+        lines.add(diagnose(storage, villager, decision, active, lobotomized));
+        lines.add(Component.text("Block classification: " + storage.blockClassificationSummary())
+                .color(NamedTextColor.DARK_GRAY));
+        return lines;
+    }
+
+    /**
+     * Explains how the rule result relates to what the plugin is actually doing to this villager.
+     */
+    private Component diagnose(LobotomizeStorage storage, Villager villager, ActivityDecision decision,
+                               boolean trackedActive, boolean trackedLobotomized) {
+        if (!trackedActive && !trackedLobotomized) {
+            return Component.text("Not tracked: the plugin is not checking this villager, so the rules above are "
+                    + "not being applied. Villagers are tracked when they load into the world; /lobotomy wake or an "
+                    + "unfinished uninstall stops tracking until the chunk or plugin reloads.").color(NamedTextColor.YELLOW);
+        }
+        if (trackedActive && !decision.active()) {
+            return Component.text("Will be lobotomized at its next check (every " + storage.getCheckInterval()
+                    + " ticks).").color(NamedTextColor.YELLOW);
+        }
+        if (trackedLobotomized && decision.active()) {
+            return Component.text("Will be woken at its next check (every " + storage.getInactiveCheckInterval()
+                    + " ticks).").color(NamedTextColor.YELLOW);
+        }
+        if (trackedLobotomized && villager.isAware()) {
+            return Component.text("Tracked as lobotomized but still aware; AI is disabled again at its next check.")
+                    .color(NamedTextColor.YELLOW);
+        }
+        if (trackedLobotomized) {
+            return Component.text("Lobotomized, as the rules expect.").color(NamedTextColor.GREEN);
+        }
+        return Component.text("Stays active: " + hint(decision)).color(NamedTextColor.GREEN);
+    }
+
+    private static String hint(ActivityDecision decision) {
+        return switch (decision.decidingRule()) {
+            case EXEMPT_NAME -> "its name is in always-active-names.";
+            case SWIMMING, IN_WATER -> "remove the water around it.";
+            case SLEEPING -> "it is asleep; it is re-checked after it wakes.";
+            case NO_PROFESSION -> "give it a job site, or turn off only-lobotomize-villagers-with-professions.";
+            case NO_EXPERIENCE -> "trade with it once, or turn off only-lobotomize-villagers-with-experience.";
+            case ROOF -> "place a block above its head, or set check-roof to false.";
+            case MOVEMENT -> "block every direction marked OPEN above.";
+            default -> "see the deciding rule above.";
+        };
+    }
+
+    private static Component flag(String label, boolean value) {
+        return Component.text(label)
+                .append(Component.text(value).color(value ? NamedTextColor.GREEN : NamedTextColor.RED));
     }
 
     /**
@@ -303,6 +410,10 @@ public class LobotomizeCommand {
 
     private int toggleDebugCommand(CommandSourceStack source) throws CommandSyntaxException {
         this.plugin.setDebugging(!this.plugin.isDebugging());
+        if (this.plugin.isDebugging()) {
+            this.plugin.getLogger().info("[Debug] Block classification: "
+                    + this.plugin.getStorage().blockClassificationSummary());
+        }
         source.getSender().sendMessage(Component.text("Debug mode: ")
                 .append(Component.text(this.plugin.isDebugging() ? "enabled" : "disabled"))
                 .append(Component.text(". Messages about villager tracking will now be printed to your console.")));

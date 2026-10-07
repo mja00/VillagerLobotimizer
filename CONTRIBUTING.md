@@ -126,7 +126,7 @@ Run the full test suite before pushing:
 For changes that affect runtime behavior, also test in-game with `./gradlew runServer`. Useful commands while testing:
 
 - `/lobotomy info` — counts of active vs. lobotomized villagers
-- `/lobotomy debug` — info about the villager you're looking at
+- `/lobotomy debug` — info about the villager you're looking at, with a trace of every lobotomy rule
 - `/lobotomy debug toggle` — toggle debug logging
 - `/lobotomy wake` — manually un-lobotomize the targeted villager
 - `/lobotomy reload` — reload config
