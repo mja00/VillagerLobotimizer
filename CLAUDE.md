@@ -33,7 +33,7 @@ Note `processVillager`'s active branch wakes on every check, not just on transit
 **policy/** - Pure, unit-tested lobotomy decision logic (no Bukkit live objects, scheduler, or shared sets):
 - `VillagerActivityPolicy.evaluate(VillagerState, BlockGrid)` - decision rules, returning an `ActivityDecision` trace (per-rule `Outcome`, per-direction `BlockVerdict`) used by `/lobotomy debug` and debug logs; `shouldBeActive` is `evaluate(...).active()`
 - `BlockClassifier` - Material sets (`impassableRegular`, `impassableTall`, `impassableAll`, `cropBlocks`, `doorBlocks`, `professionBlocks`), built once via `fromServerRegistry()`
-- `BlockSnapshot` (type/passable/solid), `BlockGrid` (coord→snapshot, `null`=unloaded), `VillagerState` (villager properties)
+- `BlockSnapshot` (type/passable/solid), `BlockGrid` (coord→snapshot, `null`=unloaded; `collisionBottomAt` reads real collision shapes), `VillagerState` (villager properties; `bodyTop` = hitbox top, so a carpet-raised villager also checks each neighbour's y+2 block)
 
 **storage/** - `LobotomizedMarkerStore` (SQLite `state.db`) records which villagers carry the PDC marker, so uninstall can reach ones in unloaded chunks. Invariant: **a row exists exactly when the marker is written**. Writes go through a single intent map mutated via `compute()` and drained on an async task every 5s; suppression in both directions keeps steady-state writes near zero. `org.sqlite` is shaded **unrelocated** (the bundled native has `org/sqlite/core/NativeDB` compiled into its JNI bindings) and opened via `SQLiteDataSource`, never `DriverManager`.
 

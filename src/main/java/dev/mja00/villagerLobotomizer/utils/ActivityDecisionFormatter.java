@@ -11,6 +11,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Renders an {@link ActivityDecision} as chat lines for {@code /lobotomy debug}. Tags are plain ASCII
@@ -47,6 +48,11 @@ public final class ActivityDecisionFormatter {
                         + (movement.roofed()
                         ? "under-feet walls/fences/gates also block"
                         : "under-feet blocks ignored")).color(NamedTextColor.GRAY)));
+        if (movement.overhang() > 0) {
+            lines.add(Component.text(String.format(Locale.ROOT,
+                    " Hitbox is raised %.4f into the layer above head height, so blocks there (\"above\") also count.",
+                    movement.overhang())).color(NamedTextColor.GRAY));
+        }
         for (DirectionTrace d : movement.directions()) {
             Component line = Component.text(" " + d.direction() + " @ " + d.x() + " " + d.y() + " " + d.z() + ": ")
                     .color(NamedTextColor.WHITE)
@@ -56,6 +62,10 @@ public final class ActivityDecisionFormatter {
                     .append(block("feet", d.feet(), d.feetVerdict()))
                     .append(Component.text(", ").color(NamedTextColor.DARK_GRAY))
                     .append(block("head", d.head(), d.headVerdict()));
+            if (d.overheadVerdict() != null) {
+                line = line.append(Component.text(", ").color(NamedTextColor.DARK_GRAY))
+                        .append(block("above", d.overhead(), d.overheadVerdict()));
+            }
             if (movement.roofed()) {
                 line = line.append(Component.text(", ").color(NamedTextColor.DARK_GRAY))
                         .append(block("under", d.underFeet(), d.underFeetVerdict()));

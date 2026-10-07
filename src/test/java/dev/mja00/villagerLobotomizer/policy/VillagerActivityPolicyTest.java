@@ -45,7 +45,7 @@ class VillagerActivityPolicyTest {
     }
 
     /** A mutable grid of snapshots; any coordinate not set defaults to AIR. */
-    private static final class TestGrid implements BlockGrid {
+    private static class TestGrid implements BlockGrid {
         private final Map<Long, BlockSnapshot> blocks = new HashMap<>();
         private final Set<Long> unloadedColumns = new java.util.HashSet<>();
 
@@ -381,5 +381,70 @@ class VillagerActivityPolicyTest {
 
     private static Outcome outcomeOf(ActivityDecision d, Rule rule) {
         return d.checks().stream().filter(c -> c.rule() == rule).findFirst().orElseThrow().outcome();
+    }
+
+    /** Standing on a carpet: feet 1/16 up, so a 1.95-tall hitbox tops out 0.0125 into the y+2 layer. */
+    private static VillagerState onCarpet(int x, int y, int z) {
+        return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95);
+    }
+
+    /** Sealed on three sides; +X is clear at feet and head height but has a block one layer higher. */
+    private static TestGrid openEastUnderLowCeiling(BlockSnapshot ceiling) {
+        return new TestGrid()
+                .set(-1, 64, 0, STONE)
+                .set(0, 64, 1, STONE)
+                .set(0, 64, -1, STONE)
+                .set(1, 66, 0, ceiling);
+    }
+
+    @Test
+    void carpetRaisedVillagerIsTrappedByBlockAboveNeighbourHeadHeight() {
+        ActivityDecision d = defaultPolicy().evaluate(onCarpet(0, 64, 0), openEastUnderLowCeiling(STONE));
+
+        assertFalse(d.active());
+        DirectionTrace east = d.movement().directions().get(0);
+        assertEquals(BlockVerdict.PASSABLE, east.feetVerdict());
+        assertEquals(BlockVerdict.PASSABLE, east.headVerdict());
+        assertEquals(BlockVerdict.HITBOX_OVERLAP, east.overheadVerdict());
+        assertFalse(east.open());
+        assertTrue(d.movement().overhang() > 0.012 && d.movement().overhang() < 0.013, "overhang");
+    }
+
+    @Test
+    void unraisedVillagerIgnoresBlockAboveNeighbourHeadHeight() {
+        ActivityDecision d = defaultPolicy().evaluate(villager("", 0, 64, 0), openEastUnderLowCeiling(STONE));
+
+        assertTrue(d.active());
+        assertEquals(0.0, d.movement().overhang());
+        assertNull(d.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
+    void villagerStandingOnFullBlockIsNotRaised() {
+        VillagerState onGround = new VillagerState("", false, false, false, false, 10, 0, 64, 0, 64 + 1.95);
+        assertTrue(defaultPolicy().shouldBeActive(onGround, openEastUnderLowCeiling(STONE)));
+    }
+
+    @Test
+    void raisedVillagerCanPassUnderHighCollisionBlock() {
+        // A top slab's collision starts halfway up the block, clear of a hitbox poking 0.0125 into the layer.
+        TestGrid grid = new TestGrid() {
+            @Override
+            public double collisionBottomAt(int x, int y, int z) {
+                return x == 1 && y == 66 && z == 0 ? 0.5 : super.collisionBottomAt(x, y, z);
+            }
+        };
+        grid.set(-1, 64, 0, STONE).set(0, 64, 1, STONE).set(0, 64, -1, STONE)
+                .set(1, 66, 0, new BlockSnapshot(Material.OAK_SLAB, false, true));
+
+        ActivityDecision d = defaultPolicy().evaluate(onCarpet(0, 64, 0), grid);
+
+        assertTrue(d.active());
+        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
+    void raisedVillagerIsNotBlockedByPassableBlockAboveNeighbour() {
+        assertTrue(defaultPolicy().shouldBeActive(onCarpet(0, 64, 0), openEastUnderLowCeiling(AIR)));
     }
 }

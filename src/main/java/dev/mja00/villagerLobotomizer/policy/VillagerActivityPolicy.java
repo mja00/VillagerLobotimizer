@@ -19,6 +19,9 @@ import java.util.Set;
  */
 public final class VillagerActivityPolicy {
 
+    // Ignores floating-point noise so a villager standing on a full block never counts as raised.
+    private static final double OVERHANG_EPSILON = 1.0E-4;
+
     private final boolean lobotomizePassengers;
     private final boolean onlyProfessions;
     private final boolean onlyWithExperience;
@@ -146,12 +149,17 @@ public final class VillagerActivityPolicy {
             roofReason = "roof " + describe(roof) + " does not block (" + roofVerdict.description() + ")";
         }
 
+        // Standing on a carpet or snow layer lifts a 1.95-tall villager into the y+2 layer, where a
+        // ceiling beside it blocks sideways movement even though feet and head height are clear.
+        double rawOverhang = v.bodyTop() - (v.blockY() + 2);
+        double overhang = rawOverhang > OVERHANG_EPSILON ? rawOverhang : 0.0;
+
         List<DirectionTrace> directions = List.of(
-                traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof),
-                traceDirection("-X (west)", grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof),
-                traceDirection("+Z (south)", grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof),
-                traceDirection("-Z (north)", grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof));
-        MovementTrace movement = new MovementTrace(floor, roof, hasRoof, roofReason, directions);
+                traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang),
+                traceDirection("-X (west)", grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang),
+                traceDirection("+Z (south)", grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang),
+                traceDirection("-Z (north)", grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang));
+        MovementTrace movement = new MovementTrace(floor, roof, hasRoof, roofReason, overhang, directions);
 
         List<String> open = new ArrayList<>();
         for (DirectionTrace d : directions) {
@@ -168,23 +176,45 @@ public final class VillagerActivityPolicy {
     /**
      * Traces whether a villager can move through a given block position.
      *
-     * @param roof whether the under-feet block must be passable
+     * @param roof     whether the under-feet block must be passable
+     * @param overhang how far the villager's hitbox reaches into the {@code y + 2} layer, or 0
      */
-    private DirectionTrace traceDirection(String direction, BlockGrid grid, int x, int y, int z, boolean roof) {
+    private DirectionTrace traceDirection(String direction, BlockGrid grid, int x, int y, int z, boolean roof,
+                                          double overhang) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
         BlockSnapshot underFeet = grid.at(x, y - 1, z);
-        if (head == null || feet == null || underFeet == null) {
+        boolean checkOverhead = overhang > 0;
+        BlockSnapshot overhead = checkOverhead ? grid.at(x, y + 2, z) : null;
+        if (head == null || feet == null || underFeet == null || (checkOverhead && overhead == null)) {
+            BlockVerdict overheadVerdict = checkOverhead ? BlockVerdict.UNLOADED : null;
             return new DirectionTrace(direction, x, y, z,
-                    head, BlockVerdict.UNLOADED, feet, BlockVerdict.UNLOADED, underFeet, BlockVerdict.UNLOADED, false);
+                    head, BlockVerdict.UNLOADED, feet, BlockVerdict.UNLOADED, underFeet, BlockVerdict.UNLOADED,
+                    overhead, overheadVerdict, false);
         }
         BlockVerdict headVerdict = classify(this.blocks.impassableRegular(), head, false);
         BlockVerdict feetVerdict = classify(this.blocks.impassableRegular(), feet, false);
         BlockVerdict underFeetVerdict = classify(this.blocks.impassableTall(), underFeet, true);
+        BlockVerdict overheadVerdict = checkOverhead
+                ? classifyOverhead(grid, overhead, x, y + 2, z, overhang)
+                : null;
         boolean open = !headVerdict.blocking() && !feetVerdict.blocking()
-                && (!roof || !underFeetVerdict.blocking());
+                && (!roof || !underFeetVerdict.blocking())
+                && (overheadVerdict == null || !overheadVerdict.blocking());
         return new DirectionTrace(direction, x, y, z,
-                head, headVerdict, feet, feetVerdict, underFeet, underFeetVerdict, open);
+                head, headVerdict, feet, feetVerdict, underFeet, underFeetVerdict,
+                overhead, overheadVerdict, open);
+    }
+
+    /**
+     * Whether a block in the {@code y + 2} layer reaches down far enough to collide with the part of
+     * the villager's hitbox that pokes into that layer.
+     */
+    private static BlockVerdict classifyOverhead(BlockGrid grid, BlockSnapshot b, int x, int y, int z, double overhang) {
+        if (b.type() == Material.WATER) {
+            return BlockVerdict.WATER;
+        }
+        return grid.collisionBottomAt(x, y, z) < overhang ? BlockVerdict.HITBOX_OVERLAP : BlockVerdict.CLEARS_HITBOX;
     }
 
     /**

@@ -24,6 +24,7 @@ import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
@@ -1067,7 +1068,8 @@ public class LobotomizeStorage {
                 villager.getVehicle() instanceof Vehicle,
                 villager.getProfession() == Villager.Profession.NONE,
                 villager.getVillagerExperience(),
-                blockX, blockY, blockZ);
+                blockX, blockY, blockZ,
+                villager.getBoundingBox().getMaxY());
     }
 
     /**
@@ -1099,6 +1101,29 @@ public class LobotomizeStorage {
              */
             @Override
             public BlockSnapshot at(int x, int y, int z) {
+                Block b = blockAt(x, y, z);
+                if (b == null) {
+                    return null;
+                }
+                Material type = b.getType();
+                return new BlockSnapshot(type, b.isPassable(), type.isSolid());
+            }
+
+            @Override
+            public double collisionBottomAt(int x, int y, int z) {
+                Block b = blockAt(x, y, z);
+                if (b == null) {
+                    return 1.0;
+                }
+                // Collision boxes are relative to the block; an empty shape has no collision at all.
+                double bottom = 1.0;
+                for (BoundingBox box : b.getCollisionShape().getBoundingBoxes()) {
+                    bottom = Math.min(bottom, box.getMinY());
+                }
+                return bottom;
+            }
+
+            private Block blockAt(int x, int y, int z) {
                 // Clamp y between the world's minimum and maximum height
                 int clampedY = Math.clamp(y, world.getMinHeight(), world.getMaxHeight() - 1);
                 int chunkX = x >> 4;
@@ -1113,9 +1138,7 @@ public class LobotomizeStorage {
                     this.cachedChunkX = chunkX;
                     this.cachedChunkZ = chunkZ;
                 }
-                Block b = chunk.getBlock(x & 0xF, clampedY, z & 0xF);
-                Material type = b.getType();
-                return new BlockSnapshot(type, b.isPassable(), type.isSolid());
+                return chunk.getBlock(x & 0xF, clampedY, z & 0xF);
             }
         };
     }

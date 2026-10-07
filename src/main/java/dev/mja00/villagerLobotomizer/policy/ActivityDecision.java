@@ -79,7 +79,9 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
         BYPASS(false, "crop/bed/carpet, always walkable"),
         DOOR_IGNORED(false, "door, ignore-villagers-stuck-in-doors"),
         NON_SOLID_IGNORED(false, "non-solid, ignore-non-solid-blocks"),
-        NOT_TALL(false, "not a wall/fence/gate");
+        NOT_TALL(false, "not a wall/fence/gate"),
+        HITBOX_OVERLAP(true, "collides with the villager's raised hitbox"),
+        CLEARS_HITBOX(false, "above the villager's raised hitbox");
 
         private final boolean blocking;
         private final String description;
@@ -100,12 +102,15 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
 
     /**
      * One cardinal neighbour. {@code underFeet} only matters when {@link MovementTrace#roofed()} is
-     * true; snapshots are {@code null} when the column's chunk is unloaded.
+     * true; snapshots are {@code null} when the column's chunk is unloaded. {@code overhead} is the
+     * block at {@code y + 2}, checked only when the villager's hitbox reaches into that layer;
+     * otherwise it and {@code overheadVerdict} are {@code null}.
      */
     public record DirectionTrace(String direction, int x, int y, int z,
                                  BlockSnapshot head, BlockVerdict headVerdict,
                                  BlockSnapshot feet, BlockVerdict feetVerdict,
                                  BlockSnapshot underFeet, BlockVerdict underFeetVerdict,
+                                 BlockSnapshot overhead, BlockVerdict overheadVerdict,
                                  boolean open) {
     }
 
@@ -114,9 +119,10 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
      * @param roof       the block above the villager's head, or {@code null} when unloaded
      * @param roofed     whether a roof (or honey floor) makes the under-feet block of each neighbour count
      * @param roofReason human-readable reason for {@code roofed}
+     * @param overhang   how far the villager's hitbox reaches into the {@code y + 2} layer, or 0
      */
     public record MovementTrace(BlockSnapshot floor, BlockSnapshot roof, boolean roofed, String roofReason,
-                                List<DirectionTrace> directions) {
+                                double overhang, List<DirectionTrace> directions) {
         public MovementTrace {
             directions = List.copyOf(directions);
         }
