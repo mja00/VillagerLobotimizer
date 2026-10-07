@@ -31,7 +31,7 @@ Note `processVillager`'s active branch wakes on every check, not just on transit
 - Trade refresh: PDC-tracked restock timing, daytime-only, job site proximity, profession sounds, level-up effects
 
 **policy/** - Pure, unit-tested lobotomy decision logic (no Bukkit live objects, scheduler, or shared sets):
-- `VillagerActivityPolicy.evaluate(VillagerState, BlockGrid)` - decision rules, returning an `ActivityDecision` trace (per-rule `Outcome`, per-direction `BlockVerdict`) used by `/lobotomy debug` and debug logs; `shouldBeActive` is `evaluate(...).active()`
+- `VillagerActivityPolicy.evaluate(VillagerState, BlockGrid)` - decision rules, returning an `ActivityDecision` trace (per-rule `Outcome`, per-direction `BlockVerdict`) used by `/lobotomy debug` and debug logs. It allocates, so periodic checks and the watchdog call the allocation-free `shouldBeActive` instead and only build the trace while debugging; both share `classify()`, and `booleanPathAlwaysAgreesWithTrace` asserts they never disagree
 - `BlockClassifier` - Material sets (`impassableRegular`, `impassableTall`, `impassableAll`, `cropBlocks`, `doorBlocks`, `professionBlocks`), built once via `fromServerRegistry()`
 - `BlockSnapshot` (type/passable/solid), `BlockGrid` (coord→snapshot, `null`=unloaded; `collisionBottomAt` reads real collision shapes), `VillagerState` (villager properties; `bodyTop` = hitbox top, so a carpet-raised villager also checks each neighbour's y+2 block)
 

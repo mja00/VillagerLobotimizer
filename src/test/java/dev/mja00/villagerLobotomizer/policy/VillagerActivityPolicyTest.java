@@ -383,6 +383,52 @@ class VillagerActivityPolicyTest {
         return d.checks().stream().filter(c -> c.rule() == rule).findFirst().orElseThrow().outcome();
     }
 
+    /**
+     * shouldBeActive and evaluate implement the same rules twice (one allocation-free for the
+     * periodic checks, one traced for debugging), so they must never disagree.
+     */
+    @Test
+    void booleanPathAlwaysAgreesWithTrace() {
+        BlockSnapshot[] palette = {AIR, AIR, AIR, STONE, STONE, WATER, CARPET, HONEY, DOOR, FENCE, NON_SOLID, LECTERN,
+                new BlockSnapshot(Material.CAVE_AIR, true, false), new BlockSnapshot(Material.WHEAT, true, false),
+                new BlockSnapshot(Material.WHITE_BED, false, true)};
+        String[] names = {"", "", "keepme", "mr nobrain", "bob"};
+        double[] bodyTops = {64 + 1.95, 64 + 0.0625 + 1.95, 64 + 0.5 + 1.95, 64 + 2.0};
+        java.util.Random random = new java.util.Random(1234);
+
+        for (int i = 0; i < 20_000; i++) {
+            VillagerActivityPolicy p = policy(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(),
+                    random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), Set.of("keepme"));
+            VillagerState v = new VillagerState(names[random.nextInt(names.length)],
+                    random.nextInt(8) == 0, random.nextInt(8) == 0, random.nextInt(4) == 0, random.nextInt(4) == 0,
+                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)]);
+
+            Map<Long, Double> collisionBottoms = new HashMap<>();
+            TestGrid grid = new TestGrid() {
+                @Override
+                public double collisionBottomAt(int x, int y, int z) {
+                    Double bottom = collisionBottoms.get(TestGrid.key(x, y, z));
+                    return bottom != null ? bottom : super.collisionBottomAt(x, y, z);
+                }
+            };
+            for (int x = -1; x <= 1; x++) {
+                for (int z = -1; z <= 1; z++) {
+                    if ((x != 0 || z != 0) && random.nextInt(12) == 0) {
+                        grid.unload(x, z);
+                    }
+                    for (int y = 63; y <= 66; y++) {
+                        grid.set(x, y, z, palette[random.nextInt(palette.length)]);
+                        if (random.nextInt(4) == 0) {
+                            collisionBottoms.put(TestGrid.key(x, y, z), random.nextBoolean() ? 0.5 : 0.0);
+                        }
+                    }
+                }
+            }
+
+            assertEquals(p.evaluate(v, grid).active(), p.shouldBeActive(v, grid), "case " + i + ": " + v);
+        }
+    }
+
     /** Standing on a carpet: feet 1/16 up, so a 1.95-tall hitbox tops out 0.0125 into the y+2 layer. */
     private static VillagerState onCarpet(int x, int y, int z) {
         return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95);

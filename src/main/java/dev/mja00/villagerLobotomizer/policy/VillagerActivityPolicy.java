@@ -61,12 +61,74 @@ public final class VillagerActivityPolicy {
      * @return {@code true} if the villager should be active, {@code false} if it should be lobotomized
      */
     public boolean shouldBeActive(VillagerState v, BlockGrid grid) {
-        return evaluate(v, grid).active();
+        // Mirrors evaluate() rule for rule, without building the trace: this runs for every tracked
+        // villager on every check. VillagerActivityPolicyTest asserts the two always agree.
+        String name = v.name();
+        if (name.contains("nobrain")) {
+            return false;
+        }
+        if (this.exemptNames.contains(name) || v.swimming()) {
+            return true;
+        }
+        if (isWater(grid.at(v.blockX(), v.blockY(), v.blockZ()))
+                || isWater(grid.at(v.blockX(), v.blockY() + 1, v.blockZ()))) {
+            return true;
+        }
+        if (v.sleeping()) {
+            return true;
+        }
+        if (this.lobotomizePassengers && v.hasVehicle()) {
+            return false;
+        }
+        if ((this.onlyProfessions && v.professionNone()) || (this.onlyWithExperience && v.experience() == 0)) {
+            return true;
+        }
+
+        BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
+        BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
+        if (this.checkRoof && (roof == null || isAir(roof.type()))) {
+            return true;
+        }
+        boolean hasRoof = (floor != null && floor.type() == Material.HONEY_BLOCK)
+                || (roof != null && classify(this.blocks.impassableAll(), roof, false).blocking());
+        double overhang = overhang(v);
+
+        return canMoveThrough(grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang)
+                || canMoveThrough(grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang)
+                || canMoveThrough(grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang)
+                || canMoveThrough(grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang);
+    }
+
+    /** Allocation-free counterpart of {@link #traceDirection}. */
+    private boolean canMoveThrough(BlockGrid grid, int x, int y, int z, boolean roof, double overhang) {
+        BlockSnapshot head = grid.at(x, y + 1, z);
+        BlockSnapshot feet = grid.at(x, y, z);
+        BlockSnapshot underFeet = grid.at(x, y - 1, z);
+        if (head == null || feet == null || underFeet == null) {
+            return false;
+        }
+        if (classify(this.blocks.impassableRegular(), head, false).blocking()
+                || classify(this.blocks.impassableRegular(), feet, false).blocking()
+                || (roof && classify(this.blocks.impassableTall(), underFeet, true).blocking())) {
+            return false;
+        }
+        if (overhang <= 0) {
+            return true;
+        }
+        BlockSnapshot overhead = grid.at(x, y + 2, z);
+        return overhead != null && !classifyOverhead(grid, overhead, x, y + 2, z, overhang).blocking();
+    }
+
+    /** How far the villager's hitbox reaches into the {@code y + 2} layer, or 0. */
+    private static double overhang(VillagerState v) {
+        double raw = v.bodyTop() - (v.blockY() + 2);
+        return raw > OVERHANG_EPSILON ? raw : 0.0;
     }
 
     /**
      * Evaluates every rule in order and records why the villager should be active or lobotomized.
      * The first rule that decides wins; later rules are recorded as {@link Outcome#NOT_REACHED}.
+     * Allocates the full trace, so it is for debugging only; periodic checks use {@link #shouldBeActive}.
      */
     public ActivityDecision evaluate(VillagerState v, BlockGrid grid) {
         Trace trace = new Trace();
@@ -151,8 +213,7 @@ public final class VillagerActivityPolicy {
 
         // Standing on a carpet or snow layer lifts a 1.95-tall villager into the y+2 layer, where a
         // ceiling beside it blocks sideways movement even though feet and head height are clear.
-        double rawOverhang = v.bodyTop() - (v.blockY() + 2);
-        double overhang = rawOverhang > OVERHANG_EPSILON ? rawOverhang : 0.0;
+        double overhang = overhang(v);
 
         List<DirectionTrace> directions = List.of(
                 traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang),
