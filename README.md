@@ -67,7 +67,7 @@ always-lobotomize-villagers-in-vehicles: false
 silent-lobotomized-villagers: false
 
 #The sound to play when a villager restocks. Leave empty ("") for default sounds.
-#A list of sounds can be found at https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html
+#A list of sounds can be found at https://jd.papermc.io/paper/io/papermc/paper/registry/keys/SoundEventKeys.html
 #Use the name found in the description column, e.g. "entity.villager.celebrate" for the sound played when a villager restocks.
 restock-sound: ""
 
@@ -150,7 +150,7 @@ enable-sentry: true
 The plugin features an enhanced sound system:
 - **Default restock sounds**: When `restock-sound` is left empty, villagers will play default sounds when restocking
 - **Customizable sounds**: You can override the default sounds by specifying a custom sound in the configuration
-- **Sound reference**: A complete list of available sounds can be found in the [Paper API documentation](https://jd.papermc.io/paper/1.21.6/io/papermc/paper/registry/keys/SoundEventKeys.html)
+- **Sound reference**: A complete list of available sounds can be found in the [Paper API documentation](https://jd.papermc.io/paper/io/papermc/paper/registry/keys/SoundEventKeys.html)
 - **Level-up celebrations**: Villagers play celebration sounds when they level up their trades
 
 ## Privacy & Telemetry
@@ -193,8 +193,9 @@ All error data is anonymized and used solely for debugging purposes.
 
 ## Requirements
 
-- Paper (or its forks) 1.21.6+
-- Java Development Kit (JDK) 21 for development
+- Paper (or its forks) 1.21.11 or 26.1–26.3
+- Java 21 for 1.21.11 servers; Java 25 for 26.x servers (Mojang's requirement)
+- JDK 21 or newer for development
 
 ## Installation
 
@@ -216,7 +217,7 @@ the jar without running it leaves those villagers without AI and nothing left to
 
 ### Prerequisites
 
-- Java Development Kit (JDK) 21
+- Java Development Kit (JDK) 21 or newer (JDK 25 to run the test server)
 - Gradle (wrapper included)
 
 ### Building
@@ -241,7 +242,7 @@ The project uses the run-paper plugin to easily test changes:
 ./gradlew runServer
 ```
 
-This will download a Paper server for Minecraft 1.21.5 and start it with the plugin installed.
+This will download a Paper server for Minecraft 26.3 and start it with the plugin installed.
 
 ### Publishing
 
@@ -267,7 +268,7 @@ You can publish to Hangar, Modrinth, and CurseForge using the same shaded artifa
   ./gradlew modrinth -Pmodrinth.projectId=villagerlobotomy
   ```
 
-  Game versions are published for `1.21.6`, `1.21.7`, and `1.21.8`. Tagged commits publish a Release; otherwise a Snapshot-like Beta with a short git hash suffix.
+  Game versions come from `modrinthGameVersions` in `build.gradle.kts` (currently `1.21.11` and `26.1`–`26.3`). Tagged commits publish a Release; otherwise a Snapshot-like Beta with a short git hash suffix.
 
 - **Publish everywhere** (Hangar + Modrinth):
 

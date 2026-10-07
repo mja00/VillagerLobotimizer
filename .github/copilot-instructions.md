@@ -1,17 +1,17 @@
 # VillagerLobotimizer Development Instructions
 
-VillagerLobotimizer is a Minecraft Paper plugin written in Java 21 that optimizes server performance by disabling villager AI when they're trapped in trading halls. The project uses Gradle for building and includes sophisticated CI/CD for publishing to Hangar and Modrinth.
+VillagerLobotimizer is a Minecraft Paper plugin (compiled for Java 21) that optimizes server performance by disabling villager AI when they're trapped in trading halls. It supports Minecraft 1.21.11 and 26.1–26.3. The project uses Gradle for building and includes CI/CD for publishing to Hangar, Modrinth, and CurseForge.
 
 **Always reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
 
 ## Working Effectively
 
 ### Prerequisites and Setup
-- Set up Java 21 (required):
+- Set up JDK 21 or newer (CI builds with 21; `runServer` on Minecraft 26.x needs Java 25):
   ```bash
-  export JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64
+  export JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64  # or temurin-25-jdk-amd64
   export PATH=$JAVA_HOME/bin:$PATH
-  java -version  # Should show OpenJDK 21
+  java -version  # Should show 21 or newer
   ```
 - Make Gradle wrapper executable: `chmod +x ./gradlew`
 - Verify Gradle setup: `./gradlew --version`
@@ -21,21 +21,21 @@ VillagerLobotimizer is a Minecraft Paper plugin written in Java 21 that optimize
 - `./gradlew build --no-daemon` -- downloads dependencies and compiles. NEVER CANCEL.
 - **Network Dependency**: Requires access to `repo.papermc.io` for Paper development bundle
 - **Known Issue**: Build fails in sandboxed environments due to `repo.papermc.io` being blocked with error "No address associated with hostname". This is expected in restricted environments.
-- **Error Signature**: `Could not resolve io.papermc.paper:dev-bundle:1.21.6-R0.1-SNAPSHOT` indicates network restriction
+- **Error Signature**: `Could not resolve io.papermc.paper:dev-bundle:1.21.11-R0.1-SNAPSHOT` indicates network restriction
 - **Workaround**: If PaperMC repository is blocked, the build cannot complete. Document this limitation rather than attempting fixes.
 - Built plugin JAR will be in `build/libs/VillagerLobotimizer-<version>.jar`
 - Uses shadow plugin, so the actual artifact is the shaded JAR (no classifier)
 
 ### Running Test Server
 - **CRITICAL**: Server download and startup takes 10-20 minutes. NEVER CANCEL. Set timeout to 60+ minutes.
-- `./gradlew runServer` -- downloads Paper server for Minecraft 1.21.8 and starts with plugin installed
+- `./gradlew runServer` -- downloads a Paper server for Minecraft 26.3 (requires Java 25) and starts it with the plugin installed
 - **Note**: This requires network access to download Paper server
 - Server runs in interactive mode - you can issue Minecraft commands
 - **Limitation**: Cannot interact with Minecraft GUI in headless environments
 
 ### Publishing (for maintainers)
-- `./gradlew publishAll` -- publishes to both Hangar and Modrinth
-- Requires `HANGAR_API_KEY` and `MODRINTH_TOKEN` environment variables
+- `./gradlew publishAll` -- publishes to both Hangar and Modrinth; CurseForge uses `scripts/publish-curseforge.sh`
+- Requires `HANGAR_API_KEY` and `MODRINTH_TOKEN` (and `CURSEFORGE_TOKEN` for CurseForge) environment variables
 - Auto-detects release vs snapshot based on git tags
 
 ## Validation
@@ -74,28 +74,32 @@ After making changes, ALWAYS run through these validation steps:
 ### Repository Structure
 ```
 .
-├── .github/workflows/     # CI/CD pipelines (pr-build.yml, test.yml, publish.yml)
+├── .github/workflows/     # CI/CD pipelines (pr-build.yml, publish.yml)
 ├── build.gradle.kts       # Kotlin DSL build configuration
 ├── gradle/               # Gradle wrapper files
 ├── gradlew              # Gradle wrapper script (Unix)
 ├── gradlew.bat          # Gradle wrapper script (Windows)
+├── scripts/              # publish-curseforge.sh
 ├── settings.gradle.kts   # Gradle settings
 ├── src/main/
 │   ├── java/dev/mja00/villagerLobotomizer/  # Java source code
-│   └── resources/        # Plugin resources (config.yml, plugin.yml)
+│   └── resources/        # Plugin resources (config.yml, plugin.yml, paper-plugin.yml)
+├── src/test/             # JUnit + MockBukkit tests
 ├── README.md            # Project documentation
 └── LICENSE              # MIT license
 ```
 
 ### Key Source Files
-- `VillagerLobotimizer.java` -- Main plugin class
+- `VillagerLobotomizer.java` -- Main plugin class (the class name is spelled correctly; the project name is not)
 - `LobotomizeCommand.java` -- Command handling (/lobotomy commands)
-- `LobotomizeStorage.java` -- Data storage and management
+- `LobotomizeStorage.java` -- Villager tracking and state transitions
+- `policy/` -- Pure, unit-tested lobotomy decision rules (`VillagerActivityPolicy`)
+- `storage/` -- SQLite record of lobotomized villagers, used by `/lobotomy uninstall`
 - `listeners/EntityListener.java` -- Entity event handling
 - `utils/VillagerUtils.java` -- Villager-specific utilities
 
 ### Configuration Files
-- `src/main/resources/plugin.yml` -- Plugin metadata for Paper
+- `src/main/resources/plugin.yml` and `paper-plugin.yml` -- Plugin metadata for Paper (`api-version: '1.21.11'`; keep both in sync)
 - `src/main/resources/config.yml` -- Default plugin configuration
 - `build.gradle.kts` -- Build configuration with plugins:
   - `io.papermc.paperweight.userdev` -- Paper development
@@ -105,12 +109,15 @@ After making changes, ALWAYS run through these validation steps:
   - `com.modrinth.minotaur` -- Modrinth publishing
 
 ### Dependencies and Versions
-- **Minecraft**: 1.21.6, 1.21.7, 1.21.8 (Paper API)
-- **Java**: 21 (required)
-- **Gradle**: 8.14.3
-- **Paper Dev Bundle**: 1.21.6-R0.1-SNAPSHOT (used for development; plugin is compatible with Paper 1.21.6–1.21.8 at runtime. For development against other patch versions, use the corresponding Paper Dev Bundle, e.g., 1.21.7-R0.1-SNAPSHOT or 1.21.8-R0.1-SNAPSHOT.)
+- **Minecraft**: 1.21.11 and 26.1–26.3 (`supportedVersions` and `modrinthGameVersions` in `build.gradle.kts`)
+- **Java**: compiled for 21; servers on Minecraft 26.x run Java 25
+- **Gradle**: 9.4.1
+- **Paper Dev Bundle**: 1.21.11-R0.1-SNAPSHOT (compile against the oldest supported version so the jar runs on all of them)
+- **Tests**: JUnit 6 + MockBukkit 4.110 (`mockbukkit-v1.21`) against `paper-api` 1.21.11
 - **Key Libraries**:
   - `org.bstats:bstats-bukkit:3.1.0` (metrics)
+  - `io.sentry:sentry` (error reporting)
+  - `org.xerial:sqlite-jdbc` (lobotomized-villager records)
   - `net.kyori:adventure-text-serializer-plain:4.22.0` (text handling)
 
 ### Timing Expectations
@@ -121,7 +128,7 @@ After making changes, ALWAYS run through these validation steps:
 - **Build failure (network restricted)**: 5-10 seconds with "No address associated with hostname" error
 
 ### Common Issues and Workarounds
-- **Java version mismatch**: Ensure Java 21 is active with `java -version`
+- **Java version mismatch**: Building needs JDK 21+ (`java -version`); a 26.x `runServer` fails to start on anything below Java 25
 - **Permission denied on gradlew**: Run `chmod +x ./gradlew`
 - **Long build times**: This is normal for Paper plugins. Be patient and never cancel.
 - **Gradle daemon issues**: Use `--no-daemon` flag to avoid daemon-related problems in CI environments
@@ -129,14 +136,14 @@ After making changes, ALWAYS run through these validation steps:
 ### Environment Validation Commands
 Run these commands to verify your environment is properly configured:
 ```bash
-# Verify Java 21
+# Verify JDK 21+
 export JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64
 export PATH=$JAVA_HOME/bin:$PATH
-java -version  # Should show "openjdk version 21"
+java -version  # Should show 21 or newer
 
 # Test Gradle wrapper
 chmod +x ./gradlew
-./gradlew --version  # Should show "Gradle 8.14.3"
+./gradlew --version  # Should show "Gradle 9.4.1"
 
 # Test network connectivity (will fail in restricted environments)
 curl -I https://repo.papermc.io/repository/maven-public/
@@ -153,7 +160,7 @@ curl -I https://repo.papermc.io/repository/maven-public/
 - **Always check** `src/main/resources/plugin.yml` when changing plugin metadata
 - **Always check** `src/main/resources/config.yml` when adding new configuration options
 - **Performance Critical**: This plugin modifies entity AI - test thoroughly with real villagers
-- **Version Compatibility**: Plugin targets Paper 1.21.6+ - verify compatibility when updating dependencies
+- **Version Compatibility**: Plugin targets Paper 1.21.11+. When adding a Minecraft version, update `supportedVersions`, `modrinthGameVersions`, and `runServer`'s `minecraftVersion` in `build.gradle.kts`, plus the CurseForge version list in `README.md` and `publish.yml`
 - **Folia Support**: Code must be compatible with Folia's regionized threading model
 - Always use Conventional Commits formatting
 - Always bump the plugin's version. If minor, bump the patch version, if major, bump the minor version. 
@@ -167,7 +174,7 @@ curl -I https://repo.papermc.io/repository/maven-public/
 
 ### Plugin Functionality
 - **Core Feature**: Automatically detects trapped villagers and disables their AI
-- **Commands**: `/lobotomy info`, `/lobotomy debug`, `/lobotomy wake`, `/lobotomy reload`
+- **Commands**: `/lobotomy info`, `/lobotomy debug`, `/lobotomy wake`, `/lobotomy reload`, `/lobotomy config`, `/lobotomy uninstall`
 - **Configuration**: Customizable check intervals, restock timing, sounds, debug options
 - **Permissions**: `lobotomy.command` (default: op)
 - **Folia Support**: Yes, works with Folia servers
