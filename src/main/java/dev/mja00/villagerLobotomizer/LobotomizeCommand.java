@@ -189,13 +189,27 @@ public class LobotomizeCommand {
         try {
             task = villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(t -> {
                 List<Component> lines = buildVillagerDetails(villager);
-                sender.sendMessage(Component.join(JoinConfiguration.newlines(), lines));
+                Component report = Component.join(JoinConfiguration.newlines(), lines);
+                if (sender instanceof Player player) {
+                    player.getScheduler().run(this.plugin,
+                            SentryTaskWrapper.wrap(ignored -> player.sendMessage(report)), null);
+                } else {
+                    sender.sendMessage(report);
+                }
                 this.plugin.getLogger().info("[Debug] Lobotomy decision for villager " + villager.getUniqueId() + ":");
                 for (Component line : lines) {
                     this.plugin.getLogger().info("[Debug]   " + PlainTextComponentSerializer.plainText().serialize(line));
                 }
-            }), () -> sender.sendMessage(Component.text("That villager was removed before it could be inspected.")
-                    .color(NamedTextColor.RED)));
+            }), () -> {
+                Component unavailable = Component.text("That villager was removed before it could be inspected.")
+                        .color(NamedTextColor.RED);
+                if (sender instanceof Player player) {
+                    player.getScheduler().run(this.plugin,
+                            SentryTaskWrapper.wrap(ignored -> player.sendMessage(unavailable)), null);
+                } else {
+                    sender.sendMessage(unavailable);
+                }
+            });
         } catch (IllegalPluginAccessException e) {
             return 0;
         }
