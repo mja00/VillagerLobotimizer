@@ -35,6 +35,7 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
 import dev.mja00.villagerLobotomizer.policy.BlockClassifier;
@@ -634,15 +635,11 @@ public class LobotomizeStorage {
             return false; // Keep current if chunk is unloaded
         }
 
-        // Reuse the coordinates already computed above instead of cloning the location again. The trace
-        // allocates per check, so it is only built while debug output will actually use it.
+        // Reuse the coordinates already computed above instead of cloning the location again.
         double feetY = villagerLocation.getY() - 0.51;
-        ActivityDecision decision = this.plugin.isDebugging()
-                ? this.evaluate(villager, feetY, blockX, blockY, blockZ)
-                : null;
-        boolean shouldBeActive = decision != null
-                ? decision.active()
-                : this.shouldBeActive(villager, feetY, blockX, blockY, blockZ);
+        Check check = check(villager, feetY, blockX, blockY, blockZ, this.plugin.isDebugging());
+        ActivityDecision decision = check.trace();
+        boolean shouldBeActive = check.active();
 
         if (shouldBeActive) {
             // Clear any stale marker whenever the villager should be active, not just on transition,
@@ -757,8 +754,9 @@ public class LobotomizeStorage {
                     untrack(v);
                     return;
                 }
-                ActivityDecision decision = this.plugin.isDebugging() ? this.evaluate(v) : null;
-                boolean shouldBeActive = decision != null ? decision.active() : this.shouldBeActive(v);
+                Check check = check(v, this.plugin.isDebugging());
+                ActivityDecision decision = check.trace();
+                boolean shouldBeActive = check.active();
                 if (shouldBeActive) {
                     setActive(v);
                     v.setAware(true);
@@ -1014,31 +1012,28 @@ public class LobotomizeStorage {
     }
 
 
-    /**
-     * Evaluates the villager at its current location with the full rule trace. Allocates; for
-     * debugging only.
-     */
-    private ActivityDecision evaluate(Villager villager) {
+    /** A decision plus its rule trace, which is only built on request since it allocates per check. */
+    private record Check(boolean active, @Nullable ActivityDecision trace) {
+        private static final Check ACTIVE = new Check(true, null);
+        private static final Check INACTIVE = new Check(false, null);
+    }
+
+    private Check check(Villager villager, boolean trace) {
         Location loc = villager.getLocation();
-        return evaluate(villager, loc.getY(), loc.getBlockX(), Location.locToBlock(loc.getY() + 0.51), loc.getBlockZ());
+        return check(villager, loc.getY(), loc.getBlockX(), Location.locToBlock(loc.getY() + 0.51), loc.getBlockZ(), trace);
     }
 
-    private ActivityDecision evaluate(Villager villager, double feetY, int blockX, int blockY, int blockZ) {
-        return this.activityPolicy.evaluate(
-                villagerStateOf(villager, feetY, blockX, blockY, blockZ),
-                gridOf(villager.getWorld()));
-    }
-
-    /** The decision alone, without the trace: the periodic and watchdog path. */
-    private boolean shouldBeActive(Villager villager) {
-        Location loc = villager.getLocation();
-        return shouldBeActive(villager, loc.getY(), loc.getBlockX(), Location.locToBlock(loc.getY() + 0.51), loc.getBlockZ());
-    }
-
-    private boolean shouldBeActive(Villager villager, double feetY, int blockX, int blockY, int blockZ) {
-        return this.activityPolicy.shouldBeActive(
-                villagerStateOf(villager, feetY, blockX, blockY, blockZ),
-                gridOf(villager.getWorld()));
+    private Check check(Villager villager, double feetY, int blockX, int blockY, int blockZ, boolean trace) {
+        VillagerState state = villagerStateOf(villager, feetY, blockX, blockY, blockZ);
+        BlockGrid grid = gridOf(villager.getWorld());
+        if (trace) {
+            ActivityDecision decision = this.activityPolicy.evaluate(state, grid);
+            return new Check(decision.active(), decision);
+        }
+        if (this.activityPolicy.shouldBeActive(state, grid)) {
+            return Check.ACTIVE;
+        }
+        return Check.INACTIVE;
     }
 
     /**
@@ -1046,7 +1041,7 @@ public class LobotomizeStorage {
      * changing its state. Must run on the villager's owning thread (its {@code EntityScheduler}).
      */
     public @NotNull ActivityDecision explain(@NotNull Villager villager) {
-        return evaluate(villager);
+        return check(villager, true).trace();
     }
 
     /** Block-set sizes the policy classifies against, for diagnosing registry/version issues. */
