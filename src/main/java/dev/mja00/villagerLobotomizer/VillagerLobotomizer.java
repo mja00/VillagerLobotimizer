@@ -41,7 +41,8 @@ import java.util.concurrent.TimeUnit;
 public class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
     private boolean chunkDebugging = false;
-    private LobotomizeStorage storage;
+    private volatile LobotomizeStorage storage;
+    private HeroTracker heroTracker;
     private boolean isFolia;
     static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
     static final HttpClient client = HttpClient.newHttpClient();
@@ -86,6 +87,16 @@ public class VillagerLobotomizer extends JavaPlugin {
         this.chunkDebugging = this.getConfig().getBoolean("chunk-debug");
         this.disableChunkVillagerUpdate = this.getConfig().getBoolean("disable-chunk-villager-updates");
         boolean createDebuggingTeams = this.getConfig().getBoolean("create-debug-teams", false);
+
+        // Outlives storage reloads, so heroes stay known when /lobotomy reload swaps storage.
+        this.heroTracker = new HeroTracker(this, hero -> {
+            LobotomizeStorage current = this.storage;
+            if (current != null) {
+                current.giftNearbyVillagers(hero);
+            }
+        });
+        this.getServer().getPluginManager().registerEvents(this.heroTracker, this);
+        this.heroTracker.scanOnlinePlayers();
 
         this.storage = new LobotomizeStorage(this);
         this.getServer().getPluginManager().registerEvents(new EntityListener(this), this);
@@ -428,6 +439,10 @@ public class VillagerLobotomizer extends JavaPlugin {
 
     public LobotomizeStorage getStorage() {
         return this.storage;
+    }
+
+    public HeroTracker getHeroTracker() {
+        return this.heroTracker;
     }
 
 

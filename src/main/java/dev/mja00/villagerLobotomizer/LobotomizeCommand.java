@@ -7,6 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -178,46 +179,56 @@ public class LobotomizeCommand {
 
     /**
      * Sends detailed status information about a villager, including a trace of every lobotomy rule,
-     * to the command source and the console.
+     * to the command source and the console. On Folia the villager and the sender can belong to
+     * different regions, so the report is built on the villager's thread and delivered on the sender's.
      *
-     * @return {@code Command.SINGLE_SUCCESS}
+     * @return {@code Command.SINGLE_SUCCESS}, or 0 if the villager is gone
      */
     private int getVillagerDetails(CommandSourceStack source, Villager villager) {
         CommandSender sender = source.getSender();
-        // Read the villager on its own thread: on Folia it can live in a different region than the executor.
         ScheduledTask task;
         try {
             task = villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(t -> {
                 List<Component> lines = buildVillagerDetails(villager);
-                Component report = Component.join(JoinConfiguration.newlines(), lines);
-                if (sender instanceof Player player) {
-                    player.getScheduler().run(this.plugin,
-                            SentryTaskWrapper.wrap(ignored -> player.sendMessage(report)), null);
-                } else {
-                    sender.sendMessage(report);
-                }
+                reply(sender, Component.join(JoinConfiguration.newlines(), lines));
                 this.plugin.getLogger().info("[Debug] Lobotomy decision for villager " + villager.getUniqueId() + ":");
                 for (Component line : lines) {
                     this.plugin.getLogger().info("[Debug]   " + PlainTextComponentSerializer.plainText().serialize(line));
                 }
-            }), () -> {
-                Component unavailable = Component.text("That villager was removed before it could be inspected.")
-                        .color(NamedTextColor.RED);
-                if (sender instanceof Player player) {
-                    player.getScheduler().run(this.plugin,
-                            SentryTaskWrapper.wrap(ignored -> player.sendMessage(unavailable)), null);
-                } else {
-                    sender.sendMessage(unavailable);
-                }
-            });
+            }), () -> reply(sender, Component.text("That villager was removed before it could be inspected.")
+                    .color(NamedTextColor.RED)));
         } catch (IllegalPluginAccessException e) {
             return 0;
         }
         if (task == null) {
+            // Still on the command thread, which owns the sender.
             sender.sendMessage(Component.text("That villager is no longer available.").color(NamedTextColor.RED));
             return 0;
         }
         return Command.SINGLE_SUCCESS;
+    }
+
+    /**
+     * Sends a message on the thread that owns the sender. Player and entity senders (and command
+     * blocks) belong to a region on Folia; the console can be messaged from anywhere.
+     */
+    void reply(CommandSender sender, Component message) {
+        if (sender instanceof Entity entity) {
+            if (Bukkit.isOwnedByCurrentRegion(entity)) {
+                entity.sendMessage(message);
+            } else {
+                entity.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(t -> entity.sendMessage(message)), null);
+            }
+        } else if (sender instanceof BlockCommandSender block) {
+            Location location = block.getBlock().getLocation();
+            if (Bukkit.isOwnedByCurrentRegion(location)) {
+                block.sendMessage(message);
+            } else {
+                Bukkit.getRegionScheduler().run(this.plugin, location, SentryTaskWrapper.wrap(t -> block.sendMessage(message)));
+            }
+        } else {
+            sender.sendMessage(message);
+        }
     }
 
     /**
@@ -247,6 +258,8 @@ public class LobotomizeCommand {
                 .append(Component.text(villager.getVillagerLevel()).color(NamedTextColor.GREEN))
                 .append(Component.text(", experience "))
                 .append(Component.text(villager.getVillagerExperience()).color(NamedTextColor.GREEN)));
+        lines.add(Component.text("Hero gift: ")
+                .append(Component.text(storage.describeHeroGift(villager)).color(NamedTextColor.GREEN)));
 
         ActivityDecision decision = storage.explain(villager);
         lines.addAll(ActivityDecisionFormatter.format(decision));
