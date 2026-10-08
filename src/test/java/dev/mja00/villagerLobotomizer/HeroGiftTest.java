@@ -167,6 +167,16 @@ class HeroGiftTest extends MockBukkitTestBase {
     }
 
     @Test
+    void reloadPutsBackAHeadStillTurnedTowardAHero() {
+        villager.setRotation(90f, 0f);
+        giveReadyGift();
+
+        plugin.getStorage().flush(LobotomizeStorage.FlushMode.RELOAD);
+
+        assertEquals(90f, villager.getLocation().getYaw(), 0.5f, "the replacement storage must not inherit a turned head");
+    }
+
+    @Test
     void headStaysOnAHeroItIsStillWatching() {
         hero.teleport(new Location(world, 18, 64, 8));
         villager.setRotation(90f, 0f);

@@ -1095,16 +1095,27 @@ public class LobotomizeStorage {
     }
 
     /**
-     * Best effort: puts back heads still turned toward a hero when tracking stops, since the pending
-     * turn-back tasks die with the plugin and the villager would be saved facing the hero. Only
-     * villagers this thread owns are touched: all of them on Paper's main thread, none on Folia,
-     * whose villagers keep the turned head.
+     * Puts back heads still turned toward a hero when tracking stops, since the pending turn-back
+     * tasks die with this storage and the villager would otherwise keep facing the hero. Villagers
+     * this thread owns are restored directly (all of them on Paper). Others (Folia) are restored on
+     * their own scheduler, which works on a reload while the plugin is still enabled. During shutdown
+     * Bukkit has already disabled the plugin, so nothing can be scheduled and those villagers keep the
+     * turned head; it only affects how they look.
      */
     private void restoreTurnedHeads() {
         for (TurnedHead head : this.turnedHeads.values()) {
             Villager villager = head.villager;
-            if (Bukkit.isOwnedByCurrentRegion(villager) && villager.isValid() && !villager.isAware()) {
-                villager.setRotation(head.yaw, head.pitch);
+            if (Bukkit.isOwnedByCurrentRegion(villager)) {
+                if (villager.isValid()) {
+                    villager.setRotation(head.yaw, head.pitch);
+                }
+                continue;
+            }
+            try {
+                villager.getScheduler().run(this.plugin,
+                        SentryTaskWrapper.wrap(task -> villager.setRotation(head.yaw, head.pitch)), null);
+            } catch (IllegalPluginAccessException e) {
+                // Shutting down: the plugin can no longer schedule work.
             }
         }
         this.turnedHeads.clear();
