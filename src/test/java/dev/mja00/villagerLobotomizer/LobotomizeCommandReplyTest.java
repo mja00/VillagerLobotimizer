@@ -3,7 +3,9 @@ package dev.mja00.villagerLobotomizer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Villager;
+import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
@@ -34,8 +36,16 @@ class LobotomizeCommandReplyTest extends MockBukkitTestBase {
     @Test
     void reportIncludesHeroGiftStatus() {
         // "Nobrain" decides the policy before any block is read; BlockMock#isPassable is unimplemented.
-        Villager villager = world.spawn(new Location(world, 8, 64, 8), Villager.class);
-        villager.customName(Component.text("Nobrain"));
+        // The persisted marker makes the spawn tracked lobotomized, the only state with a gift timer.
+        NamespacedKey markerKey = new NamespacedKey(plugin, LobotomizeStorage.LOBOTOMIZED_KEY);
+        Villager villager = world.spawn(new Location(world, 8, 64, 8), Villager.class, v -> {
+            v.customName(Component.text("Nobrain"));
+            v.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
+        });
+        if (!plugin.getStorage().getLobotomized().contains(villager)) {
+            plugin.getStorage().addVillager(villager);
+        }
+        assertTrue(plugin.getStorage().getLobotomized().contains(villager), "precondition: tracked lobotomized");
 
         String report = new LobotomizeCommand(plugin).buildVillagerDetails(villager).stream()
                 .map(PlainTextComponentSerializer.plainText()::serialize)

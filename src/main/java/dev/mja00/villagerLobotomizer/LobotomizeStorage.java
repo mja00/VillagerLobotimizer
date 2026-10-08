@@ -1187,6 +1187,11 @@ public class LobotomizeStorage {
         if (!this.heroGiftsEnabled) {
             return "disabled in config";
         }
+        if (!this.inactiveVillagers.contains(villager)) {
+            return this.activeVillagers.contains(villager)
+                    ? "given by vanilla AI (not lobotomized)"
+                    : "none (not tracked by the plugin)";
+        }
         HeroGiftPolicy.GiftClock clock = this.heroGiftClocks.get(villager.getUniqueId());
         if (clock == null) {
             return "no hero seen since it loaded; first after about " + HeroGiftPolicy.FIRST_GIFT_DELAY_TICKS

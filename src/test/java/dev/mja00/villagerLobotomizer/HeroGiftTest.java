@@ -428,14 +428,27 @@ class HeroGiftTest extends MockBukkitTestBase {
     }
 
     @Test
-    void debugReportDescribesTheTimer() {
-        assertTrue(plugin.getStorage().describeHeroGift(villager).startsWith("no hero seen since it loaded"));
+    void debugReportDescribesTheTimerOfALobotomizedVillager() {
+        Villager tracked = spawnTrackedLobotomized(new Location(world, 8, 64, 10));
+        LobotomizeStorage storage = plugin.getStorage();
+        assertTrue(storage.describeHeroGift(tracked).startsWith("no hero seen since it loaded"));
 
-        startClockAt(250L);
-        assertEquals("next after 250 more ticks with a hero in view", plugin.getStorage().describeHeroGift(villager));
+        storage.setHeroGiftClock(tracked, new GiftClock(250L));
+        assertEquals("next after 250 more ticks with a hero in view", storage.describeHeroGift(tracked));
 
-        startClockAt(0L);
-        assertEquals("ready for the next hero in view within 5 blocks", plugin.getStorage().describeHeroGift(villager));
+        storage.setHeroGiftClock(tracked, new GiftClock(0L));
+        assertEquals("ready for the next hero in view within 5 blocks", storage.describeHeroGift(tracked));
+    }
+
+    @Test
+    void debugReportHasNoTimerForActiveOrUntrackedVillagers() {
+        LobotomizeStorage storage = plugin.getStorage();
+        storage.addVillager(villager);
+        assertTrue(storage.getActive().contains(villager), "precondition: tracked active (no marker)");
+        assertEquals("given by vanilla AI (not lobotomized)", storage.describeHeroGift(villager));
+
+        storage.removeVillager(villager);
+        assertEquals("none (not tracked by the plugin)", storage.describeHeroGift(villager));
     }
 
     @Test
