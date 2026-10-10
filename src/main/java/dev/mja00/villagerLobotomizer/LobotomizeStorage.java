@@ -1,6 +1,7 @@
 package dev.mja00.villagerLobotomizer;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -10,12 +11,17 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -26,14 +32,19 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Item;
+import org.bukkit.entity.Player;
 import org.bukkit.entity.Vehicle;
 import org.bukkit.entity.Villager;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
+import org.bukkit.loot.LootTables;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,6 +52,7 @@ import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
 import dev.mja00.villagerLobotomizer.policy.BlockClassifier;
 import dev.mja00.villagerLobotomizer.policy.BlockGrid;
 import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
+import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
 import dev.mja00.villagerLobotomizer.policy.VillagerActivityPolicy;
 import dev.mja00.villagerLobotomizer.policy.VillagerState;
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
@@ -68,6 +80,36 @@ public class LobotomizeStorage {
     public static final String LOBOTOMIZED_KEY = "isLobotomized";
 
     private final NamespacedKey lobotomizedKey;
+    private final boolean heroGiftsEnabled;
+    private HeroGiftLoot heroGiftLoot = HeroGiftLoot.vanilla();
+    private BiPredicate<Villager, Player> heroVisibility = (villager, player) -> villager.hasLineOfSight(player);
+    /** What a thrown gift collides with: blocks' collision shapes, hard entities and the world border. */
+    private Function<World, Predicate<BoundingBox>> throwCollider = world -> world::hasCollisionsIn;
+    /**
+     * Records the villager as the gift's thrower, as vanilla does. Picking the item up then fires the
+     * {@code thrown_item_picked_up_by_player} advancement trigger with the villager as its entity.
+     */
+    private BiConsumer<Item, Villager> recordThrower = (item, villager) -> item.setThrower(villager.getUniqueId());
+    /** Each tracked villager's gift timer. Like vanilla's it is not saved, so it restarts whenever the villager loads. */
+    private final Map<UUID, HeroGiftPolicy.GiftClock> heroGiftClocks = new ConcurrentHashMap<>();
+    /** Villagers turned toward a hero, with the rotation to restore. Only touched on the villager's thread. */
+    private final Map<UUID, TurnedHead> turnedHeads = new ConcurrentHashMap<>();
+    /** Longer than a scan, so a villager still watching a hero is not turned back between scans. */
+    static final long HEAD_TURN_BACK_TICKS = HeroGiftPolicy.SCAN_INTERVAL_TICKS + 10L;
+
+    private static final class TurnedHead {
+        final Villager villager;
+        final float yaw;
+        final float pitch;
+        long lastFacedTick;
+        boolean turnBackScheduled;
+
+        TurnedHead(Villager villager, float yaw, float pitch) {
+            this.villager = villager;
+            this.yaw = yaw;
+            this.pitch = pitch;
+        }
+    }
     private final LobotomizedMarkerStore markerStore;
     private final NamespacedKey lastRestockCheckDayTimeKey;
     private final NamespacedKey lastRestockGameTimeKey;
@@ -123,6 +165,7 @@ public class LobotomizeStorage {
         this.silentLobotomizedVillagers = plugin.getConfig().getBoolean("silent-lobotomized-villagers");
         this.markerStore = plugin.getMarkerStore();
         this.persistConfigured = plugin.getConfig().getBoolean("persist-lobotomized-state", true);
+        this.heroGiftsEnabled = plugin.getConfig().getBoolean("hero-gifts-from-lobotomized-villagers", true);
         String soundName = plugin.getConfig().getString("restock-sound", "");
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
@@ -249,6 +292,8 @@ public class LobotomizeStorage {
      * @return {@code true} if the villager was being tracked, {@code false} otherwise
      */
     private boolean untrack(@NotNull Villager v) {
+        this.heroGiftClocks.remove(v.getUniqueId());
+        this.turnedHeads.remove(v.getUniqueId());
         synchronized (this.stateLock) {
             boolean wasActive = this.activeVillagers.remove(v);
             boolean wasInactive = this.inactiveVillagers.remove(v);
@@ -320,6 +365,12 @@ public class LobotomizeStorage {
     public final void removeVillager(@NotNull Villager villager) {
         boolean wasInactive;
         boolean wasActive;
+        this.heroGiftClocks.remove(villager.getUniqueId());
+        // Don't let a villager unloading mid-turn be saved facing the hero.
+        TurnedHead head = this.turnedHeads.remove(villager.getUniqueId());
+        if (head != null && Bukkit.isOwnedByCurrentRegion(villager)) {
+            villager.setRotation(head.yaw, head.pitch);
+        }
         // Cancel the per-villager task and drop set membership atomically (paired with
         // scheduleVillagerTask) so a concurrent (re)schedule can't leave a live orphan task.
         synchronized (this.stateLock) {
@@ -366,6 +417,10 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Removed persistent lobotomized marker from " + villager.getUniqueId());
             }
         }
+        // An awake villager gifts through vanilla AI again, so drop our timer along with the marker;
+        // its own look control takes its head back over.
+        this.heroGiftClocks.remove(villager.getUniqueId());
+        this.turnedHeads.remove(villager.getUniqueId());
         // Outside the guard on purpose: a row can outlive its marker when a chunk never saved, and
         // clearing one we do not hold is free.
         if (this.markerStore != null) {
@@ -493,6 +548,7 @@ public class LobotomizeStorage {
             this.inactiveVillagers.clear();
             this.activeVillagers.clear();
         }
+        restoreTurnedHeads();
 
         // Leave both the no-AI state and the marker in place across a restart, or every trading hall
         // is un-lobotomized on boot and the lag spike comes back until check-interval elapses.
@@ -667,7 +723,8 @@ public class LobotomizeStorage {
                 villager.setGlowing(true);
             }
         } else {
-            // Inactive villagers still need their trades refreshed
+            // Inactive villagers still need their trades refreshed. Hero gifts, which their disabled AI
+            // can no longer give, are driven by HeroTracker's per-hero scan instead.
             this.refreshTrades(villager);
 
             if (active) {
@@ -896,6 +953,284 @@ public class LobotomizeStorage {
         } catch (IllegalArgumentException e) {
             this.plugin.getLogger().warning("Failed to level up villager " + villager.getUniqueId() + ": " + e.getMessage());
         }
+    }
+
+    /**
+     * Runs every {@link HeroGiftPolicy#SCAN_INTERVAL_TICKS} on a hero's thread, standing in for the
+     * gift behavior of the tracked lobotomized villagers around them. Villagers outside this hero's
+     * region are skipped; on Folia any villager in view of the hero shares it.
+     */
+    public void giftNearbyVillagers(@NotNull Player hero) {
+        if (!this.heroGiftsEnabled || this.shuttingDown || this.inactiveVillagers.isEmpty()) {
+            return;
+        }
+        for (Villager villager : hero.getWorld().getNearbyEntitiesByType(Villager.class, hero.getLocation(),
+                HeroGiftPolicy.VIEW_RANGE)) {
+            if (Bukkit.isOwnedByCurrentRegion(villager) && this.inactiveVillagers.contains(villager)) {
+                offerHeroGift(villager, hero);
+            }
+        }
+    }
+
+    /**
+     * Runs vanilla's gift sequence for a lobotomized villager that can see the hero: the cooldown
+     * runs down while it watches, then it turns toward the hero and throws the gift once the hero
+     * is in vanilla's 5-block range. Must run on the thread owning both; a failure is logged so it
+     * can never stop the scan.
+     */
+    void offerHeroGift(@NotNull Villager villager, @NotNull Player hero) {
+        if (!this.heroGiftsEnabled) {
+            return;
+        }
+        try {
+            // An aware villager is running vanilla's gift behavior itself.
+            if (villager.isAware() || villager.isTrading() || villager.isSleeping()
+                    || hero.getWorld() != villager.getWorld()) {
+                return;
+            }
+            Location villagerLocation = villager.getLocation();
+            Location heroLocation = hero.getLocation();
+            double distanceSquared = heroLocation.distanceSquared(villagerLocation);
+            if (!canSeeHero(villager, hero, distanceSquared)) {
+                return;
+            }
+            HeroGiftPolicy.GiftClock clock = this.heroGiftClocks.computeIfAbsent(villager.getUniqueId(),
+                    id -> new HeroGiftPolicy.GiftClock(HeroGiftPolicy.firstGiftDelay(this.random)));
+            boolean inRange = HeroGiftPolicy.withinThrowingDistance(
+                    heroLocation.getBlockX() - villagerLocation.getBlockX(),
+                    heroLocation.getBlockY() - villagerLocation.getBlockY(),
+                    heroLocation.getBlockZ() - villagerLocation.getBlockZ());
+            HeroGiftPolicy.Step step = HeroGiftPolicy.onSighting(clock, villager.getWorld().getGameTime(),
+                    hero.getUniqueId(), distanceSquared, inRange);
+            if (step == HeroGiftPolicy.Step.WAIT) {
+                return;
+            }
+            if (step == HeroGiftPolicy.Step.GIVE) {
+                // Vanilla throws to its nearest visible hero. One that came closer since this hero
+                // was picked may not have been scanned yet, so hand over to it (turning first) instead.
+                Player closer = closerVisibleHero(villager, hero, distanceSquared);
+                if (closer != null) {
+                    offerHeroGift(villager, closer);
+                    return;
+                }
+            }
+            faceHero(villager, hero, villager.getWorld().getGameTime());
+            if (step != HeroGiftPolicy.Step.GIVE) {
+                return;
+            }
+            // Restart before rolling, so a loot failure waits out a cooldown instead of retrying every scan.
+            HeroGiftPolicy.startNextCooldown(clock, this.random);
+            deliverHeroGift(villager, hero, clock.remainingTicks());
+        } catch (RuntimeException e) {
+            this.logger.log(java.util.logging.Level.WARNING, e,
+                    () -> "Could not give a hero gift from villager " + villager.getUniqueId());
+        }
+    }
+
+    private boolean canSeeHero(@NotNull Villager villager, @NotNull Player hero, double distanceSquared) {
+        return HeroGiftPolicy.isCandidate(distanceSquared,
+                hero.hasPotionEffect(PotionEffectType.HERO_OF_THE_VILLAGE),
+                hero.getGameMode() == GameMode.SPECTATOR)
+                && this.heroVisibility.test(villager, hero);
+    }
+
+    /**
+     * The closest other hero the villager can see, if any is closer than {@code recipient}. Only
+     * heroes owned by this region are considered; on Folia any hero in view of the villager is.
+     */
+    private @Nullable Player closerVisibleHero(@NotNull Villager villager, @NotNull Player recipient,
+                                               double recipientDistanceSquared) {
+        HeroTracker heroes = this.plugin.getHeroTracker();
+        if (heroes == null) {
+            return null;
+        }
+        Location villagerLocation = villager.getLocation();
+        Player closest = null;
+        double closestDistanceSquared = recipientDistanceSquared;
+        for (UUID id : heroes.candidates()) {
+            if (id.equals(recipient.getUniqueId())) {
+                continue;
+            }
+            Player other = Bukkit.getPlayer(id);
+            if (other == null || other.getWorld() != villager.getWorld() || !Bukkit.isOwnedByCurrentRegion(other)) {
+                continue;
+            }
+            double distanceSquared = other.getLocation().distanceSquared(villagerLocation);
+            if (distanceSquared < closestDistanceSquared && canSeeHero(villager, other, distanceSquared)) {
+                closest = other;
+                closestDistanceSquared = distanceSquared;
+            }
+        }
+        return closest;
+    }
+
+    /**
+     * Turns the villager's head toward the hero, remembering where it looked before the first turn.
+     * Its AI is off, so nothing else would ever turn it back; {@link #turnBackWhenIdle} does.
+     */
+    private void faceHero(@NotNull Villager villager, @NotNull Player hero, long now) {
+        Location eyes = villager.getEyeLocation();
+        Vector toHero = hero.getEyeLocation().toVector().subtract(eyes.toVector());
+        if (toHero.lengthSquared() < 1.0E-6) {
+            return;
+        }
+        Location current = villager.getLocation();
+        TurnedHead head = this.turnedHeads.computeIfAbsent(villager.getUniqueId(),
+                id -> new TurnedHead(villager, current.getYaw(), current.getPitch()));
+        head.lastFacedTick = now;
+        eyes.setDirection(toHero);
+        villager.setRotation(eyes.getYaw(), eyes.getPitch());
+        if (!head.turnBackScheduled) {
+            head.turnBackScheduled = scheduleTurnBack(villager, HEAD_TURN_BACK_TICKS);
+        }
+    }
+
+    private boolean scheduleTurnBack(@NotNull Villager villager, long delayTicks) {
+        try {
+            return villager.getScheduler().runDelayed(this.plugin,
+                    SentryTaskWrapper.wrap(task -> turnBackWhenIdle(villager)), null, delayTicks) != null;
+        } catch (IllegalPluginAccessException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Puts back heads still turned toward a hero when tracking stops, since the pending turn-back
+     * tasks die with this storage and the villager would otherwise keep facing the hero. Villagers
+     * this thread owns are restored directly (all of them on Paper). Others (Folia) are restored on
+     * their own scheduler, which works on a reload while the plugin is still enabled. During shutdown
+     * Bukkit has already disabled the plugin, so nothing can be scheduled and those villagers keep the
+     * turned head; it only affects how they look.
+     */
+    private void restoreTurnedHeads() {
+        for (TurnedHead head : this.turnedHeads.values()) {
+            Villager villager = head.villager;
+            if (Bukkit.isOwnedByCurrentRegion(villager)) {
+                if (villager.isValid()) {
+                    villager.setRotation(head.yaw, head.pitch);
+                }
+                continue;
+            }
+            try {
+                villager.getScheduler().run(this.plugin,
+                        SentryTaskWrapper.wrap(task -> villager.setRotation(head.yaw, head.pitch)), null);
+            } catch (IllegalPluginAccessException e) {
+                // Shutting down: the plugin can no longer schedule work.
+            }
+        }
+        this.turnedHeads.clear();
+    }
+
+    /**
+     * Restores the villager's original rotation once it has not faced a hero for
+     * {@link #HEAD_TURN_BACK_TICKS}: after its throw, or when the hero walked off. Vanilla's look
+     * control does the same once the gift behavior stops.
+     */
+    private void turnBackWhenIdle(@NotNull Villager villager) {
+        TurnedHead head = this.turnedHeads.get(villager.getUniqueId());
+        if (head == null) {
+            return;
+        }
+        long idle = villager.getWorld().getGameTime() - head.lastFacedTick;
+        if (idle >= 0 && idle < HEAD_TURN_BACK_TICKS) {
+            head.turnBackScheduled = scheduleTurnBack(villager, HEAD_TURN_BACK_TICKS - idle);
+            return;
+        }
+        this.turnedHeads.remove(villager.getUniqueId());
+        // An awake villager's own AI has taken its head over again.
+        if (!villager.isAware()) {
+            villager.setRotation(head.yaw, head.pitch);
+        }
+    }
+
+    /**
+     * Throws the gift at the hero the way vanilla does, or, when the villager's cell would stop the
+     * throw, drops it at the hero's feet instead so it can never land inside the cell.
+     */
+    private void deliverHeroGift(@NotNull Villager villager, @NotNull Player hero, long cooldownTicks) {
+        LootTables table = HeroGiftPolicy.giftTable(!villager.isAdult(), villager.getProfession().key().value());
+        Collection<ItemStack> items = this.heroGiftLoot.roll(villager, table, this.random);
+        Location from = villager.getEyeLocation().subtract(0.0, HeroGiftPolicy.THROW_HEIGHT_BELOW_EYES, 0.0);
+        Location heroLocation = hero.getLocation();
+        Vector velocity = heroLocation.toVector().subtract(villager.getLocation().toVector());
+        velocity = velocity.lengthSquared() < 1.0E-6 ? new Vector() : velocity.normalize().multiply(HeroGiftPolicy.THROW_SPEED);
+        boolean thrown = HeroGiftPolicy.throwEscapes(from.toVector(), velocity, villager.getLocation().toVector(),
+                this.throwCollider.apply(villager.getWorld()));
+        for (ItemStack item : items) {
+            if (item == null || item.isEmpty()) {
+                continue;
+            }
+            if (thrown) {
+                Vector throwVelocity = velocity.clone();
+                villager.getWorld().dropItem(from, item, dropped -> {
+                    dropped.setVelocity(throwVelocity);
+                    this.recordThrower.accept(dropped, villager);
+                });
+            } else {
+                // dropItem adds a random pop; zero it so the gift lands where the hero is standing.
+                hero.getWorld().dropItem(heroLocation, item, dropped -> {
+                    dropped.setVelocity(new Vector());
+                    this.recordThrower.accept(dropped, villager);
+                });
+            }
+        }
+        if (this.plugin.isDebugging()) {
+            this.logger.log(java.util.logging.Level.INFO,
+                    "[Debug] Villager {0} {1} a hero gift ({2}, {3} stack(s)) to {4}; next after {5} ticks with a hero in view",
+                    new Object[]{villager.getUniqueId(), thrown ? "threw" : "dropped", table.name(),
+                            String.valueOf(items.size()), hero.getName(), String.valueOf(cooldownTicks)});
+        }
+    }
+
+    /** For /lobotomy debug: the villager's hero-gift status. Entity-thread only. */
+    public @NotNull String describeHeroGift(@NotNull Villager villager) {
+        if (!this.heroGiftsEnabled) {
+            return "disabled in config";
+        }
+        if (!this.inactiveVillagers.contains(villager)) {
+            return this.activeVillagers.contains(villager)
+                    ? "given by vanilla AI (not lobotomized)"
+                    : "none (not tracked by the plugin)";
+        }
+        HeroGiftPolicy.GiftClock clock = this.heroGiftClocks.get(villager.getUniqueId());
+        if (clock == null) {
+            return "no hero seen since it loaded; first after about " + HeroGiftPolicy.FIRST_GIFT_DELAY_TICKS
+                    + " ticks with a hero in view";
+        }
+        long remaining = clock.remainingTicks();
+        return remaining <= 0
+                ? "ready for the next hero in view within 5 blocks"
+                : "next after " + remaining + " more ticks with a hero in view";
+    }
+
+    /** Test seam: real loot tables are not available under MockBukkit. */
+    void setHeroGiftLoot(@NotNull HeroGiftLoot heroGiftLoot) {
+        this.heroGiftLoot = heroGiftLoot;
+    }
+
+    /** Test seam: MockBukkit does not implement {@code Item#setThrower}. */
+    void setRecordThrower(@NotNull BiConsumer<Item, Villager> recordThrower) {
+        this.recordThrower = recordThrower;
+    }
+
+    /** Test seam: MockBukkit does not implement ray tracing. */
+    void setThrowCollider(@NotNull Function<World, Predicate<BoundingBox>> throwCollider) {
+        this.throwCollider = throwCollider;
+    }
+
+    /** Test seam: the villager's gift timer, or {@code null} if it has not seen a hero since it loaded. */
+    HeroGiftPolicy.@Nullable GiftClock heroGiftClock(@NotNull Villager villager) {
+        return this.heroGiftClocks.get(villager.getUniqueId());
+    }
+
+    /** Test seam: starts the villager's gift timer at a given point. */
+    void setHeroGiftClock(@NotNull Villager villager, HeroGiftPolicy.@NotNull GiftClock clock) {
+        this.heroGiftClocks.put(villager.getUniqueId(), clock);
+    }
+
+    /** Test seam: MockBukkit does not implement line of sight. */
+    void setHeroVisibility(@NotNull BiPredicate<Villager, Player> heroVisibility) {
+        this.heroVisibility = heroVisibility;
     }
 
     /**
