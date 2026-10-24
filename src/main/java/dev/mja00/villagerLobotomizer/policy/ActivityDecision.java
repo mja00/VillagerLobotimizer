@@ -103,8 +103,9 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
     /**
      * One cardinal neighbour. {@code underFeet} only matters when {@link MovementTrace#roofed()} is
      * true; snapshots are {@code null} when the column's chunk is unloaded. {@code overhead} is the
-     * block at {@code y + 2}, checked only when the villager's hitbox reaches into that layer;
-     * otherwise it and {@code overheadVerdict} are {@code null}.
+     * block at {@code y + 2}, checked only when the villager's hitbox reaches into that layer, either
+     * raised by a carpet or by jumping onto a 1-high block under a raised roof; otherwise it and
+     * {@code overheadVerdict} are {@code null}.
      */
     public record DirectionTrace(String direction, int x, int y, int z,
                                  BlockSnapshot head, BlockVerdict headVerdict,

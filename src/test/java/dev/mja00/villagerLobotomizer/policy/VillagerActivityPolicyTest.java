@@ -101,6 +101,18 @@ class VillagerActivityPolicyTest {
                 .set(x, y, z - 1, STONE);
     }
 
+    /** Surround the four cardinal neighbours of (x,z) with STONE walls {@code height} blocks tall. */
+    private static TestGrid walledCell(int x, int y, int z, int height) {
+        TestGrid grid = new TestGrid();
+        for (int dy = 0; dy < height; dy++) {
+            grid.set(x + 1, y + dy, z, STONE)
+                    .set(x - 1, y + dy, z, STONE)
+                    .set(x, y + dy, z + 1, STONE)
+                    .set(x, y + dy, z - 1, STONE);
+        }
+        return grid;
+    }
+
     @Test
     void openSpaceIsActive() {
         // All neighbours default to AIR -> walkable -> active.
@@ -221,9 +233,28 @@ class VillagerActivityPolicyTest {
     void checkRoofAcceptsCeilingOneLayerHigher() {
         // #89: a pressure plate sunk into the floor's slot leaves a 3-tall cell; the villager is still trapped.
         VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
-        TestGrid grid = sealedBox(0, 64, 0).set(0, 67, 0, STONE);
+        TestGrid grid = walledCell(0, 64, 0, 3).set(0, 67, 0, STONE);
         assertFalse(p.shouldBeActive(villager("", 0, 64, 0), grid));
         assertFalse(p.evaluate(villager("", 0, 64, 0), grid).active());
+    }
+
+    @Test
+    void raisedRoofLeavesRoomToJumpOverOneHighWalls() {
+        // Under a ceiling at y+3 the villager can jump onto 1-high walls and walk out on top of them.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 67, 0, STONE);
+        assertTrue(p.shouldBeActive(villager("", 0, 64, 0), grid));
+        ActivityDecision d = p.evaluate(villager("", 0, 64, 0), grid);
+        assertTrue(d.active());
+        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+
+        // A block at y+2 above each 1-high wall leaves no room to stand on it after jumping.
+        TestGrid lipped = sealedBox(0, 64, 0).set(0, 67, 0, STONE)
+                .set(1, 66, 0, STONE).set(-1, 66, 0, STONE).set(0, 66, 1, STONE).set(0, 66, -1, STONE);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), lipped));
+        ActivityDecision lippedDecision = p.evaluate(villager("", 0, 64, 0), lipped);
+        assertFalse(lippedDecision.active());
+        assertEquals(BlockVerdict.HITBOX_OVERLAP, lippedDecision.movement().directions().get(0).overheadVerdict());
     }
 
     @Test
