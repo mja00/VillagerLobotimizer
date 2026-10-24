@@ -139,9 +139,12 @@ public final class VillagerActivityPolicy {
         return overhead != null && !classifyOverhead(grid, overhead, x, y + 2, z, reach).blocking();
     }
 
-    /** How far the hitbox would reach into the {@code y + 2} layer after jumping onto a 1-high block. */
+    /**
+     * How far the hitbox would reach into the {@code y + 2} layer after jumping onto a 1-high block.
+     * Uses height, not the current top: after the jump its feet are at {@code y + 1} wherever it started.
+     */
     private static double jumpReach(VillagerState v) {
-        return v.bodyTop() - (v.blockY() + 1);
+        return v.height() - 1;
     }
 
     /** How far the villager's hitbox reaches into the {@code y + 2} layer, or 0. */

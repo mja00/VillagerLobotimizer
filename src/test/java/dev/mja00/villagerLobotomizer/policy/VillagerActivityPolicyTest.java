@@ -258,6 +258,17 @@ class VillagerActivityPolicyTest {
     }
 
     @Test
+    void raisedRoofLetsVillagerOnCarpetJumpOverOneHighWalls() {
+        // After the jump its feet sit on the wall, so starting on a carpet does not make it any taller.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 64, 0, CARPET).set(0, 67, 0, STONE);
+        assertTrue(p.shouldBeActive(onCarpet(0, 64, 0), grid));
+        ActivityDecision d = p.evaluate(onCarpet(0, 64, 0), grid);
+        assertTrue(d.active());
+        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
     void raisedRoofDoesNotLetVillagersJumpFencesOrJumpFromHoney() {
         VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
         // Fences and walls are 1.5 high, too tall to jump onto.
@@ -457,6 +468,7 @@ class VillagerActivityPolicyTest {
                 new BlockSnapshot(Material.WHITE_BED, false, true)};
         String[] names = {"", "", "keepme", "mr nobrain", "bob"};
         double[] bodyTops = {64 + 1.95, 64 + 0.0625 + 1.95, 64 + 0.5 + 1.95, 64 + 2.0};
+        double[] heights = {1.95, 0.975};
         java.util.Random random = new java.util.Random(1234);
 
         for (int i = 0; i < 20_000; i++) {
@@ -464,7 +476,8 @@ class VillagerActivityPolicyTest {
                     random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), Set.of("keepme"));
             VillagerState v = new VillagerState(names[random.nextInt(names.length)],
                     random.nextInt(8) == 0, random.nextInt(8) == 0, random.nextInt(4) == 0, random.nextInt(4) == 0,
-                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)]);
+                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)],
+                    heights[random.nextInt(heights.length)]);
 
             Map<Long, Double> collisionBottoms = new HashMap<>();
             TestGrid grid = new TestGrid() {
@@ -494,7 +507,7 @@ class VillagerActivityPolicyTest {
 
     /** Standing on a carpet: feet 1/16 up, so a 1.95-tall hitbox tops out 0.0125 into the y+2 layer. */
     private static VillagerState onCarpet(int x, int y, int z) {
-        return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95);
+        return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95, 1.95);
     }
 
     /** Sealed on three sides; +X is clear at feet and head height but has a block one layer higher. */
@@ -530,7 +543,7 @@ class VillagerActivityPolicyTest {
 
     @Test
     void villagerStandingOnFullBlockIsNotRaised() {
-        VillagerState onGround = new VillagerState("", false, false, false, false, 10, 0, 64, 0, 64 + 1.95);
+        VillagerState onGround = new VillagerState("", false, false, false, false, 10, 0, 64, 0, 64 + 1.95, 1.95);
         assertTrue(defaultPolicy().shouldBeActive(onGround, openEastUnderLowCeiling(STONE)));
     }
 

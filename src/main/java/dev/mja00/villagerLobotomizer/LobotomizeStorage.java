@@ -1410,6 +1410,7 @@ public class LobotomizeStorage {
         String name = customName == null
                 ? ""
                 : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+        double height = villager.getHeight();
         return new VillagerState(
                 name,
                 villager.isSwimming(),
@@ -1418,7 +1419,8 @@ public class LobotomizeStorage {
                 villager.getProfession() == Villager.Profession.NONE,
                 villager.getVillagerExperience(),
                 blockX, blockY, blockZ,
-                feetY + villager.getHeight());
+                feetY + height,
+                height);
     }
 
     /**

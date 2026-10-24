@@ -6,6 +6,7 @@ package dev.mja00.villagerLobotomizer.policy;
  * the block the villager occupies (already offset/floored by the caller). {@code bodyTop} is the
  * absolute Y of the top of the villager's hitbox; standing on a carpet or snow layer can lift it
  * into the {@code blockY + 2} layer, where neighbouring blocks then stop sideways movement.
+ * {@code height} is the hitbox height, which decides how far it reaches after jumping onto a block.
  */
 public record VillagerState(
         String name,
@@ -17,11 +18,13 @@ public record VillagerState(
         int blockX,
         int blockY,
         int blockZ,
-        double bodyTop) {
+        double bodyTop,
+        double height) {
 
-    /** A villager whose hitbox stays below {@code blockY + 2}. */
+    /** An adult villager standing on a full block, so its hitbox stays below {@code blockY + 2}. */
     public VillagerState(String name, boolean swimming, boolean sleeping, boolean hasVehicle,
                          boolean professionNone, int experience, int blockX, int blockY, int blockZ) {
-        this(name, swimming, sleeping, hasVehicle, professionNone, experience, blockX, blockY, blockZ, blockY + 2.0);
+        this(name, swimming, sleeping, hasVehicle, professionNone, experience, blockX, blockY, blockZ,
+                blockY + 1.95, 1.95);
     }
 }
