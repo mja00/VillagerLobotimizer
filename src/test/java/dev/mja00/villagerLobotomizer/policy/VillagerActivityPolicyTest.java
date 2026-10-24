@@ -218,6 +218,23 @@ class VillagerActivityPolicyTest {
     }
 
     @Test
+    void checkRoofAcceptsCeilingOneLayerHigher() {
+        // #89: a pressure plate sunk into the floor's slot leaves a 3-tall cell; the villager is still trapped.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 67, 0, STONE);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), grid));
+        assertFalse(p.evaluate(villager("", 0, 64, 0), grid).active());
+    }
+
+    @Test
+    void checkRoofIgnoresCeilingTwoLayersHigher() {
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 68, 0, STONE);
+        assertTrue(p.shouldBeActive(villager("", 0, 64, 0), grid));
+        assertEquals(Rule.ROOF, p.evaluate(villager("", 0, 64, 0), grid).decidingRule());
+    }
+
+    @Test
     void checkRoofTreatsCaveAndVoidAirAsOpen() {
         // Worldgen fills caves with CAVE_AIR and world bounds with VOID_AIR; both are open sky for the roof check.
         VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());

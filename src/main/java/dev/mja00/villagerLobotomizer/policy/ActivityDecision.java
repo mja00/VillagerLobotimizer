@@ -116,7 +116,7 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
 
     /**
      * @param floor      the block under the villager, or {@code null} when unloaded
-     * @param roof       the block above the villager's head, or {@code null} when unloaded
+     * @param roof       the first non-air block one or two layers above the villager's head, or {@code null} when unloaded
      * @param roofed     whether a roof (or honey floor) makes the under-feet block of each neighbour count
      * @param roofReason human-readable reason for {@code roofed}
      * @param overhang   how far the villager's hitbox reaches into the {@code y + 2} layer, or 0

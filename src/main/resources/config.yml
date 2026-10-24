@@ -49,7 +49,7 @@ ignore-villagers-stuck-in-doors: false
 #To not lobotomize villagers surrounded by non-solid blocks, set this to true.
 ignore-non-solid-blocks: false
 
-#To check if there is a roof above a villager before lobotomizing, set this to true
+#To check if there is a roof above a villager before lobotomizing, set this to true. The roof can be directly above its head or one block higher.
 check-roof: true
 
 #Create teams for debugging purposes. This will create colored teams for inactive and active villagers. We use this to color their glowing effect.
@@ -59,7 +59,7 @@ create-debug-teams: false
 #Note: this is only read when the plugin loads; changing it requires a server restart (a /lobotomy reload will not re-run the update check).
 disable-update-checker: false
 
-#Disable chunk forced Villager updating. This'll disable changes to blocks in a chunk from triggering Villagers in the chunk to be updated.
+#Disable chunk forced Villager updating. This'll stop breaking blocks in a chunk from triggering Villagers in the chunk to be updated.
 disable-chunk-villager-updates: false
 
 #Prevent trading with unlobotomized villagers. When enabled, players can only trade with villagers that have been lobotomized.

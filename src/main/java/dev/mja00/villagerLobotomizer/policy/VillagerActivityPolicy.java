@@ -85,7 +85,7 @@ public final class VillagerActivityPolicy {
         }
 
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
-        BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
+        BlockSnapshot roof = roofOf(v, grid);
         if (this.checkRoof && (roof == null || isAir(roof.type()))) {
             return true;
         }
@@ -123,6 +123,18 @@ public final class VillagerActivityPolicy {
     private static double overhang(VillagerState v) {
         double raw = v.bodyTop() - (v.blockY() + 2);
         return raw > OVERHANG_EPSILON ? raw : 0.0;
+    }
+
+    /**
+     * The block directly above head height, or the one above that when the first is air: a 3-tall
+     * cell (e.g. a pressure plate sunk into the floor's slot) still traps a villager.
+     */
+    private static BlockSnapshot roofOf(VillagerState v, BlockGrid grid) {
+        BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
+        if (roof != null && isAir(roof.type())) {
+            return grid.at(v.blockX(), v.blockY() + 3, v.blockZ());
+        }
+        return roof;
     }
 
     /**
@@ -186,15 +198,15 @@ public final class VillagerActivityPolicy {
         }
 
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
-        BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
-        int roofY = v.blockY() + 2;
+        BlockSnapshot roof = roofOf(v, grid);
+        String roofRange = "y=" + (v.blockY() + 2) + ".." + (v.blockY() + 3);
 
         if (!this.checkRoof) {
             trace.disabled(Rule.ROOF, "option off");
         } else if (roof == null || isAir(roof.type())) {
-            return trace.decide(Rule.ROOF, true, "no block above head (y=" + roofY + " is " + describe(roof) + ")");
+            return trace.decide(Rule.ROOF, true, "no block above head in " + roofRange + " (" + describe(roof) + ")");
         } else {
-            trace.pass(Rule.ROOF, "roof at y=" + roofY + " is " + describe(roof));
+            trace.pass(Rule.ROOF, "roof " + describe(roof) + " within " + roofRange);
         }
 
         Material floorMaterial = floor == null ? Material.AIR : floor.type();
