@@ -258,6 +258,21 @@ class VillagerActivityPolicyTest {
     }
 
     @Test
+    void raisedRoofDoesNotLetVillagersJumpFencesOrJumpFromHoney() {
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        // Fences and walls are 1.5 high, too tall to jump onto.
+        TestGrid fenced = new TestGrid().set(0, 67, 0, STONE)
+                .set(1, 64, 0, FENCE).set(-1, 64, 0, FENCE).set(0, 64, 1, FENCE).set(0, 64, -1, FENCE);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), fenced));
+        assertFalse(p.evaluate(villager("", 0, 64, 0), fenced).active());
+
+        // Honey cuts jump height too much to climb a full block.
+        TestGrid honey = sealedBox(0, 64, 0).set(0, 67, 0, STONE).set(0, 63, 0, HONEY);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), honey));
+        assertFalse(p.evaluate(villager("", 0, 64, 0), honey).active());
+    }
+
+    @Test
     void checkRoofIgnoresCeilingTwoLayersHigher() {
         VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
         TestGrid grid = sealedBox(0, 64, 0).set(0, 68, 0, STONE);

@@ -85,19 +85,21 @@ public final class VillagerActivityPolicy {
         }
 
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
+        boolean honeyFloor = floor != null && floor.type() == Material.HONEY_BLOCK;
         BlockSnapshot nearRoof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
         boolean jumpable = false;
         if (this.checkRoof) {
             BlockSnapshot roof = nearRoof;
             if (roof != null && isAir(roof.type())) {
                 roof = grid.at(v.blockX(), v.blockY() + 3, v.blockZ());
-                jumpable = true;
+                // Honey cuts jump height too much to climb a full block.
+                jumpable = !honeyFloor;
             }
             if (roof == null || isAir(roof.type())) {
                 return true;
             }
         }
-        boolean hasRoof = (floor != null && floor.type() == Material.HONEY_BLOCK)
+        boolean hasRoof = honeyFloor
                 || (nearRoof != null && classify(this.blocks.impassableAll(), nearRoof, false).blocking());
         double overhang = overhang(v);
         double jumpReach = jumpReach(v);
@@ -128,7 +130,7 @@ public final class VillagerActivityPolicy {
                 return true;
             }
             reach = overhang;
-        } else if (jumpable) {
+        } else if (jumpable && !this.blocks.impassableTall().contains(feet.type())) {
             reach = jumpReach;
         } else {
             return false;
@@ -225,10 +227,11 @@ public final class VillagerActivityPolicy {
         } else {
             trace.pass(Rule.ROOF, "roof " + describe(roof) + " within " + roofRange);
         }
-        boolean jumpable = this.checkRoof && roof != null && nearRoof != null && isAir(nearRoof.type());
-
         Material floorMaterial = floor == null ? Material.AIR : floor.type();
         boolean honeyFloor = floorMaterial == Material.HONEY_BLOCK;
+        // Honey cuts jump height too much to climb a full block.
+        boolean jumpable = this.checkRoof && !honeyFloor && roof != null && nearRoof != null
+                && isAir(nearRoof.type());
         BlockVerdict roofVerdict = classify(this.blocks.impassableAll(), nearRoof, false);
         boolean roofBlocks = nearRoof != null && roofVerdict.blocking();
         boolean hasRoof = honeyFloor || roofBlocks;
@@ -300,7 +303,7 @@ public final class VillagerActivityPolicy {
         if (walkable) {
             checkOverhead = overhang > 0;
             reach = overhang;
-        } else if (jumpable && !headVerdict.blocking()) {
+        } else if (jumpable && !headVerdict.blocking() && !this.blocks.impassableTall().contains(feet.type())) {
             checkOverhead = true;
             reach = jumpReach;
         }
