@@ -11,7 +11,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
-import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityRemoveEvent;
 import org.bukkit.event.entity.EntityTransformEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
@@ -121,13 +120,10 @@ public class EntityListener implements Listener {
         }
     }
 
+    // Only breaks get an instant recheck since they can free a villager; rechecking on place would
+    // lobotomize villagers mid-build, before they can claim a workstation.
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public final void onBlockBreak(BlockBreakEvent event) {
-        this.plugin.getStorage().handleBlockChange(event.getBlock());
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public final void onBlockPlace(BlockPlaceEvent event) {
         this.plugin.getStorage().handleBlockChange(event.getBlock());
     }
 
