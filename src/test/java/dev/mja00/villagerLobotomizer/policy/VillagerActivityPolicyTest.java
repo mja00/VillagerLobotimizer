@@ -101,6 +101,18 @@ class VillagerActivityPolicyTest {
                 .set(x, y, z - 1, STONE);
     }
 
+    /** Surround the four cardinal neighbours of (x,z) with STONE walls {@code height} blocks tall. */
+    private static TestGrid walledCell(int x, int y, int z, int height) {
+        TestGrid grid = new TestGrid();
+        for (int dy = 0; dy < height; dy++) {
+            grid.set(x + 1, y + dy, z, STONE)
+                    .set(x - 1, y + dy, z, STONE)
+                    .set(x, y + dy, z + 1, STONE)
+                    .set(x, y + dy, z - 1, STONE);
+        }
+        return grid;
+    }
+
     @Test
     void openSpaceIsActive() {
         // All neighbours default to AIR -> walkable -> active.
@@ -215,6 +227,68 @@ class VillagerActivityPolicyTest {
         // Sealed at feet level, but roof (y+2) is AIR and checkRoof is on -> active.
         assertTrue(policy(false, false, false, true, false, false, Set.of())
                 .shouldBeActive(villager("", 0, 64, 0), sealedBox(0, 64, 0)));
+    }
+
+    @Test
+    void checkRoofAcceptsCeilingOneLayerHigher() {
+        // #89: a pressure plate sunk into the floor's slot leaves a 3-tall cell; the villager is still trapped.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = walledCell(0, 64, 0, 3).set(0, 67, 0, STONE);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), grid));
+        assertFalse(p.evaluate(villager("", 0, 64, 0), grid).active());
+    }
+
+    @Test
+    void raisedRoofLeavesRoomToJumpOverOneHighWalls() {
+        // Under a ceiling at y+3 the villager can jump onto 1-high walls and walk out on top of them.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 67, 0, STONE);
+        assertTrue(p.shouldBeActive(villager("", 0, 64, 0), grid));
+        ActivityDecision d = p.evaluate(villager("", 0, 64, 0), grid);
+        assertTrue(d.active());
+        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+
+        // A block at y+2 above each 1-high wall leaves no room to stand on it after jumping.
+        TestGrid lipped = sealedBox(0, 64, 0).set(0, 67, 0, STONE)
+                .set(1, 66, 0, STONE).set(-1, 66, 0, STONE).set(0, 66, 1, STONE).set(0, 66, -1, STONE);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), lipped));
+        ActivityDecision lippedDecision = p.evaluate(villager("", 0, 64, 0), lipped);
+        assertFalse(lippedDecision.active());
+        assertEquals(BlockVerdict.HITBOX_OVERLAP, lippedDecision.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
+    void raisedRoofLetsVillagerOnCarpetJumpOverOneHighWalls() {
+        // After the jump its feet sit on the wall, so starting on a carpet does not make it any taller.
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 64, 0, CARPET).set(0, 67, 0, STONE);
+        assertTrue(p.shouldBeActive(onCarpet(0, 64, 0), grid));
+        ActivityDecision d = p.evaluate(onCarpet(0, 64, 0), grid);
+        assertTrue(d.active());
+        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+    }
+
+    @Test
+    void raisedRoofDoesNotLetVillagersJumpFencesOrJumpFromHoney() {
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        // Fences and walls are 1.5 high, too tall to jump onto.
+        TestGrid fenced = new TestGrid().set(0, 67, 0, STONE)
+                .set(1, 64, 0, FENCE).set(-1, 64, 0, FENCE).set(0, 64, 1, FENCE).set(0, 64, -1, FENCE);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), fenced));
+        assertFalse(p.evaluate(villager("", 0, 64, 0), fenced).active());
+
+        // Honey cuts jump height too much to climb a full block.
+        TestGrid honey = sealedBox(0, 64, 0).set(0, 67, 0, STONE).set(0, 63, 0, HONEY);
+        assertFalse(p.shouldBeActive(villager("", 0, 64, 0), honey));
+        assertFalse(p.evaluate(villager("", 0, 64, 0), honey).active());
+    }
+
+    @Test
+    void checkRoofIgnoresCeilingTwoLayersHigher() {
+        VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
+        TestGrid grid = sealedBox(0, 64, 0).set(0, 68, 0, STONE);
+        assertTrue(p.shouldBeActive(villager("", 0, 64, 0), grid));
+        assertEquals(Rule.ROOF, p.evaluate(villager("", 0, 64, 0), grid).decidingRule());
     }
 
     @Test
@@ -394,6 +468,7 @@ class VillagerActivityPolicyTest {
                 new BlockSnapshot(Material.WHITE_BED, false, true)};
         String[] names = {"", "", "keepme", "mr nobrain", "bob"};
         double[] bodyTops = {64 + 1.95, 64 + 0.0625 + 1.95, 64 + 0.5 + 1.95, 64 + 2.0};
+        double[] heights = {1.95, 0.975};
         java.util.Random random = new java.util.Random(1234);
 
         for (int i = 0; i < 20_000; i++) {
@@ -401,7 +476,8 @@ class VillagerActivityPolicyTest {
                     random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), Set.of("keepme"));
             VillagerState v = new VillagerState(names[random.nextInt(names.length)],
                     random.nextInt(8) == 0, random.nextInt(8) == 0, random.nextInt(4) == 0, random.nextInt(4) == 0,
-                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)]);
+                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)],
+                    heights[random.nextInt(heights.length)]);
 
             Map<Long, Double> collisionBottoms = new HashMap<>();
             TestGrid grid = new TestGrid() {
@@ -431,7 +507,7 @@ class VillagerActivityPolicyTest {
 
     /** Standing on a carpet: feet 1/16 up, so a 1.95-tall hitbox tops out 0.0125 into the y+2 layer. */
     private static VillagerState onCarpet(int x, int y, int z) {
-        return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95);
+        return new VillagerState("", false, false, false, false, 10, x, y, z, y + 0.0625 + 1.95, 1.95);
     }
 
     /** Sealed on three sides; +X is clear at feet and head height but has a block one layer higher. */
@@ -467,7 +543,7 @@ class VillagerActivityPolicyTest {
 
     @Test
     void villagerStandingOnFullBlockIsNotRaised() {
-        VillagerState onGround = new VillagerState("", false, false, false, false, 10, 0, 64, 0, 64 + 1.95);
+        VillagerState onGround = new VillagerState("", false, false, false, false, 10, 0, 64, 0, 64 + 1.95, 1.95);
         assertTrue(defaultPolicy().shouldBeActive(onGround, openEastUnderLowCeiling(STONE)));
     }
 

@@ -85,38 +85,66 @@ public final class VillagerActivityPolicy {
         }
 
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
-        BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
-        if (this.checkRoof && (roof == null || isAir(roof.type()))) {
-            return true;
+        boolean honeyFloor = floor != null && floor.type() == Material.HONEY_BLOCK;
+        BlockSnapshot nearRoof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
+        boolean jumpable = false;
+        if (this.checkRoof) {
+            BlockSnapshot roof = nearRoof;
+            if (roof != null && isAir(roof.type())) {
+                roof = grid.at(v.blockX(), v.blockY() + 3, v.blockZ());
+                // Honey cuts jump height too much to climb a full block.
+                jumpable = !honeyFloor;
+            }
+            if (roof == null || isAir(roof.type())) {
+                return true;
+            }
         }
-        boolean hasRoof = (floor != null && floor.type() == Material.HONEY_BLOCK)
-                || (roof != null && classify(this.blocks.impassableAll(), roof, false).blocking());
+        boolean hasRoof = honeyFloor
+                || (nearRoof != null && classify(this.blocks.impassableAll(), nearRoof, false).blocking());
         double overhang = overhang(v);
+        double jumpReach = jumpReach(v);
 
-        return canMoveThrough(grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang)
-                || canMoveThrough(grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang)
-                || canMoveThrough(grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang)
-                || canMoveThrough(grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang);
+        return canMoveThrough(grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang, jumpable, jumpReach)
+                || canMoveThrough(grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang, jumpable, jumpReach)
+                || canMoveThrough(grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang, jumpable, jumpReach)
+                || canMoveThrough(grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang, jumpable, jumpReach);
     }
 
     /** Allocation-free counterpart of {@link #traceDirection}. */
-    private boolean canMoveThrough(BlockGrid grid, int x, int y, int z, boolean roof, double overhang) {
+    private boolean canMoveThrough(BlockGrid grid, int x, int y, int z, boolean roof, double overhang,
+                                   boolean jumpable, double jumpReach) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
         BlockSnapshot underFeet = grid.at(x, y - 1, z);
         if (head == null || feet == null || underFeet == null) {
             return false;
         }
-        if (classify(this.blocks.impassableRegular(), head, false).blocking()
-                || classify(this.blocks.impassableRegular(), feet, false).blocking()
-                || (roof && classify(this.blocks.impassableTall(), underFeet, true).blocking())) {
+        if (classify(this.blocks.impassableRegular(), head, false).blocking()) {
             return false;
         }
-        if (overhang <= 0) {
-            return true;
+        boolean walkable = !classify(this.blocks.impassableRegular(), feet, false).blocking()
+                && !(roof && classify(this.blocks.impassableTall(), underFeet, true).blocking());
+        double reach;
+        if (walkable) {
+            if (overhang <= 0) {
+                return true;
+            }
+            reach = overhang;
+        } else if (jumpable && !this.blocks.impassableTall().contains(feet.type())) {
+            reach = jumpReach;
+        } else {
+            return false;
         }
         BlockSnapshot overhead = grid.at(x, y + 2, z);
-        return overhead != null && !classifyOverhead(grid, overhead, x, y + 2, z, overhang).blocking();
+        return overhead != null && !classifyOverhead(grid, overhead, x, y + 2, z, reach).blocking();
+    }
+
+    /**
+     * How far the hitbox would reach into the {@code y + 2} layer after jumping onto a 1-high block.
+     * Uses height, not the current top: after the jump its feet are at {@code y + 1} wherever it started.
+     */
+    private static double jumpReach(VillagerState v) {
+        return v.height() - 1;
     }
 
     /** How far the villager's hitbox reaches into the {@code y + 2} layer, or 0. */
@@ -186,40 +214,52 @@ public final class VillagerActivityPolicy {
         }
 
         BlockSnapshot floor = grid.at(v.blockX(), v.blockY() - 1, v.blockZ());
-        BlockSnapshot roof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
-        int roofY = v.blockY() + 2;
+        // A roof one block higher still traps a villager in a 3-tall cell (e.g. a pressure plate sunk
+        // into the floor's slot), but leaves room to jump onto 1-high blocks around it.
+        BlockSnapshot nearRoof = grid.at(v.blockX(), v.blockY() + 2, v.blockZ());
+        BlockSnapshot roof = nearRoof;
+        if (nearRoof != null && isAir(nearRoof.type())) {
+            roof = grid.at(v.blockX(), v.blockY() + 3, v.blockZ());
+        }
+        String roofRange = "y=" + (v.blockY() + 2) + ".." + (v.blockY() + 3);
 
         if (!this.checkRoof) {
             trace.disabled(Rule.ROOF, "option off");
         } else if (roof == null || isAir(roof.type())) {
-            return trace.decide(Rule.ROOF, true, "no block above head (y=" + roofY + " is " + describe(roof) + ")");
+            return trace.decide(Rule.ROOF, true, "no block above head in " + roofRange + " (" + describe(roof) + ")");
         } else {
-            trace.pass(Rule.ROOF, "roof at y=" + roofY + " is " + describe(roof));
+            trace.pass(Rule.ROOF, "roof " + describe(roof) + " within " + roofRange);
         }
-
         Material floorMaterial = floor == null ? Material.AIR : floor.type();
         boolean honeyFloor = floorMaterial == Material.HONEY_BLOCK;
-        BlockVerdict roofVerdict = classify(this.blocks.impassableAll(), roof, false);
-        boolean roofBlocks = roof != null && roofVerdict.blocking();
+        // Honey cuts jump height too much to climb a full block.
+        boolean jumpable = this.checkRoof && !honeyFloor && roof != null && nearRoof != null
+                && isAir(nearRoof.type());
+        BlockVerdict roofVerdict = classify(this.blocks.impassableAll(), nearRoof, false);
+        boolean roofBlocks = nearRoof != null && roofVerdict.blocking();
         boolean hasRoof = honeyFloor || roofBlocks;
         String roofReason;
         if (honeyFloor) {
             roofReason = "standing on a honey block";
         } else if (roofBlocks) {
-            roofReason = "roof " + describe(roof) + " is " + roofVerdict.description();
+            roofReason = "roof " + describe(nearRoof) + " is " + roofVerdict.description();
+        } else if (jumpable) {
+            roofReason = "roof " + describe(roof) + " is one block higher, so the villager can jump onto"
+                    + " 1-high blocks (\"above\" counts)";
         } else {
-            roofReason = "roof " + describe(roof) + " does not block (" + roofVerdict.description() + ")";
+            roofReason = "roof " + describe(nearRoof) + " does not block (" + roofVerdict.description() + ")";
         }
 
         // Standing on a carpet or snow layer lifts a 1.95-tall villager into the y+2 layer, where a
         // ceiling beside it blocks sideways movement even though feet and head height are clear.
         double overhang = overhang(v);
+        double jumpReach = jumpReach(v);
 
         List<DirectionTrace> directions = List.of(
-                traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang),
-                traceDirection("-X (west)", grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang),
-                traceDirection("+Z (south)", grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang),
-                traceDirection("-Z (north)", grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang));
+                traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang, jumpable, jumpReach),
+                traceDirection("-X (west)", grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang, jumpable, jumpReach),
+                traceDirection("+Z (south)", grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang, jumpable, jumpReach),
+                traceDirection("-Z (north)", grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang, jumpable, jumpReach));
         MovementTrace movement = new MovementTrace(floor, roof, hasRoof, roofReason, overhang, directions);
 
         List<String> open = new ArrayList<>();
@@ -239,29 +279,46 @@ public final class VillagerActivityPolicy {
      *
      * @param roof     whether the under-feet block must be passable
      * @param overhang how far the villager's hitbox reaches into the {@code y + 2} layer, or 0
+     * @param jumpable whether a raised roof leaves room to jump onto a 1-high block here
      */
     private DirectionTrace traceDirection(String direction, BlockGrid grid, int x, int y, int z, boolean roof,
-                                          double overhang) {
+                                          double overhang, boolean jumpable, double jumpReach) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
         BlockSnapshot underFeet = grid.at(x, y - 1, z);
-        boolean checkOverhead = overhang > 0;
-        BlockSnapshot overhead = checkOverhead ? grid.at(x, y + 2, z) : null;
-        if (head == null || feet == null || underFeet == null || (checkOverhead && overhead == null)) {
-            BlockVerdict overheadVerdict = checkOverhead ? BlockVerdict.UNLOADED : null;
+        if (head == null || feet == null || underFeet == null) {
+            BlockVerdict overheadVerdict = overhang > 0 || jumpable ? BlockVerdict.UNLOADED : null;
             return new DirectionTrace(direction, x, y, z,
                     head, BlockVerdict.UNLOADED, feet, BlockVerdict.UNLOADED, underFeet, BlockVerdict.UNLOADED,
-                    overhead, overheadVerdict, false);
+                    null, overheadVerdict, false);
         }
         BlockVerdict headVerdict = classify(this.blocks.impassableRegular(), head, false);
         BlockVerdict feetVerdict = classify(this.blocks.impassableRegular(), feet, false);
         BlockVerdict underFeetVerdict = classify(this.blocks.impassableTall(), underFeet, true);
-        BlockVerdict overheadVerdict = checkOverhead
-                ? classifyOverhead(grid, overhead, x, y + 2, z, overhang)
-                : null;
-        boolean open = !headVerdict.blocking() && !feetVerdict.blocking()
-                && (!roof || !underFeetVerdict.blocking())
-                && (overheadVerdict == null || !overheadVerdict.blocking());
+        boolean walkable = !headVerdict.blocking() && !feetVerdict.blocking()
+                && (!roof || !underFeetVerdict.blocking());
+
+        BlockSnapshot overhead = null;
+        BlockVerdict overheadVerdict = null;
+        boolean open = walkable;
+        double reach = 0;
+        boolean checkOverhead = false;
+        if (walkable) {
+            checkOverhead = overhang > 0;
+            reach = overhang;
+        } else if (jumpable && !headVerdict.blocking() && !this.blocks.impassableTall().contains(feet.type())) {
+            checkOverhead = true;
+            reach = jumpReach;
+        }
+        if (checkOverhead) {
+            overhead = grid.at(x, y + 2, z);
+            if (overhead == null) {
+                overheadVerdict = BlockVerdict.UNLOADED;
+            } else {
+                overheadVerdict = classifyOverhead(grid, overhead, x, y + 2, z, reach);
+            }
+            open = !overheadVerdict.blocking();
+        }
         return new DirectionTrace(direction, x, y, z,
                 head, headVerdict, feet, feetVerdict, underFeet, underFeetVerdict,
                 overhead, overheadVerdict, open);
@@ -269,13 +326,13 @@ public final class VillagerActivityPolicy {
 
     /**
      * Whether a block in the {@code y + 2} layer reaches down far enough to collide with the part of
-     * the villager's hitbox that pokes into that layer.
+     * the villager's hitbox that pokes into that layer, by {@code reach} blocks.
      */
-    private static BlockVerdict classifyOverhead(BlockGrid grid, BlockSnapshot b, int x, int y, int z, double overhang) {
+    private static BlockVerdict classifyOverhead(BlockGrid grid, BlockSnapshot b, int x, int y, int z, double reach) {
         if (b.type() == Material.WATER) {
             return BlockVerdict.WATER;
         }
-        return grid.collisionBottomAt(x, y, z) < overhang ? BlockVerdict.HITBOX_OVERLAP : BlockVerdict.CLEARS_HITBOX;
+        return grid.collisionBottomAt(x, y, z) < reach ? BlockVerdict.HITBOX_OVERLAP : BlockVerdict.CLEARS_HITBOX;
     }
 
     /**

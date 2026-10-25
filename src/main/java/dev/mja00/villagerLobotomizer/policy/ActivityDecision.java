@@ -103,8 +103,9 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
     /**
      * One cardinal neighbour. {@code underFeet} only matters when {@link MovementTrace#roofed()} is
      * true; snapshots are {@code null} when the column's chunk is unloaded. {@code overhead} is the
-     * block at {@code y + 2}, checked only when the villager's hitbox reaches into that layer;
-     * otherwise it and {@code overheadVerdict} are {@code null}.
+     * block at {@code y + 2}, checked only when the villager's hitbox reaches into that layer, either
+     * raised by a carpet or by jumping onto a 1-high block under a raised roof; otherwise it and
+     * {@code overheadVerdict} are {@code null}.
      */
     public record DirectionTrace(String direction, int x, int y, int z,
                                  BlockSnapshot head, BlockVerdict headVerdict,
@@ -116,7 +117,7 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
 
     /**
      * @param floor      the block under the villager, or {@code null} when unloaded
-     * @param roof       the block above the villager's head, or {@code null} when unloaded
+     * @param roof       the first non-air block one or two layers above the villager's head, or {@code null} when unloaded
      * @param roofed     whether a roof (or honey floor) makes the under-feet block of each neighbour count
      * @param roofReason human-readable reason for {@code roofed}
      * @param overhang   how far the villager's hitbox reaches into the {@code y + 2} layer, or 0
