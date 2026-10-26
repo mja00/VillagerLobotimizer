@@ -132,6 +132,7 @@ public class LobotomizeStorage {
     private final boolean ignoreStuckInDoors;
     private final VillagerActivityPolicy activityPolicy;
     private Sound restockSound;
+    private String customRestockSound;
     private Sound levelUpSound;
     private String customLevelUpSound;
     private final Logger logger;
@@ -171,7 +172,10 @@ public class LobotomizeStorage {
         String levelUpSoundName = plugin.getConfig().getString("level-up-sound", "");
 
         Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
-        soundName = convertLegacySoundName(soundName, "restock-sound", soundRegistry);
+        this.customRestockSound = customResourceSound(soundName);
+        if (this.customRestockSound == null) {
+            soundName = convertLegacySoundName(soundName, "restock-sound", soundRegistry);
+        }
         this.customLevelUpSound = customResourceSound(levelUpSoundName);
         if (this.customLevelUpSound == null) {
             levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound", soundRegistry);
@@ -216,7 +220,7 @@ public class LobotomizeStorage {
         }
 
         try {
-            if (!soundName.isEmpty()) {
+            if (this.customRestockSound == null && !soundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, soundName);
                 this.restockSound = soundRegistry.getOrThrow(key);
             } else {
@@ -269,6 +273,18 @@ public class LobotomizeStorage {
         if (value == null || !value.matches("[a-z0-9._-]+:[a-z0-9/._-]+")) return null;
         NamespacedKey key = NamespacedKey.fromString(value);
         return key != null && !NamespacedKey.MINECRAFT.equals(key.getNamespace()) ? key.asString() : null;
+    }
+
+    void playRestockSound(Villager villager) {
+        if (this.customRestockSound != null) {
+            villager.getWorld().playSound(villager.getLocation(), this.customRestockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+        } else if (this.restockSound != null) {
+            villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+        } else {
+            villager.getWorld().playSound(villager.getLocation(), VillagerUtils.PROFESSION_TO_SOUND.get(villager.getProfession()),
+                    SoundCategory.NEUTRAL, 1.0F,
+                    1.0F);
+        }
     }
 
     void playLevelUpSound(Villager villager) {
@@ -939,13 +955,7 @@ public class LobotomizeStorage {
                 this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: " + villager.getRestocksToday());
             }
 
-            if (this.restockSound != null) {
-                villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
-            } else {
-                villager.getWorld().playSound(villager.getLocation(), VillagerUtils.PROFESSION_TO_SOUND.get(villager.getProfession()),
-                        SoundCategory.NEUTRAL, 1.0F,
-                        1.0F);
-            }
+            playRestockSound(villager);
         } else if (this.plugin.isDebugging()) {
             this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() +
                     ": intervalPassed=" + intervalPassed + " (needed " + effectiveInterval + "ms, had " + timeSinceLastRestock + "ms)" +
