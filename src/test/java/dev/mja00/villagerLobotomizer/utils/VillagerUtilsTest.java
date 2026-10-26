@@ -1,6 +1,11 @@
 package dev.mja00.villagerLobotomizer.utils;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.mja00.villagerLobotomizer.MockBukkitTestBase;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -11,16 +16,11 @@ import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 class VillagerUtilsTest extends MockBukkitTestBase {
 
     private static final NamespacedKey LAST_RESTOCK_KEY = NamespacedKey.fromString("vltest:last_restock_check");
-    private static final NamespacedKey LAST_RESET_GAME_TIME_KEY = NamespacedKey.fromString("vltest:last_restock_game_time");
+    private static final NamespacedKey LAST_RESET_GAME_TIME_KEY =
+            NamespacedKey.fromString("vltest:last_restock_game_time");
 
     private Villager spawnVillager() {
         WorldMock world = server.addSimpleWorld("test");
@@ -30,13 +30,11 @@ class VillagerUtilsTest extends MockBukkitTestBase {
     @Test
     void getVillagerLevelMapsExperienceToLevelAtBoundaries() {
         Villager villager = spawnVillager();
-        int[][] cases = {
-                {0, 1}, {9, 1}, {10, 2}, {69, 2}, {70, 3}, {149, 3}, {150, 4}, {249, 4}, {250, 5}
-        };
+        int[][] cases = {{0, 1}, {9, 1}, {10, 2}, {69, 2}, {70, 3}, {149, 3}, {150, 4}, {249, 4}, {250, 5}};
         for (int[] c : cases) {
             villager.setVillagerExperience(c[0]);
-            assertEquals(c[1], VillagerUtils.getVillagerLevel(villager),
-                    "experience " + c[0] + " should be level " + c[1]);
+            assertEquals(
+                    c[1], VillagerUtils.getVillagerLevel(villager), "experience " + c[0] + " should be level " + c[1]);
         }
     }
 
@@ -51,7 +49,9 @@ class VillagerUtilsTest extends MockBukkitTestBase {
             }
         }
         // Sound map must cover the same professions as the station map
-        assertEquals(VillagerUtils.PROFESSION_TO_STATION.keySet(), VillagerUtils.PROFESSION_TO_SOUND.keySet(),
+        assertEquals(
+                VillagerUtils.PROFESSION_TO_STATION.keySet(),
+                VillagerUtils.PROFESSION_TO_SOUND.keySet(),
                 "station and sound maps should cover the same professions");
     }
 
@@ -131,8 +131,10 @@ class VillagerUtilsTest extends MockBukkitTestBase {
         VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY);
 
         assertEquals(0, villager.getRestocksToday(), "crossing a day boundary resets the restock counter");
-        assertEquals(24_050L, villager.getPersistentDataContainer()
-                .getOrDefault(LAST_RESTOCK_KEY, PersistentDataType.LONG, 0L), "PDC updated to current full time");
+        assertEquals(
+                24_050L,
+                villager.getPersistentDataContainer().getOrDefault(LAST_RESTOCK_KEY, PersistentDataType.LONG, 0L),
+                "PDC updated to current full time");
     }
 
     @Test
@@ -150,12 +152,14 @@ class VillagerUtilsTest extends MockBukkitTestBase {
         villager.getPersistentDataContainer().set(LAST_RESET_GAME_TIME_KEY, PersistentDataType.LONG, 45_000L);
         villager.setRestocksToday(2);
 
-        assertFalse(VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
+        assertFalse(
+                VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
                 "within 12000 game ticks of the last reset the cap still applies");
         assertEquals(2, villager.getRestocksToday());
 
         world.setGameTime(57_001L);
-        assertTrue(VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
+        assertTrue(
+                VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
                 "12000 game ticks after the last reset the counter resets even though day time is frozen");
         assertEquals(0, villager.getRestocksToday());
     }

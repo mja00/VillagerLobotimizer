@@ -1,9 +1,8 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.util.Locale;
 import java.util.stream.Stream;
+import org.jetbrains.annotations.NotNull;
 
 public class StringUtils {
     /**

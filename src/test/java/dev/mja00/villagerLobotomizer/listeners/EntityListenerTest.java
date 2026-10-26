@@ -1,11 +1,16 @@
 package dev.mja00.villagerLobotomizer.listeners;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
 import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 import dev.mja00.villagerLobotomizer.LobotomizeStorage;
 import dev.mja00.villagerLobotomizer.MockBukkitTestBase;
 import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Villager;
@@ -22,12 +27,6 @@ import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.inventory.MerchantInventoryMock;
 import org.mockbukkit.mockbukkit.inventory.SimpleInventoryViewMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integration tests for the event wiring in {@link EntityListener}: firing the Paper entity
@@ -55,7 +54,8 @@ class EntityListenerTest extends MockBukkitTestBase {
 
         server.getPluginManager().callEvent(new EntityAddToWorldEvent(villager, world));
 
-        assertTrue(plugin.getStorage().getActive().contains(villager),
+        assertTrue(
+                plugin.getStorage().getActive().contains(villager),
                 "a freshly added villager should be tracked as active");
     }
 
@@ -106,8 +106,7 @@ class EntityListenerTest extends MockBukkitTestBase {
 
         server.getPluginManager().callEvent(new EntityRemoveEvent(villager, EntityRemoveEvent.Cause.UNLOAD));
 
-        assertEquals(1, rowCount(),
-                "an unloaded villager keeps its marker on disk, so its row must survive too");
+        assertEquals(1, rowCount(), "an unloaded villager keeps its marker on disk, so its row must survive too");
     }
 
     @Test
@@ -147,15 +146,16 @@ class EntityListenerTest extends MockBukkitTestBase {
         assertTrue(plugin.getStorage().getActive().contains(villager), "precondition: villager is active");
 
         PlayerMock player = server.addPlayer();
-        InventoryOpenEvent event = new InventoryOpenEvent(new SimpleInventoryViewMock(player,
-                new MerchantInventoryMock(null, villager), player.getInventory(), InventoryType.MERCHANT));
+        InventoryOpenEvent event = new InventoryOpenEvent(new SimpleInventoryViewMock(
+                player, new MerchantInventoryMock(null, villager), player.getInventory(), InventoryType.MERCHANT));
         server.getPluginManager().callEvent(event);
         return event.isCancelled();
     }
 
     @Test
     void zeroXpVillagerCanTradeWhenExperienceIsRequired() {
-        assertFalse(tradeBlocked(0),
+        assertFalse(
+                tradeBlocked(0),
                 "a 0-xp villager can only gain the xp it needs to qualify by trading, so it must not be blocked");
     }
 
@@ -171,8 +171,9 @@ class EntityListenerTest extends MockBukkitTestBase {
         ZombieVillager zombie = world.spawn(villager.getLocation(), ZombieVillager.class);
         zombie.setSilent(true);
 
-        server.getPluginManager().callEvent(new EntityTransformEvent(villager, List.of(zombie),
-                EntityTransformEvent.TransformReason.INFECTION));
+        server.getPluginManager()
+                .callEvent(new EntityTransformEvent(
+                        villager, List.of(zombie), EntityTransformEvent.TransformReason.INFECTION));
         return zombie.isSilent();
     }
 

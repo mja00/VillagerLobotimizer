@@ -6,16 +6,15 @@ import dev.mja00.villagerLobotomizer.policy.ActivityDecision.MovementTrace;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.RuleCheck;
-import org.bukkit.Material;
-
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import org.bukkit.Material;
 
 /**
  * Pure decision logic for whether a villager should keep its AI ("active") or be lobotomized
- * ("inactive"). 
+ * ("inactive").
  */
 public final class VillagerActivityPolicy {
 
@@ -34,10 +33,15 @@ public final class VillagerActivityPolicy {
     /**
      * Creates a new activity policy with the specified configuration.
      */
-    public VillagerActivityPolicy(boolean lobotomizePassengers, boolean onlyProfessions,
-                                  boolean onlyWithExperience, boolean checkRoof,
-                                  boolean ignoreStuckInDoors, boolean ignoreNonSolidBlocks,
-                                  Set<String> exemptNames, BlockClassifier blocks) {
+    public VillagerActivityPolicy(
+            boolean lobotomizePassengers,
+            boolean onlyProfessions,
+            boolean onlyWithExperience,
+            boolean checkRoof,
+            boolean ignoreStuckInDoors,
+            boolean ignoreNonSolidBlocks,
+            Set<String> exemptNames,
+            BlockClassifier blocks) {
         this.lobotomizePassengers = lobotomizePassengers;
         this.onlyProfessions = onlyProfessions;
         this.onlyWithExperience = onlyWithExperience;
@@ -100,7 +104,9 @@ public final class VillagerActivityPolicy {
             }
         }
         boolean hasRoof = honeyFloor
-                || (nearRoof != null && classify(this.blocks.impassableAll(), nearRoof, false).blocking());
+                || (nearRoof != null
+                        && classify(this.blocks.impassableAll(), nearRoof, false)
+                                .blocking());
         double overhang = overhang(v);
         double jumpReach = jumpReach(v);
 
@@ -111,8 +117,8 @@ public final class VillagerActivityPolicy {
     }
 
     /** Allocation-free counterpart of {@link #traceDirection}. */
-    private boolean canMoveThrough(BlockGrid grid, int x, int y, int z, boolean roof, double overhang,
-                                   boolean jumpable, double jumpReach) {
+    private boolean canMoveThrough(
+            BlockGrid grid, int x, int y, int z, boolean roof, double overhang, boolean jumpable, double jumpReach) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
         BlockSnapshot underFeet = grid.at(x, y - 1, z);
@@ -122,8 +128,11 @@ public final class VillagerActivityPolicy {
         if (classify(this.blocks.impassableRegular(), head, false).blocking()) {
             return false;
         }
-        boolean walkable = !classify(this.blocks.impassableRegular(), feet, false).blocking()
-                && !(roof && classify(this.blocks.impassableTall(), underFeet, true).blocking());
+        boolean walkable =
+                !classify(this.blocks.impassableRegular(), feet, false).blocking()
+                        && !(roof
+                                && classify(this.blocks.impassableTall(), underFeet, true)
+                                        .blocking());
         double reach;
         if (walkable) {
             if (overhang <= 0) {
@@ -136,7 +145,8 @@ public final class VillagerActivityPolicy {
             return false;
         }
         BlockSnapshot overhead = grid.at(x, y + 2, z);
-        return overhead != null && !classifyOverhead(grid, overhead, x, y + 2, z, reach).blocking();
+        return overhead != null
+                && !classifyOverhead(grid, overhead, x, y + 2, z, reach).blocking();
     }
 
     /**
@@ -233,8 +243,7 @@ public final class VillagerActivityPolicy {
         Material floorMaterial = floor == null ? Material.AIR : floor.type();
         boolean honeyFloor = floorMaterial == Material.HONEY_BLOCK;
         // Honey cuts jump height too much to climb a full block.
-        boolean jumpable = this.checkRoof && !honeyFloor && roof != null && nearRoof != null
-                && isAir(nearRoof.type());
+        boolean jumpable = this.checkRoof && !honeyFloor && roof != null && nearRoof != null && isAir(nearRoof.type());
         BlockVerdict roofVerdict = classify(this.blocks.impassableAll(), nearRoof, false);
         boolean roofBlocks = nearRoof != null && roofVerdict.blocking();
         boolean hasRoof = honeyFloor || roofBlocks;
@@ -256,10 +265,46 @@ public final class VillagerActivityPolicy {
         double jumpReach = jumpReach(v);
 
         List<DirectionTrace> directions = List.of(
-                traceDirection("+X (east)", grid, v.blockX() + 1, v.blockY(), v.blockZ(), hasRoof, overhang, jumpable, jumpReach),
-                traceDirection("-X (west)", grid, v.blockX() - 1, v.blockY(), v.blockZ(), hasRoof, overhang, jumpable, jumpReach),
-                traceDirection("+Z (south)", grid, v.blockX(), v.blockY(), v.blockZ() + 1, hasRoof, overhang, jumpable, jumpReach),
-                traceDirection("-Z (north)", grid, v.blockX(), v.blockY(), v.blockZ() - 1, hasRoof, overhang, jumpable, jumpReach));
+                traceDirection(
+                        "+X (east)",
+                        grid,
+                        v.blockX() + 1,
+                        v.blockY(),
+                        v.blockZ(),
+                        hasRoof,
+                        overhang,
+                        jumpable,
+                        jumpReach),
+                traceDirection(
+                        "-X (west)",
+                        grid,
+                        v.blockX() - 1,
+                        v.blockY(),
+                        v.blockZ(),
+                        hasRoof,
+                        overhang,
+                        jumpable,
+                        jumpReach),
+                traceDirection(
+                        "+Z (south)",
+                        grid,
+                        v.blockX(),
+                        v.blockY(),
+                        v.blockZ() + 1,
+                        hasRoof,
+                        overhang,
+                        jumpable,
+                        jumpReach),
+                traceDirection(
+                        "-Z (north)",
+                        grid,
+                        v.blockX(),
+                        v.blockY(),
+                        v.blockZ() - 1,
+                        hasRoof,
+                        overhang,
+                        jumpable,
+                        jumpReach));
         MovementTrace movement = new MovementTrace(floor, roof, hasRoof, roofReason, overhang, directions);
 
         List<String> open = new ArrayList<>();
@@ -268,9 +313,8 @@ public final class VillagerActivityPolicy {
                 open.add(d.direction());
             }
         }
-        String detail = open.isEmpty()
-                ? "trapped, all 4 directions blocked"
-                : "can walk out " + String.join(", ", open);
+        String detail =
+                open.isEmpty() ? "trapped, all 4 directions blocked" : "can walk out " + String.join(", ", open);
         return trace.finish(Rule.MOVEMENT, !open.isEmpty(), detail, movement);
     }
 
@@ -281,22 +325,41 @@ public final class VillagerActivityPolicy {
      * @param overhang how far the villager's hitbox reaches into the {@code y + 2} layer, or 0
      * @param jumpable whether a raised roof leaves room to jump onto a 1-high block here
      */
-    private DirectionTrace traceDirection(String direction, BlockGrid grid, int x, int y, int z, boolean roof,
-                                          double overhang, boolean jumpable, double jumpReach) {
+    private DirectionTrace traceDirection(
+            String direction,
+            BlockGrid grid,
+            int x,
+            int y,
+            int z,
+            boolean roof,
+            double overhang,
+            boolean jumpable,
+            double jumpReach) {
         BlockSnapshot head = grid.at(x, y + 1, z);
         BlockSnapshot feet = grid.at(x, y, z);
         BlockSnapshot underFeet = grid.at(x, y - 1, z);
         if (head == null || feet == null || underFeet == null) {
             BlockVerdict overheadVerdict = overhang > 0 || jumpable ? BlockVerdict.UNLOADED : null;
-            return new DirectionTrace(direction, x, y, z,
-                    head, BlockVerdict.UNLOADED, feet, BlockVerdict.UNLOADED, underFeet, BlockVerdict.UNLOADED,
-                    null, overheadVerdict, false);
+            return new DirectionTrace(
+                    direction,
+                    x,
+                    y,
+                    z,
+                    head,
+                    BlockVerdict.UNLOADED,
+                    feet,
+                    BlockVerdict.UNLOADED,
+                    underFeet,
+                    BlockVerdict.UNLOADED,
+                    null,
+                    overheadVerdict,
+                    false);
         }
         BlockVerdict headVerdict = classify(this.blocks.impassableRegular(), head, false);
         BlockVerdict feetVerdict = classify(this.blocks.impassableRegular(), feet, false);
         BlockVerdict underFeetVerdict = classify(this.blocks.impassableTall(), underFeet, true);
-        boolean walkable = !headVerdict.blocking() && !feetVerdict.blocking()
-                && (!roof || !underFeetVerdict.blocking());
+        boolean walkable =
+                !headVerdict.blocking() && !feetVerdict.blocking() && (!roof || !underFeetVerdict.blocking());
 
         BlockSnapshot overhead = null;
         BlockVerdict overheadVerdict = null;
@@ -306,7 +369,9 @@ public final class VillagerActivityPolicy {
         if (walkable) {
             checkOverhead = overhang > 0;
             reach = overhang;
-        } else if (jumpable && !headVerdict.blocking() && !this.blocks.impassableTall().contains(feet.type())) {
+        } else if (jumpable
+                && !headVerdict.blocking()
+                && !this.blocks.impassableTall().contains(feet.type())) {
             checkOverhead = true;
             reach = jumpReach;
         }
@@ -319,9 +384,20 @@ public final class VillagerActivityPolicy {
             }
             open = !overheadVerdict.blocking();
         }
-        return new DirectionTrace(direction, x, y, z,
-                head, headVerdict, feet, feetVerdict, underFeet, underFeetVerdict,
-                overhead, overheadVerdict, open);
+        return new DirectionTrace(
+                direction,
+                x,
+                y,
+                z,
+                head,
+                headVerdict,
+                feet,
+                feetVerdict,
+                underFeet,
+                underFeetVerdict,
+                overhead,
+                overheadVerdict,
+                open);
     }
 
     /**
@@ -359,14 +435,17 @@ public final class VillagerActivityPolicy {
         if (b.passable()) {
             return BlockVerdict.PASSABLE;
         }
-        if (this.blocks.cropBlocks().contains(type) || type.name().contains("_BED")
+        if (this.blocks.cropBlocks().contains(type)
+                || type.name().contains("_BED")
                 || type.name().contains("_CARPET")) {
             return BlockVerdict.BYPASS;
         }
         if (this.ignoreStuckInDoors && this.blocks.doorBlocks().contains(type)) {
             return BlockVerdict.DOOR_IGNORED;
         }
-        if (!b.solid() && this.ignoreNonSolidBlocks && !this.blocks.professionBlocks().contains(type)) {
+        if (!b.solid()
+                && this.ignoreNonSolidBlocks
+                && !this.blocks.professionBlocks().contains(type)) {
             return BlockVerdict.NON_SOLID_IGNORED;
         }
         return BlockVerdict.NOT_PASSABLE;

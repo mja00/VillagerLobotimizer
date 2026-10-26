@@ -4,19 +4,6 @@ import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import dev.mja00.villagerLobotomizer.storage.MarkedVillager;
 import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-import org.bukkit.Bukkit;
-import org.bukkit.Chunk;
-import org.bukkit.NamespacedKey;
-import org.bukkit.World;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -31,6 +18,18 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Level;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
+import org.bukkit.Chunk;
+import org.bukkit.NamespacedKey;
+import org.bukkit.World;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Undoes everything the plugin has done: restores AI and strips the persistent marker from every
@@ -53,12 +52,17 @@ public final class UninstallSweep {
 
     /** Roughly one player's view-distance stream, so the sweep never looks like a load storm. */
     private static final int MAX_IN_FLIGHT = 8;
+
     private static final int MAX_ATTEMPTS = 3;
     private static final long PROGRESS_EVERY_TICKS = 100L;
     private static final long PHASE_A_TIMEOUT_MILLIS = 10_000L;
     private static final long DEFAULT_STALL_TIMEOUT_MILLIS = 30_000L;
 
-    private enum Stage { RESTORING_LOADED, SWEEPING_ROWS, FINISHED }
+    private enum Stage {
+        RESTORING_LOADED,
+        SWEEPING_ROWS,
+        FINISHED
+    }
 
     private final VillagerLobotomizer plugin;
     private final LobotomizedMarkerStore store;
@@ -86,6 +90,7 @@ public final class UninstallSweep {
      * Their neighbourhood was not fully covered, so their rows are kept for a re-run.
      */
     private final Set<UUID> searchIncomplete = ConcurrentHashMap.newKeySet();
+
     private final Map<UUID, MarkedVillager> rowsById = new HashMap<>();
     /** Concurrent so a region thread can requeue while still holding its in-flight slot. */
     private final Deque<ChunkTarget> queue = new ConcurrentLinkedDeque<>();
@@ -101,8 +106,11 @@ public final class UninstallSweep {
     private int unresolvedCount;
     private long stallTimeoutMillis = DEFAULT_STALL_TIMEOUT_MILLIS;
 
-    UninstallSweep(@NotNull VillagerLobotomizer plugin, @NotNull LobotomizedMarkerStore store,
-                   @Nullable UUID requesterId, @NotNull ChunkAccessor chunkAccessor) {
+    UninstallSweep(
+            @NotNull VillagerLobotomizer plugin,
+            @NotNull LobotomizedMarkerStore store,
+            @Nullable UUID requesterId,
+            @NotNull ChunkAccessor chunkAccessor) {
         this.plugin = plugin;
         this.store = store;
         this.lobotomizedKey = new NamespacedKey(plugin, LobotomizeStorage.LOBOTOMIZED_KEY);
@@ -130,8 +138,8 @@ public final class UninstallSweep {
         this.phaseADeadline = now + PHASE_A_TIMEOUT_MILLIS;
         this.lastChangeAt = now;
         this.lastProgressAt = now;
-        this.pumpTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
-                this.plugin, SentryTaskWrapper.wrap((task) -> pump()), 1L, 1L);
+        this.pumpTask = Bukkit.getGlobalRegionScheduler()
+                .runAtFixedRate(this.plugin, SentryTaskWrapper.wrap((task) -> pump()), 1L, 1L);
     }
 
     /**
@@ -151,21 +159,24 @@ public final class UninstallSweep {
             }
             this.dispatched.incrementAndGet();
             try {
-                ScheduledTask scheduled = villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> {
-                    try {
-                        restore(villager);
-                    } finally {
-                        this.completed.incrementAndGet();
-                    }
-                }), this.completed::incrementAndGet);
+                ScheduledTask scheduled = villager.getScheduler()
+                        .run(
+                                this.plugin,
+                                SentryTaskWrapper.wrap((task) -> {
+                                    try {
+                                        restore(villager);
+                                    } finally {
+                                        this.completed.incrementAndGet();
+                                    }
+                                }),
+                                this.completed::incrementAndGet);
                 if (scheduled == null) {
                     // Entity already gone, so neither callback will fire; do not wait on it.
                     this.completed.incrementAndGet();
                 }
             } catch (Exception e) {
                 this.completed.incrementAndGet();
-                this.plugin.getLogger().log(Level.WARNING,
-                        "Could not restore villager " + villager.getUniqueId(), e);
+                this.plugin.getLogger().log(Level.WARNING, "Could not restore villager " + villager.getUniqueId(), e);
             }
         }
     }
@@ -189,7 +200,7 @@ public final class UninstallSweep {
         switch (this.stage) {
             case RESTORING_LOADED -> pumpRestoringLoaded();
             case SWEEPING_ROWS -> pumpSweepingRows();
-            case FINISHED -> { }
+            case FINISHED -> {}
         }
     }
 
@@ -207,8 +218,9 @@ public final class UninstallSweep {
         if (rows == null) {
             // A failed read must abort: continuing as if there were no rows would end in a "clean"
             // report over a state file whose contents were never seen.
-            report(Component.text("Could not read the state file; rows for villagers not already "
-                    + "restored were kept.").color(NamedTextColor.YELLOW));
+            report(Component.text(
+                            "Could not read the state file; rows for villagers not already " + "restored were kept.")
+                    .color(NamedTextColor.YELLOW));
             finish(false);
             return;
         }
@@ -222,8 +234,12 @@ public final class UninstallSweep {
         try {
             return this.store.loadAll();
         } catch (SQLException e) {
-            this.plugin.getLogger().log(Level.SEVERE, "Could not read the marker store; "
-                    + "villagers in unloaded chunks were not restored.", e);
+            this.plugin
+                    .getLogger()
+                    .log(
+                            Level.SEVERE,
+                            "Could not read the marker store; " + "villagers in unloaded chunks were not restored.",
+                            e);
             return null;
         }
     }
@@ -245,14 +261,18 @@ public final class UninstallSweep {
             this.rowsById.put(row.entityId(), row);
             // The world is part of the key: chunk coordinates are only unique within one world, and
             // merging rows from two worlds would sweep one of them against the wrong world's chunk.
-            byChunk.computeIfAbsent(new ChunkKey(world.getUID(), row.chunkX(), row.chunkZ()),
-                    (key) -> new ChunkTarget(world, row.chunkX(), row.chunkZ())).villagerIds.add(row.entityId());
+            byChunk.computeIfAbsent(
+                            new ChunkKey(world.getUID(), row.chunkX(), row.chunkZ()),
+                            (key) -> new ChunkTarget(world, row.chunkX(), row.chunkZ()))
+                    .villagerIds
+                    .add(row.entityId());
         }
 
         this.queue.addAll(byChunk.values());
         this.totalChunks = this.queue.size();
         if (this.totalChunks > 0) {
-            report(Component.text("Loading " + this.totalChunks + " chunk(s) to reach villagers that are not in memory."));
+            report(Component.text(
+                    "Loading " + this.totalChunks + " chunk(s) to reach villagers that are not in memory."));
         }
     }
 
@@ -307,9 +327,17 @@ public final class UninstallSweep {
                 // Folia's thread confinement for this callback is undocumented, so hand off to the
                 // scheduler that is documented to own the chunk rather than assume.
                 try {
-                    Bukkit.getRegionScheduler().execute(this.plugin, target.world, target.chunkX, target.chunkZ,
-                            () -> settle(target, target.world.isChunkLoaded(target.chunkX, target.chunkZ)
-                                    ? target.world.getChunkAt(target.chunkX, target.chunkZ) : null));
+                    Bukkit.getRegionScheduler()
+                            .execute(
+                                    this.plugin,
+                                    target.world,
+                                    target.chunkX,
+                                    target.chunkZ,
+                                    () -> settle(
+                                            target,
+                                            target.world.isChunkLoaded(target.chunkX, target.chunkZ)
+                                                    ? target.world.getChunkAt(target.chunkX, target.chunkZ)
+                                                    : null));
                 } catch (Exception e) {
                     abandon(target, e);
                 }
@@ -357,8 +385,12 @@ public final class UninstallSweep {
     }
 
     private void abandon(@NotNull ChunkTarget target, @NotNull Exception cause) {
-        this.plugin.getLogger().log(Level.WARNING, "Could not load chunk "
-                + target.chunkX + "," + target.chunkZ + " in " + target.world.getName(), cause);
+        this.plugin
+                .getLogger()
+                .log(
+                        Level.WARNING,
+                        "Could not load chunk " + target.chunkX + "," + target.chunkZ + " in " + target.world.getName(),
+                        cause);
         giveUp(target);
         this.inFlight.decrementAndGet();
     }
@@ -431,8 +463,8 @@ public final class UninstallSweep {
         if (this.totalChunks == 0) {
             return;
         }
-        report(Component.text("Restored " + this.restored.get() + " villager(s), "
-                + this.chunksSwept.get() + "/" + this.totalChunks + " chunks."));
+        report(Component.text("Restored " + this.restored.get() + " villager(s), " + this.chunksSwept.get() + "/"
+                + this.totalChunks + " chunks."));
     }
 
     /**
@@ -469,7 +501,8 @@ public final class UninstallSweep {
         // disk make the run incomplete.
         boolean clean = completedNormally && this.skippedIds.isEmpty() && kept.isEmpty();
 
-        report(Component.text("Restored ").append(Component.text(String.valueOf(this.restored.get())).color(NamedTextColor.GREEN))
+        report(Component.text("Restored ")
+                .append(Component.text(String.valueOf(this.restored.get())).color(NamedTextColor.GREEN))
                 .append(Component.text(" villager(s) across " + this.chunksSwept.get() + " chunk(s).")));
         if (this.unresolvedCount > 0) {
             report(Component.text(this.unresolvedCount + " villager(s) no longer exist; their stale rows were dropped.")
@@ -479,7 +512,8 @@ public final class UninstallSweep {
         if (clean) {
             this.store.deleteDatabaseFiles();
             report(Component.text("Uninstall complete. It is safe to delete the plugin jar now; "
-                    + "restart the server to finish removing it.").color(NamedTextColor.GREEN));
+                            + "restart the server to finish removing it.")
+                    .color(NamedTextColor.GREEN));
         } else {
             if (this.skippedIds.size() > 0) {
                 report(Component.text(this.skippedIds.size() + " villager(s) are in worlds that are not loaded.")
@@ -487,11 +521,13 @@ public final class UninstallSweep {
             }
             if (!kept.isEmpty()) {
                 report(Component.text(kept.size() + " villager(s) were not reached before the sweep stopped; "
-                        + "their rows were kept so a re-run can retry them.").color(NamedTextColor.YELLOW));
+                                + "their rows were kept so a re-run can retry them.")
+                        .color(NamedTextColor.YELLOW));
             }
             report(Component.text("Uninstall incomplete, so the state file was kept. Villager tracking is "
-                    + "paused: run '/lobotomy uninstall confirm' again to finish, or '/lobotomy reload' "
-                    + "(or restart) to resume normal operation.").color(NamedTextColor.YELLOW));
+                            + "paused: run '/lobotomy uninstall confirm' again to finish, or '/lobotomy reload' "
+                            + "(or restart) to resume normal operation.")
+                    .color(NamedTextColor.YELLOW));
         }
 
         ScheduledTask task = this.pumpTask;
@@ -550,8 +586,7 @@ public final class UninstallSweep {
     }
 
     /** Chunk coordinates plus the world they belong to; coordinates alone are not unique. */
-    private record ChunkKey(UUID worldId, int chunkX, int chunkZ) {
-    }
+    private record ChunkKey(UUID worldId, int chunkX, int chunkZ) {}
 
     private static final class ChunkTarget {
         private final World world;
@@ -559,6 +594,7 @@ public final class UninstallSweep {
         private final int chunkZ;
         /** True for the 3x3 neighbourhood pass, whose misses may be confirmed as absent. */
         private final boolean secondPass;
+
         private final List<UUID> villagerIds = new ArrayList<>();
         private int attempts;
 

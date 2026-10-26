@@ -1,10 +1,29 @@
 package dev.mja00.villagerLobotomizer;
 
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mojang.brigadier.tree.LiteralCommandNode;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import dev.mja00.villagerLobotomizer.utils.ActivityDecisionFormatter;
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
+import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.BlockCommandSender;
@@ -16,29 +35,6 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.Nullable;
 
-import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
-import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
-import dev.mja00.villagerLobotomizer.utils.ActivityDecisionFormatter;
-import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
-
-import com.mojang.brigadier.Command;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.mojang.brigadier.suggestion.Suggestions;
-import com.mojang.brigadier.suggestion.SuggestionsBuilder;
-import com.mojang.brigadier.tree.LiteralCommandNode;
-
-import io.papermc.paper.command.brigadier.CommandSourceStack;
-import io.papermc.paper.command.brigadier.Commands;
-import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
-import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySelectorArgumentResolver;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.JoinConfiguration;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
-
 public class LobotomizeCommand {
     private final VillagerLobotomizer plugin;
 
@@ -47,15 +43,20 @@ public class LobotomizeCommand {
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand(final String commandName) {
-        return Commands.literal(commandName).requires(this::hasAnySubcommandPermission)
+        return Commands.literal(commandName)
+                .requires(this::hasAnySubcommandPermission)
                 .then(Commands.literal("info")
                         .requires((command) -> command.getSender().hasPermission("lobotomy.command.info"))
                         .executes((command) -> infoCommand(command.getSource())))
                 .then(Commands.literal("debug")
                         .requires((command) -> command.getSender().hasPermission("lobotomy.command.debug"))
                         .executes((command) -> debugCommand(command.getSource()))
-                        .then(Commands.argument("villager", ArgumentTypes.entity()).executes((command) -> debugCommandSpecific(command.getSource(), command.getArgument("villager", EntitySelectorArgumentResolver.class))))
-                        .then(Commands.literal("toggle").executes((command) -> toggleDebugCommand(command.getSource()))))
+                        .then(Commands.argument("villager", ArgumentTypes.entity())
+                                .executes((command) -> debugCommandSpecific(
+                                        command.getSource(),
+                                        command.getArgument("villager", EntitySelectorArgumentResolver.class))))
+                        .then(Commands.literal("toggle")
+                                .executes((command) -> toggleDebugCommand(command.getSource()))))
                 .then(Commands.literal("wake")
                         .requires((command) -> command.getSender().hasPermission("lobotomy.command.wake"))
                         .executes((command) -> wakeCommand(command.getSource())))
@@ -69,15 +70,17 @@ public class LobotomizeCommand {
                                 .executes((command) -> uninstallConfirmCommand(command.getSource()))))
                 .then(Commands.literal("config")
                         .requires((command) -> command.getSender().hasPermission("lobotomy.command.config"))
-                        .then(Commands.argument("key", StringArgumentType.string()).suggests(LobotomizeCommand::getConfigKeySuggestions)
-                        .then(Commands.literal("get")
-                            .executes(
-                                (command) -> getConfigCommand(command.getSource(), command.getArgument("key", String.class))
-                                )
-                            )
-                        .then(Commands.literal("set").then(Commands.argument("value", StringArgumentType.string()).executes((command) -> setConfigCommand(command.getSource(), command.getArgument("key", String.class), command.getArgument("value", String.class)))))
-                    )
-                )
+                        .then(Commands.argument("key", StringArgumentType.string())
+                                .suggests(LobotomizeCommand::getConfigKeySuggestions)
+                                .then(Commands.literal("get")
+                                        .executes((command) -> getConfigCommand(
+                                                command.getSource(), command.getArgument("key", String.class))))
+                                .then(Commands.literal("set")
+                                        .then(Commands.argument("value", StringArgumentType.string())
+                                                .executes((command) -> setConfigCommand(
+                                                        command.getSource(),
+                                                        command.getArgument("key", String.class),
+                                                        command.getArgument("value", String.class)))))))
                 .build();
     }
 
@@ -102,7 +105,9 @@ public class LobotomizeCommand {
         int total = active + inactive;
         CommandSender sender = source.getSender();
         if (total == 0) {
-            sender.sendMessage(Component.text("No villagers are currently tracked. Villagers are tracked when chunks load.").color(NamedTextColor.YELLOW));
+            sender.sendMessage(
+                    Component.text("No villagers are currently tracked. Villagers are tracked when chunks load.")
+                            .color(NamedTextColor.YELLOW));
             return Command.SINGLE_SUCCESS;
         }
         Component message = Component.text("There are ")
@@ -111,12 +116,16 @@ public class LobotomizeCommand {
         message = message.append(Component.text("\nActive: "))
                 .append(Component.text(String.valueOf(active)).color(NamedTextColor.GREEN))
                 .append(Component.text(" ("))
-                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)active / (double)total) / (double)100.0F)).color(NamedTextColor.GREEN))
+                .append(Component.text(String.valueOf(
+                                Math.round((double) 10000.0F * (double) active / (double) total) / (double) 100.0F))
+                        .color(NamedTextColor.GREEN))
                 .append(Component.text("%)"));
         message = message.append(Component.text("\nLobotomized: "))
                 .append(Component.text(String.valueOf(inactive)).color(NamedTextColor.RED))
                 .append(Component.text(" ("))
-                .append(Component.text(String.valueOf(Math.round((double)10000.0F * (double)inactive / (double)total) / (double)100.0F)).color(NamedTextColor.GREEN))
+                .append(Component.text(String.valueOf(
+                                Math.round((double) 10000.0F * (double) inactive / (double) total) / (double) 100.0F))
+                        .color(NamedTextColor.GREEN))
                 .append(Component.text("%)"));
         sender.sendMessage(message);
 
@@ -148,7 +157,9 @@ public class LobotomizeCommand {
         }
         Entity target = this.getTargeted(player);
         if (target == null) {
-            source.getSender().sendMessage(Component.text("Look at a villager while executing the command, or specify the UUID of a villager."));
+            source.getSender()
+                    .sendMessage(Component.text(
+                            "Look at a villager while executing the command, or specify the UUID of a villager."));
             return null;
         }
         return target;
@@ -160,7 +171,8 @@ public class LobotomizeCommand {
      * @return {@code Command.SINGLE_SUCCESS} if the villager details are displayed, {@code 0} otherwise.
      * @throws CommandSyntaxException if entity selection fails.
      */
-    private int debugCommandSpecific(CommandSourceStack source, EntitySelectorArgumentResolver resolver) throws CommandSyntaxException {
+    private int debugCommandSpecific(CommandSourceStack source, EntitySelectorArgumentResolver resolver)
+            throws CommandSyntaxException {
         if (!(source.getExecutor() instanceof Player)) {
             source.getSender().sendMessage(Component.text("Only players can use this command."));
             return 0;
@@ -170,7 +182,9 @@ public class LobotomizeCommand {
         final Entity target = targets.get(0);
 
         if (!(target instanceof Villager villager)) {
-            source.getSender().sendMessage(Component.text("Look at a villager while executing the command, or specify the UUID of a villager."));
+            source.getSender()
+                    .sendMessage(Component.text(
+                            "Look at a villager while executing the command, or specify the UUID of a villager."));
             return 0;
         }
 
@@ -188,21 +202,34 @@ public class LobotomizeCommand {
         CommandSender sender = source.getSender();
         ScheduledTask task;
         try {
-            task = villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(t -> {
-                List<Component> lines = buildVillagerDetails(villager);
-                reply(sender, Component.join(JoinConfiguration.newlines(), lines));
-                this.plugin.getLogger().info("[Debug] Lobotomy decision for villager " + villager.getUniqueId() + ":");
-                for (Component line : lines) {
-                    this.plugin.getLogger().info("[Debug]   " + PlainTextComponentSerializer.plainText().serialize(line));
-                }
-            }), () -> reply(sender, Component.text("That villager was removed before it could be inspected.")
-                    .color(NamedTextColor.RED)));
+            task = villager.getScheduler()
+                    .run(
+                            this.plugin,
+                            SentryTaskWrapper.wrap(t -> {
+                                List<Component> lines = buildVillagerDetails(villager);
+                                reply(sender, Component.join(JoinConfiguration.newlines(), lines));
+                                this.plugin
+                                        .getLogger()
+                                        .info("[Debug] Lobotomy decision for villager " + villager.getUniqueId() + ":");
+                                for (Component line : lines) {
+                                    this.plugin
+                                            .getLogger()
+                                            .info("[Debug]   "
+                                                    + PlainTextComponentSerializer.plainText()
+                                                            .serialize(line));
+                                }
+                            }),
+                            () -> reply(
+                                    sender,
+                                    Component.text("That villager was removed before it could be inspected.")
+                                            .color(NamedTextColor.RED)));
         } catch (IllegalPluginAccessException e) {
             return 0;
         }
         if (task == null) {
             // Still on the command thread, which owns the sender.
-            sender.sendMessage(Component.text("That villager is no longer available.").color(NamedTextColor.RED));
+            sender.sendMessage(
+                    Component.text("That villager is no longer available.").color(NamedTextColor.RED));
             return 0;
         }
         return Command.SINGLE_SUCCESS;
@@ -224,7 +251,8 @@ public class LobotomizeCommand {
             if (Bukkit.isOwnedByCurrentRegion(location)) {
                 block.sendMessage(message);
             } else {
-                Bukkit.getRegionScheduler().run(this.plugin, location, SentryTaskWrapper.wrap(t -> block.sendMessage(message)));
+                Bukkit.getRegionScheduler()
+                        .run(this.plugin, location, SentryTaskWrapper.wrap(t -> block.sendMessage(message)));
             }
         } else {
             sender.sendMessage(message);
@@ -244,16 +272,19 @@ public class LobotomizeCommand {
         Location loc = villager.getLocation();
 
         List<Component> lines = new ArrayList<>();
-        lines.add(Component.text("Villager " + villager.getUniqueId()).color(NamedTextColor.GOLD)
-                .append(Component.text(" at " + loc.getWorld().getName() + " "
-                        + loc.getBlockX() + " " + loc.getBlockY() + " " + loc.getBlockZ()).color(NamedTextColor.GRAY)));
+        lines.add(Component.text("Villager " + villager.getUniqueId())
+                .color(NamedTextColor.GOLD)
+                .append(Component.text(" at " + loc.getWorld().getName() + " " + loc.getBlockX() + " " + loc.getBlockY()
+                                + " " + loc.getBlockZ())
+                        .color(NamedTextColor.GRAY)));
         lines.add(flag("Is Awareness enabled: ", villager.isAware()));
         lines.add(flag("Is AI enabled: ", hasAI));
         lines.add(flag("Is marked as Lobotomized: ", lobotomized));
         lines.add(flag("Is marked as Active: ", active));
         lines.add(flag("Has persistent lobotomized marker: ", marker));
         lines.add(Component.text("Profession: ")
-                .append(Component.text(villager.getProfession().key().asString()).color(NamedTextColor.GREEN))
+                .append(Component.text(villager.getProfession().key().asString())
+                        .color(NamedTextColor.GREEN))
                 .append(Component.text(", level "))
                 .append(Component.text(villager.getVillagerLevel()).color(NamedTextColor.GREEN))
                 .append(Component.text(", experience "))
@@ -272,20 +303,27 @@ public class LobotomizeCommand {
     /**
      * Explains how the rule result relates to what the plugin is actually doing to this villager.
      */
-    private Component diagnose(LobotomizeStorage storage, Villager villager, ActivityDecision decision,
-                               boolean trackedActive, boolean trackedLobotomized) {
+    private Component diagnose(
+            LobotomizeStorage storage,
+            Villager villager,
+            ActivityDecision decision,
+            boolean trackedActive,
+            boolean trackedLobotomized) {
         if (!trackedActive && !trackedLobotomized) {
             return Component.text("Not tracked: the plugin is not checking this villager, so the rules above are "
-                    + "not being applied. Villagers are tracked when they load into the world; /lobotomy wake or an "
-                    + "unfinished uninstall stops tracking until the chunk or plugin reloads.").color(NamedTextColor.YELLOW);
+                            + "not being applied. Villagers are tracked when they load into the world; /lobotomy wake or an "
+                            + "unfinished uninstall stops tracking until the chunk or plugin reloads.")
+                    .color(NamedTextColor.YELLOW);
         }
         if (trackedActive && !decision.active()) {
-            return Component.text("Will be lobotomized at its next check (every " + storage.getCheckInterval()
-                    + " ticks).").color(NamedTextColor.YELLOW);
+            return Component.text(
+                            "Will be lobotomized at its next check (every " + storage.getCheckInterval() + " ticks).")
+                    .color(NamedTextColor.YELLOW);
         }
         if (trackedLobotomized && decision.active()) {
-            return Component.text("Will be woken at its next check (every " + storage.getInactiveCheckInterval()
-                    + " ticks).").color(NamedTextColor.YELLOW);
+            return Component.text(
+                            "Will be woken at its next check (every " + storage.getInactiveCheckInterval() + " ticks).")
+                    .color(NamedTextColor.YELLOW);
         }
         if (trackedLobotomized && villager.isAware()) {
             return Component.text("Tracked as lobotomized but still aware; AI is disabled again at its next check.")
@@ -323,7 +361,13 @@ public class LobotomizeCommand {
     private @Nullable Entity getTargeted(Player player) {
         Entity target = null;
 
-        RayTraceResult ray = player.getWorld().rayTraceEntities(player.getEyeLocation(), player.getEyeLocation().getDirection(), 16.0F, 0.0F, (ex) -> ex instanceof Villager);
+        RayTraceResult ray = player.getWorld()
+                .rayTraceEntities(
+                        player.getEyeLocation(),
+                        player.getEyeLocation().getDirection(),
+                        16.0F,
+                        0.0F,
+                        (ex) -> ex instanceof Villager);
         target = ray == null ? null : ray.getHitEntity();
 
         return target;
@@ -338,7 +382,10 @@ public class LobotomizeCommand {
         Entity target = getLookedTarget(source);
         if (target == null) return 0;
         wakeVillager((Villager) target);
-        source.getSender().sendMessage(Component.text("This villager will now be unaffected by the plugin until its chunk or the plugin is reloaded."));
+        source.getSender()
+                .sendMessage(
+                        Component.text(
+                                "This villager will now be unaffected by the plugin until its chunk or the plugin is reloaded."));
         return Command.SINGLE_SUCCESS;
     }
 
@@ -347,18 +394,24 @@ public class LobotomizeCommand {
         // removeVillager only wakes tracked-inactive villagers, but an untracked one (e.g. tracking paused
         // after an incomplete uninstall) can still be frozen, so restore it on its own scheduler regardless.
         boolean silent = this.plugin.getConfig().getBoolean("silent-lobotomized-villagers");
-        villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap(task -> {
-            // Untrack again here: an add queued by a reload in this tick runs before this task and would re-track it.
-            this.plugin.getStorage().removeVillager(villager);
-            // Only undo our own freeze, so a villager silenced on purpose elsewhere keeps its Silent flag.
-            if (!villager.isAware()) {
-                villager.setAware(true);
-                if (silent) {
-                    villager.setSilent(false);
-                }
-            }
-            this.plugin.getStorage().clearLobotomizedMarker(villager);
-        }), null);
+        villager.getScheduler()
+                .run(
+                        this.plugin,
+                        SentryTaskWrapper.wrap(task -> {
+                            // Untrack again here: an add queued by a reload in this tick runs before this task and
+                            // would re-track it.
+                            this.plugin.getStorage().removeVillager(villager);
+                            // Only undo our own freeze, so a villager silenced on purpose elsewhere keeps its Silent
+                            // flag.
+                            if (!villager.isAware()) {
+                                villager.setAware(true);
+                                if (silent) {
+                                    villager.setSilent(false);
+                                }
+                            }
+                            this.plugin.getStorage().clearLobotomizedMarker(villager);
+                        }),
+                        null);
     }
 
     /**
@@ -372,27 +425,32 @@ public class LobotomizeCommand {
         LobotomizedMarkerStore store = this.plugin.ensureMarkerStore();
 
         sender.sendMessage(Component.text("This restores AI to every villager the plugin has lobotomized, "
-                + "removes its data from them, then disables the plugin.").color(NamedTextColor.YELLOW));
+                        + "removes its data from them, then disables the plugin.")
+                .color(NamedTextColor.YELLOW));
         if (store == null) {
             sender.sendMessage(Component.text("Villagers still marked: unknown — the state file could not "
-                    + "be opened. Check the console before confirming.").color(NamedTextColor.RED));
+                            + "be opened. Check the console before confirming.")
+                    .color(NamedTextColor.RED));
         } else {
             sender.sendMessage(Component.text("Villagers still marked: ")
-                    .append(Component.text(String.valueOf(store.getKnownRowCount())).color(NamedTextColor.GREEN)));
+                    .append(Component.text(String.valueOf(store.getKnownRowCount()))
+                            .color(NamedTextColor.GREEN)));
             long unrecorded = store.getUnrecordedChangeCount();
             if (unrecorded > 0) {
                 sender.sendMessage(Component.text(unrecorded + " of those were marked while state writes "
-                        + "were failing and may have no record; the sweep may not reach all of them.")
+                                + "were failing and may have no record; the sweep may not reach all of them.")
                         .color(NamedTextColor.YELLOW));
             }
         }
         sender.sendMessage(Component.text("Chunks will be loaded to reach villagers that are not in memory, "
-                + "which also fires other plugins' chunk load handlers.").color(NamedTextColor.YELLOW));
+                        + "which also fires other plugins' chunk load handlers.")
+                .color(NamedTextColor.YELLOW));
         if (this.plugin.getConfig().getBoolean("prevent-trading-with-unlobotomized-villagers")) {
             sender.sendMessage(Component.text("Trading will be blocked while the sweep runs.")
                     .color(NamedTextColor.YELLOW));
         }
-        sender.sendMessage(Component.text("Run '/lobotomy uninstall confirm' to proceed.").color(NamedTextColor.RED));
+        sender.sendMessage(
+                Component.text("Run '/lobotomy uninstall confirm' to proceed.").color(NamedTextColor.RED));
         return Command.SINGLE_SUCCESS;
     }
 
@@ -400,7 +458,8 @@ public class LobotomizeCommand {
         CommandSender sender = source.getSender();
         if (!this.plugin.startUninstall(sender)) {
             sender.sendMessage(Component.text("Could not start the uninstall; one may already be running. "
-                    + "Check the console for details.").color(NamedTextColor.RED));
+                            + "Check the console for details.")
+                    .color(NamedTextColor.RED));
             return 0;
         }
         sender.sendMessage(Component.text("Uninstall started. Progress is reported here and in the console.")
@@ -411,7 +470,10 @@ public class LobotomizeCommand {
     private int reloadCommand(CommandSourceStack source) throws CommandSyntaxException {
         int villagers = this.plugin.reloadPluginState();
         if (villagers < 0) {
-            source.getSender().sendMessage(Component.text("Failed to reload storage; keeping existing state. Check console for details.").color(NamedTextColor.RED));
+            source.getSender()
+                    .sendMessage(Component.text(
+                                    "Failed to reload storage; keeping existing state. Check console for details.")
+                            .color(NamedTextColor.RED));
             return 0;
         }
         Component message = Component.text("Reloaded ")
@@ -424,12 +486,16 @@ public class LobotomizeCommand {
     private int toggleDebugCommand(CommandSourceStack source) throws CommandSyntaxException {
         this.plugin.setDebugging(!this.plugin.isDebugging());
         if (this.plugin.isDebugging()) {
-            this.plugin.getLogger().info("[Debug] Block classification: "
-                    + this.plugin.getStorage().blockClassificationSummary());
+            this.plugin
+                    .getLogger()
+                    .info("[Debug] Block classification: "
+                            + this.plugin.getStorage().blockClassificationSummary());
         }
-        source.getSender().sendMessage(Component.text("Debug mode: ")
-                .append(Component.text(this.plugin.isDebugging() ? "enabled" : "disabled"))
-                .append(Component.text(". Messages about villager tracking will now be printed to your console.")));
+        source.getSender()
+                .sendMessage(Component.text("Debug mode: ")
+                        .append(Component.text(this.plugin.isDebugging() ? "enabled" : "disabled"))
+                        .append(Component.text(
+                                ". Messages about villager tracking will now be printed to your console.")));
         return Command.SINGLE_SUCCESS;
     }
 
@@ -438,13 +504,15 @@ public class LobotomizeCommand {
      *
      * @return suggestions for matching config keys
      */
-    private static CompletableFuture<Suggestions> getConfigKeySuggestions(final CommandContext<CommandSourceStack> ctx, final SuggestionsBuilder builder) {
+    private static CompletableFuture<Suggestions> getConfigKeySuggestions(
+            final CommandContext<CommandSourceStack> ctx, final SuggestionsBuilder builder) {
         CommandSourceStack source = ctx.getSource();
         if (!(source.getExecutor() instanceof Player)) {
             return builder.buildFuture();
         }
 
-        VillagerLobotomizer plugin = (VillagerLobotomizer) Bukkit.getPluginManager().getPlugin("VillagerLobotimizer");
+        VillagerLobotomizer plugin =
+                (VillagerLobotomizer) Bukkit.getPluginManager().getPlugin("VillagerLobotimizer");
         if (plugin == null) {
             return builder.buildFuture();
         }
@@ -484,7 +552,9 @@ public class LobotomizeCommand {
      */
     private int setConfigCommand(CommandSourceStack source, String key, String value) throws CommandSyntaxException {
         if (!this.plugin.getConfig().contains(key)) {
-            source.getSender().sendMessage(Component.text("Config key '" + key + "' does not exist.").color(NamedTextColor.RED));
+            source.getSender()
+                    .sendMessage(Component.text("Config key '" + key + "' does not exist.")
+                            .color(NamedTextColor.RED));
             return 0;
         }
 
@@ -494,7 +564,10 @@ public class LobotomizeCommand {
         try {
             if (currentValue instanceof Boolean) {
                 if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
-                    source.getSender().sendMessage(Component.text("'" + key + "' expects a boolean value (true/false), but got: " + value).color(NamedTextColor.RED));
+                    source.getSender()
+                            .sendMessage(Component.text(
+                                            "'" + key + "' expects a boolean value (true/false), but got: " + value)
+                                    .color(NamedTextColor.RED));
                     return 0;
                 }
                 boolean boolValue = Boolean.parseBoolean(value);
@@ -514,25 +587,36 @@ public class LobotomizeCommand {
                 this.plugin.getConfig().set(key, value);
             } else if (currentValue instanceof List) {
                 // List editing unsupported via command
-                source.getSender().sendMessage(Component.text("Setting list values is not supported yet. Use the config file directly.").color(NamedTextColor.YELLOW));
+                source.getSender()
+                        .sendMessage(Component.text(
+                                        "Setting list values is not supported yet. Use the config file directly.")
+                                .color(NamedTextColor.YELLOW));
                 return 0;
             } else {
-                source.getSender().sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.").color(NamedTextColor.RED));
+                source.getSender()
+                        .sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.")
+                                .color(NamedTextColor.RED));
                 return 0;
             }
 
             this.plugin.saveConfig();
             this.plugin.reloadConfig();
 
-            source.getSender().sendMessage(Component.text("Successfully set '" + key + "' to '" + value + "'").color(NamedTextColor.GREEN));
-            source.getSender().sendMessage(Component.text("Note: You may need to run '/lobotomy reload' for changes to take effect.").color(NamedTextColor.YELLOW));
+            source.getSender()
+                    .sendMessage(Component.text("Successfully set '" + key + "' to '" + value + "'")
+                            .color(NamedTextColor.GREEN));
+            source.getSender()
+                    .sendMessage(
+                            Component.text("Note: You may need to run '/lobotomy reload' for changes to take effect.")
+                                    .color(NamedTextColor.YELLOW));
 
             return Command.SINGLE_SUCCESS;
 
         } catch (Exception e) {
-            source.getSender().sendMessage(Component.text("Failed to set config value: " + e.getMessage()).color(NamedTextColor.RED));
+            source.getSender()
+                    .sendMessage(Component.text("Failed to set config value: " + e.getMessage())
+                            .color(NamedTextColor.RED));
             return 0;
         }
     }
-
 }

@@ -2,7 +2,6 @@ package dev.mja00.villagerLobotomizer.utils;
 
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import io.sentry.Sentry;
-
 import java.util.function.Consumer;
 
 public class SentryTaskWrapper {

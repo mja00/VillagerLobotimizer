@@ -1,10 +1,10 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import dev.mja00.villagerLobotomizer.MockBukkitTestBase;
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+
+import dev.mja00.villagerLobotomizer.MockBukkitTestBase;
+import org.junit.jupiter.api.Test;
 
 /**
  * Exercises the real (Bukkit-available) path of {@link SentryContextProvider}. The existing

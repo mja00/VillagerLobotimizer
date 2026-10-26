@@ -1,14 +1,13 @@
 package dev.mja00.villagerLobotomizer.policy;
 
-import org.bukkit.loot.LootTables;
-import org.bukkit.util.BoundingBox;
-import org.bukkit.util.Vector;
-import org.jetbrains.annotations.Nullable;
-
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.function.Predicate;
+import org.bukkit.loot.LootTables;
+import org.bukkit.util.BoundingBox;
+import org.bukkit.util.Vector;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Pure rules for Hero of the Village gifts from lobotomized villagers, mirroring vanilla's gift
@@ -18,6 +17,7 @@ public final class HeroGiftPolicy {
 
     /** Vanilla villagers see players within their 16-block follow range, and count the cooldown down then. */
     public static final double VIEW_RANGE = 16.0;
+
     public static final double VIEW_RANGE_SQUARED = VIEW_RANGE * VIEW_RANGE;
     /** Vanilla only hands a gift over once the villager's block is closer than 5 blocks to the hero's. */
     public static final int THROW_RANGE_SQUARED = 5 * 5;
@@ -33,6 +33,7 @@ public final class HeroGiftPolicy {
      * without this, every villager seen by the same scan would throw at once.
      */
     public static final long FIRST_GIFT_JITTER_TICKS = 3 * SCAN_INTERVAL_TICKS;
+
     public static final long MIN_COOLDOWN_TICKS = 600L;
     public static final long MAX_COOLDOWN_TICKS = 6600L;
     /** Vanilla throws from this far below the villager's eyes... */
@@ -41,11 +42,13 @@ public final class HeroGiftPolicy {
     public static final double THROW_SPEED = 0.3;
     /** Vanilla item physics: gravity per tick, then drag on the motion. */
     static final double ITEM_GRAVITY = 0.04;
+
     static final double ITEM_DRAG = 0.98;
     /** How long a thrown gift is followed before it counts as clear of the cell. */
     static final int MAX_THROW_TICKS = 40;
     /** An item entity's collision box: 0.25 wide and 0.25 tall. */
     static final double ITEM_HALF_WIDTH = 0.125;
+
     static final double ITEM_HEIGHT = 0.25;
     /** Half the item's width, so consecutive boxes overlap and nothing thin slips between them. */
     static final double MAX_THROW_SUBSTEP = ITEM_HALF_WIDTH;
@@ -102,8 +105,7 @@ public final class HeroGiftPolicy {
         }
     }
 
-    private HeroGiftPolicy() {
-    }
+    private HeroGiftPolicy() {}
 
     /**
      * Whether a hero counts as in view, before the (costlier) line-of-sight check. Like vanilla this is
@@ -181,8 +183,8 @@ public final class HeroGiftPolicy {
      * @param villagerPosition the villager's feet, whose block is the one the gift must leave
      * @param collides         whether a box overlaps anything the item would collide with
      */
-    public static boolean throwEscapes(Vector start, Vector velocity, Vector villagerPosition,
-                                       Predicate<BoundingBox> collides) {
+    public static boolean throwEscapes(
+            Vector start, Vector velocity, Vector villagerPosition, Predicate<BoundingBox> collides) {
         Vector position = start.clone();
         if (collides.test(itemBox(position))) {
             return false;
@@ -236,8 +238,12 @@ public final class HeroGiftPolicy {
     /** An item entity's collision box, 0.25 blocks on each side, standing on {@code position}. */
     static BoundingBox itemBox(Vector position) {
         return new BoundingBox(
-                position.getX() - ITEM_HALF_WIDTH, position.getY(), position.getZ() - ITEM_HALF_WIDTH,
-                position.getX() + ITEM_HALF_WIDTH, position.getY() + ITEM_HEIGHT, position.getZ() + ITEM_HALF_WIDTH);
+                position.getX() - ITEM_HALF_WIDTH,
+                position.getY(),
+                position.getZ() - ITEM_HALF_WIDTH,
+                position.getX() + ITEM_HALF_WIDTH,
+                position.getY() + ITEM_HEIGHT,
+                position.getZ() + ITEM_HALF_WIDTH);
     }
 
     /** The first gift delay for a villager that has not seen a hero since it loaded. */

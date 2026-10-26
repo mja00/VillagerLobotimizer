@@ -6,12 +6,11 @@ import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.MovementTrace;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.RuleCheck;
 import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 
 /**
  * Renders an {@link ActivityDecision} as chat lines for {@code /lobotomy debug}. Tags are plain ASCII
@@ -19,8 +18,7 @@ import java.util.Locale;
  */
 public final class ActivityDecisionFormatter {
 
-    private ActivityDecisionFormatter() {
-    }
+    private ActivityDecisionFormatter() {}
 
     public static List<Component> format(ActivityDecision decision) {
         List<Component> lines = new ArrayList<>();
@@ -30,7 +28,8 @@ public final class ActivityDecisionFormatter {
                 .append(Component.text(" (" + decision.summary() + ")").color(NamedTextColor.GRAY)));
         lines.add(Component.text("Rules, in order (first decisive rule wins):").color(NamedTextColor.GOLD));
         for (RuleCheck check : decision.checks()) {
-            Component line = Component.text(" [" + check.outcome().tag() + "] ").color(colorOf(check.outcome()))
+            Component line = Component.text(" [" + check.outcome().tag() + "] ")
+                    .color(colorOf(check.outcome()))
                     .append(Component.text(check.rule().label()).color(NamedTextColor.WHITE));
             if (!check.detail().isEmpty()) {
                 line = line.append(Component.text(": " + check.detail()).color(NamedTextColor.GRAY));
@@ -42,16 +41,20 @@ public final class ActivityDecisionFormatter {
         if (movement == null) {
             return lines;
         }
-        lines.add(Component.text("Movement check: ").color(NamedTextColor.GOLD)
+        lines.add(Component.text("Movement check: ")
+                .color(NamedTextColor.GOLD)
                 .append(Component.text("floor " + name(movement.floor()) + "; "
-                        + movement.roofReason() + "; "
-                        + (movement.roofed()
-                        ? "under-feet walls/fences/gates also block"
-                        : "under-feet blocks ignored")).color(NamedTextColor.GRAY)));
+                                + movement.roofReason() + "; "
+                                + (movement.roofed()
+                                        ? "under-feet walls/fences/gates also block"
+                                        : "under-feet blocks ignored"))
+                        .color(NamedTextColor.GRAY)));
         if (movement.overhang() > 0) {
-            lines.add(Component.text(String.format(Locale.ROOT,
-                    " Hitbox is raised %.4f into the layer above head height, so blocks there (\"above\") also count.",
-                    movement.overhang())).color(NamedTextColor.GRAY));
+            lines.add(Component.text(String.format(
+                            Locale.ROOT,
+                            " Hitbox is raised %.4f into the layer above head height, so blocks there (\"above\") also count.",
+                            movement.overhang()))
+                    .color(NamedTextColor.GRAY));
         }
         for (DirectionTrace d : movement.directions()) {
             Component line = Component.text(" " + d.direction() + " @ " + d.x() + " " + d.y() + " " + d.z() + ": ")

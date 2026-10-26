@@ -22,9 +22,27 @@ public record VillagerState(
         double height) {
 
     /** An adult villager standing on a full block, so its hitbox stays below {@code blockY + 2}. */
-    public VillagerState(String name, boolean swimming, boolean sleeping, boolean hasVehicle,
-                         boolean professionNone, int experience, int blockX, int blockY, int blockZ) {
-        this(name, swimming, sleeping, hasVehicle, professionNone, experience, blockX, blockY, blockZ,
-                blockY + 1.95, 1.95);
+    public VillagerState(
+            String name,
+            boolean swimming,
+            boolean sleeping,
+            boolean hasVehicle,
+            boolean professionNone,
+            int experience,
+            int blockX,
+            int blockY,
+            int blockZ) {
+        this(
+                name,
+                swimming,
+                sleeping,
+                hasVehicle,
+                professionNone,
+                experience,
+                blockX,
+                blockY,
+                blockZ,
+                blockY + 1.95,
+                1.95);
     }
 }

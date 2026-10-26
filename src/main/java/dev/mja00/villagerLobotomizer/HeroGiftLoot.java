@@ -3,7 +3,6 @@ package dev.mja00.villagerLobotomizer;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
-
 import org.bukkit.entity.Villager;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.loot.LootContext;
@@ -15,7 +14,8 @@ import org.jetbrains.annotations.NotNull;
 @FunctionalInterface
 public interface HeroGiftLoot {
 
-    @NotNull Collection<ItemStack> roll(@NotNull Villager villager, @NotNull LootTables table, @NotNull Random random);
+    @NotNull
+    Collection<ItemStack> roll(@NotNull Villager villager, @NotNull LootTables table, @NotNull Random random);
 
     /** Vanilla's gift tables, given the villager as the looted entity and origin, as vanilla does. */
     static @NotNull HeroGiftLoot vanilla() {
@@ -24,7 +24,9 @@ public interface HeroGiftLoot {
             if (lootTable == null) {
                 return List.of();
             }
-            LootContext context = new LootContext.Builder(villager.getLocation()).lootedEntity(villager).build();
+            LootContext context = new LootContext.Builder(villager.getLocation())
+                    .lootedEntity(villager)
+                    .build();
             return lootTable.populateLoot(random, context);
         };
     }

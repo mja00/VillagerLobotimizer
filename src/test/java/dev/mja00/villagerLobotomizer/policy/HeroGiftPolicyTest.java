@@ -1,22 +1,21 @@
 package dev.mja00.villagerLobotomizer.policy;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy.GiftClock;
 import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy.Step;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Predicate;
 import org.bukkit.loot.LootTables;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.junit.jupiter.api.Test;
-
-import java.util.HashSet;
-import java.util.Random;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.Predicate;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HeroGiftPolicyTest {
 
@@ -91,9 +90,12 @@ class HeroGiftPolicyTest {
         GiftClock clock = new GiftClock(SCAN);
         HeroGiftPolicy.onSighting(clock, 1000L, HERO, NEAR, true);
 
-        assertEquals(Step.FACE, HeroGiftPolicy.onSighting(clock, 1000L + SCAN, HERO, NEAR, true), "cooldown just ran out");
+        assertEquals(
+                Step.FACE, HeroGiftPolicy.onSighting(clock, 1000L + SCAN, HERO, NEAR, true), "cooldown just ran out");
         assertEquals(0L, clock.remainingTicks());
-        assertEquals(Step.GIVE, HeroGiftPolicy.onSighting(clock, 1000L + SCAN + HeroGiftPolicy.HEAD_TURN_TICKS, HERO, NEAR, true));
+        assertEquals(
+                Step.GIVE,
+                HeroGiftPolicy.onSighting(clock, 1000L + SCAN + HeroGiftPolicy.HEAD_TURN_TICKS, HERO, NEAR, true));
     }
 
     @Test
@@ -111,7 +113,10 @@ class HeroGiftPolicyTest {
         GiftClock clock = new GiftClock(0L);
         HeroGiftPolicy.onSighting(clock, 1000L, HERO, NEAR, true);
 
-        assertEquals(Step.FACE, HeroGiftPolicy.onSighting(clock, 1060L, HERO, NEAR, true), "the hero was out of view in between");
+        assertEquals(
+                Step.FACE,
+                HeroGiftPolicy.onSighting(clock, 1060L, HERO, NEAR, true),
+                "the hero was out of view in between");
         assertEquals(Step.GIVE, HeroGiftPolicy.onSighting(clock, 1080L, HERO, NEAR, true));
     }
 
@@ -134,9 +139,13 @@ class HeroGiftPolicyTest {
         assertEquals(Step.FACE, HeroGiftPolicy.onSighting(clock, 1000L, far, 100.0, false));
         assertEquals(Step.FACE, HeroGiftPolicy.onSighting(clock, 1020L, far, 100.0, false));
 
-        assertEquals(Step.FACE, HeroGiftPolicy.onSighting(clock, 1020L, near, 4.0, true),
+        assertEquals(
+                Step.FACE,
+                HeroGiftPolicy.onSighting(clock, 1020L, near, 4.0, true),
                 "turning to the new hero, not throwing on the old hero's head turn");
-        assertEquals(Step.WAIT, HeroGiftPolicy.onSighting(clock, 1030L, far, 100.0, false),
+        assertEquals(
+                Step.WAIT,
+                HeroGiftPolicy.onSighting(clock, 1030L, far, 100.0, false),
                 "the farther hero does not take the villager back");
         assertEquals(Step.GIVE, HeroGiftPolicy.onSighting(clock, 1040L, near, 4.0, true));
     }
@@ -213,8 +222,10 @@ class HeroGiftPolicyTest {
         Vector offCenter = new Vector(0.5, THROW_FROM.getY(), 0.25);
         double[] trapdoor = {1, 65, 0, 2, 66, 3.0 / 16};
         assertFalse(HeroGiftPolicy.throwEscapes(offCenter, EAST, VILLAGER, boxes(FLOOR, trapdoor)));
-        assertTrue(HeroGiftPolicy.throwEscapes(new Vector(0.5, THROW_FROM.getY(), 0.5), EAST, VILLAGER,
-                boxes(FLOOR, trapdoor)), "thrown from the middle of the block, the item clears it");
+        assertTrue(
+                HeroGiftPolicy.throwEscapes(
+                        new Vector(0.5, THROW_FROM.getY(), 0.5), EAST, VILLAGER, boxes(FLOOR, trapdoor)),
+                "thrown from the middle of the block, the item clears it");
     }
 
     @Test
@@ -225,7 +236,8 @@ class HeroGiftPolicyTest {
 
     @Test
     void aGiftLandingInTheVillagersOwnBlockIsBlocked() {
-        assertFalse(HeroGiftPolicy.throwEscapes(THROW_FROM, new Vector(), VILLAGER, boxes(FLOOR)),
+        assertFalse(
+                HeroGiftPolicy.throwEscapes(THROW_FROM, new Vector(), VILLAGER, boxes(FLOOR)),
                 "a hero standing in the villager's spot gets nothing thrown; the gift drops at their feet");
     }
 
@@ -256,7 +268,10 @@ class HeroGiftPolicyTest {
     void giftTableFollowsVanilla() {
         assertEquals(LootTables.LIBRARIAN_GIFT, HeroGiftPolicy.giftTable(false, "librarian"));
         assertEquals(LootTables.WEAPONSMITH_GIFT, HeroGiftPolicy.giftTable(false, "weaponsmith"));
-        assertEquals(LootTables.BABY_VILLAGER_GIFT, HeroGiftPolicy.giftTable(true, "librarian"), "babies use the baby table");
+        assertEquals(
+                LootTables.BABY_VILLAGER_GIFT,
+                HeroGiftPolicy.giftTable(true, "librarian"),
+                "babies use the baby table");
         assertEquals(LootTables.UNEMPLOYED_GIFT, HeroGiftPolicy.giftTable(false, "none"));
         assertEquals(LootTables.UNEMPLOYED_GIFT, HeroGiftPolicy.giftTable(false, "nitwit"));
     }

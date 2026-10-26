@@ -12,8 +12,7 @@ import java.util.List;
  * @param checks       one entry per {@link Rule}, in evaluation order
  * @param movement     the per-direction movement trace, or {@code null} when an earlier rule decided
  */
-public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck> checks,
-                               MovementTrace movement) {
+public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck> checks, MovementTrace movement) {
 
     public ActivityDecision {
         checks = List.copyOf(checks);
@@ -66,8 +65,7 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
         }
     }
 
-    public record RuleCheck(Rule rule, Outcome outcome, String detail) {
-    }
+    public record RuleCheck(Rule rule, Outcome outcome, String detail) {}
 
     /** Why a single block counted as blocking or open for movement. */
     public enum BlockVerdict {
@@ -107,13 +105,20 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
      * raised by a carpet or by jumping onto a 1-high block under a raised roof; otherwise it and
      * {@code overheadVerdict} are {@code null}.
      */
-    public record DirectionTrace(String direction, int x, int y, int z,
-                                 BlockSnapshot head, BlockVerdict headVerdict,
-                                 BlockSnapshot feet, BlockVerdict feetVerdict,
-                                 BlockSnapshot underFeet, BlockVerdict underFeetVerdict,
-                                 BlockSnapshot overhead, BlockVerdict overheadVerdict,
-                                 boolean open) {
-    }
+    public record DirectionTrace(
+            String direction,
+            int x,
+            int y,
+            int z,
+            BlockSnapshot head,
+            BlockVerdict headVerdict,
+            BlockSnapshot feet,
+            BlockVerdict feetVerdict,
+            BlockSnapshot underFeet,
+            BlockVerdict underFeetVerdict,
+            BlockSnapshot overhead,
+            BlockVerdict overheadVerdict,
+            boolean open) {}
 
     /**
      * @param floor      the block under the villager, or {@code null} when unloaded
@@ -122,8 +127,13 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
      * @param roofReason human-readable reason for {@code roofed}
      * @param overhang   how far the villager's hitbox reaches into the {@code y + 2} layer, or 0
      */
-    public record MovementTrace(BlockSnapshot floor, BlockSnapshot roof, boolean roofed, String roofReason,
-                                double overhang, List<DirectionTrace> directions) {
+    public record MovementTrace(
+            BlockSnapshot floor,
+            BlockSnapshot roof,
+            boolean roofed,
+            String roofReason,
+            double overhang,
+            List<DirectionTrace> directions) {
         public MovementTrace {
             directions = List.copyOf(directions);
         }
@@ -141,7 +151,7 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
 
     /** One-line summary for console logs, e.g. {@code lobotomized by trapped (movement) check: ...}. */
     public String summary() {
-        return (this.active ? "kept active by " : "lobotomized by ")
-                + this.decidingRule.label() + ": " + decidingCheck().detail();
+        return (this.active ? "kept active by " : "lobotomized by ") + this.decidingRule.label() + ": "
+                + decidingCheck().detail();
     }
 }

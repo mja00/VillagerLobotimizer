@@ -2,12 +2,6 @@ package dev.mja00.villagerLobotomizer.storage;
 
 import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Villager;
-import org.bukkit.plugin.Plugin;
-import org.jetbrains.annotations.NotNull;
-import org.sqlite.SQLiteDataSource;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +20,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Villager;
+import org.bukkit.plugin.Plugin;
+import org.jetbrains.annotations.NotNull;
+import org.sqlite.SQLiteDataSource;
 
 /**
  * Records which villagers currently carry the persistent lobotomy marker, so
@@ -116,8 +115,10 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
                 this.usable = true;
                 return true;
             } catch (SQLException | IOException | RuntimeException e) {
-                this.logger.log(Level.SEVERE, "Could not open " + this.databaseFile
-                        + "; lobotomized state will not persist this session.", e);
+                this.logger.log(
+                        Level.SEVERE,
+                        "Could not open " + this.databaseFile + "; lobotomized state will not persist this session.",
+                        e);
                 closeConnectionQuietly();
                 this.usable = false;
                 return false;
@@ -152,8 +153,13 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
         if (!isUsable()) {
             return;
         }
-        this.drainTask = Bukkit.getAsyncScheduler().runAtFixedRate(plugin,
-                SentryTaskWrapper.wrap((task) -> drainNow()), periodSeconds, periodSeconds, TimeUnit.SECONDS);
+        this.drainTask = Bukkit.getAsyncScheduler()
+                .runAtFixedRate(
+                        plugin,
+                        SentryTaskWrapper.wrap((task) -> drainNow()),
+                        periodSeconds,
+                        periodSeconds,
+                        TimeUnit.SECONDS);
     }
 
     /** Records that the marker now exists on this villager. Never does I/O. */
@@ -175,8 +181,11 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
      * thread that owns the entity.
      */
     public void markerWritten(@NotNull Villager villager) {
-        markerWritten(villager.getUniqueId(), villager.getWorld().getUID(),
-                villager.getLocation().getBlockX() >> 4, villager.getLocation().getBlockZ() >> 4);
+        markerWritten(
+                villager.getUniqueId(),
+                villager.getWorld().getUID(),
+                villager.getLocation().getBlockX() >> 4,
+                villager.getLocation().getBlockZ() >> 4);
     }
 
     /**
@@ -197,7 +206,9 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
 
     /** Rows the store believes exist, from memory. */
     public int getKnownRowCount() {
-        return (int) this.intents.values().stream().filter((intent) -> !intent.absent()).count();
+        return (int) this.intents.values().stream()
+                .filter((intent) -> !intent.absent())
+                .count();
     }
 
     /**
@@ -210,7 +221,8 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
             return 0;
         }
         return (int) this.intents.values().stream()
-                .filter((intent) -> intent.dirty() && !intent.absent()).count();
+                .filter((intent) -> intent.dirty() && !intent.absent())
+                .count();
     }
 
     /** Applies every buffered change on the calling thread. Must not be called on a region thread. */
@@ -242,13 +254,16 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
                 if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                     this.usable = false;
                     int unrecorded = getUnrecordedChangeCount();
-                    this.logger.log(Level.SEVERE, "Giving up on " + this.databaseFile + " after "
-                            + this.consecutiveFailures + " failed writes; lobotomized state will not persist"
-                            + (unrecorded > 0
-                                    ? " and " + unrecorded + " marker(s) were written with no row, so "
-                                    + "'/lobotomy uninstall' cannot reach those villagers in unloaded chunks"
-                                    : "")
-                            + ".", e);
+                    this.logger.log(
+                            Level.SEVERE,
+                            "Giving up on " + this.databaseFile + " after "
+                                    + this.consecutiveFailures + " failed writes; lobotomized state will not persist"
+                                    + (unrecorded > 0
+                                            ? " and " + unrecorded + " marker(s) were written with no row, so "
+                                                    + "'/lobotomy uninstall' cannot reach those villagers in unloaded chunks"
+                                            : "")
+                                    + ".",
+                            e);
                 } else {
                     this.logger.log(Level.WARNING, "Failed to write lobotomy state; will retry.", e);
                 }
@@ -269,7 +284,7 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
         boolean previousAutoCommit = this.connection.getAutoCommit();
         this.connection.setAutoCommit(false);
         try (PreparedStatement upsert = this.connection.prepareStatement(UPSERT_ROW);
-             PreparedStatement delete = this.connection.prepareStatement(DELETE_ROW)) {
+                PreparedStatement delete = this.connection.prepareStatement(DELETE_ROW)) {
             for (Map.Entry<UUID, Intent> entry : batch.entrySet()) {
                 Intent intent = entry.getValue();
                 if (intent.absent()) {
@@ -335,7 +350,7 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
     private static @NotNull List<MarkedVillager> readAll(Connection connection) throws SQLException {
         List<MarkedVillager> rows = new ArrayList<>();
         try (PreparedStatement statement = connection.prepareStatement(SELECT_ALL);
-             ResultSet results = statement.executeQuery()) {
+                ResultSet results = statement.executeQuery()) {
             while (results.next()) {
                 try {
                     rows.add(new MarkedVillager(
@@ -378,7 +393,7 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
             this.intents.clear();
 
             boolean deleted = true;
-            for (String suffix : new String[]{"", "-wal", "-shm", "-journal"}) {
+            for (String suffix : new String[] {"", "-wal", "-shm", "-journal"}) {
                 Path path = this.databaseFile.resolveSibling(this.databaseFile.getFileName() + suffix);
                 try {
                     Files.deleteIfExists(path);
@@ -445,7 +460,9 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
         }
 
         boolean matches(UUID otherWorld, int otherChunkX, int otherChunkZ) {
-            return !this.absent && this.chunkX == otherChunkX && this.chunkZ == otherChunkZ
+            return !this.absent
+                    && this.chunkX == otherChunkX
+                    && this.chunkZ == otherChunkZ
                     && otherWorld.equals(this.worldId);
         }
 

@@ -1,23 +1,22 @@
 package dev.mja00.villagerLobotomizer.policy;
 
-import dev.mja00.villagerLobotomizer.policy.ActivityDecision.BlockVerdict;
-import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
-import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
-import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
-import org.bukkit.Material;
-import org.junit.jupiter.api.Test;
-
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.BlockVerdict;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.bukkit.Material;
+import org.junit.jupiter.api.Test;
 
 class VillagerActivityPolicyTest {
 
@@ -36,12 +35,12 @@ class VillagerActivityPolicyTest {
     /** Minimal hand-built classifier — we control exactly which materials are "impassable". */
     private static BlockClassifier classifier() {
         return new BlockClassifier(
-                EnumSet.of(Material.STONE),                                    // impassableRegular
-                EnumSet.of(Material.OAK_FENCE),                                // impassableTall
+                EnumSet.of(Material.STONE), // impassableRegular
+                EnumSet.of(Material.OAK_FENCE), // impassableTall
                 EnumSet.of(Material.STONE, Material.WHITE_CARPET, Material.OAK_FENCE), // impassableAll
-                EnumSet.of(Material.WHEAT),                                    // cropBlocks
-                EnumSet.of(Material.OAK_DOOR),                                 // doorBlocks
-                EnumSet.of(Material.LECTERN));                                 // professionBlocks
+                EnumSet.of(Material.WHEAT), // cropBlocks
+                EnumSet.of(Material.OAK_DOOR), // doorBlocks
+                EnumSet.of(Material.LECTERN)); // professionBlocks
     }
 
     /** A mutable grid of snapshots; any coordinate not set defaults to AIR. */
@@ -76,12 +75,23 @@ class VillagerActivityPolicyTest {
         }
     }
 
-    private VillagerActivityPolicy policy(boolean lobotomizePassengers, boolean onlyProfessions,
-                                          boolean onlyWithExperience, boolean checkRoof,
-                                          boolean ignoreStuckInDoors, boolean ignoreNonSolidBlocks,
-                                          Set<String> exemptNames) {
-        return new VillagerActivityPolicy(lobotomizePassengers, onlyProfessions, onlyWithExperience,
-                checkRoof, ignoreStuckInDoors, ignoreNonSolidBlocks, exemptNames, classifier());
+    private VillagerActivityPolicy policy(
+            boolean lobotomizePassengers,
+            boolean onlyProfessions,
+            boolean onlyWithExperience,
+            boolean checkRoof,
+            boolean ignoreStuckInDoors,
+            boolean ignoreNonSolidBlocks,
+            Set<String> exemptNames) {
+        return new VillagerActivityPolicy(
+                lobotomizePassengers,
+                onlyProfessions,
+                onlyWithExperience,
+                checkRoof,
+                ignoreStuckInDoors,
+                ignoreNonSolidBlocks,
+                exemptNames,
+                classifier());
     }
 
     private VillagerActivityPolicy defaultPolicy() {
@@ -164,8 +174,8 @@ class VillagerActivityPolicyTest {
     void vehicleForcesInactiveOnlyWhenConfigured() {
         VillagerState inVehicle = new VillagerState("", false, false, true, false, 10, 0, 64, 0);
         // open space, but lobotomizePassengers + in a vehicle -> inactive
-        assertFalse(policy(true, false, false, false, false, false, Set.of())
-                .shouldBeActive(inVehicle, new TestGrid()));
+        assertFalse(
+                policy(true, false, false, false, false, false, Set.of()).shouldBeActive(inVehicle, new TestGrid()));
         // same state, feature off -> falls through to movement -> active
         assertTrue(defaultPolicy().shouldBeActive(inVehicle, new TestGrid()));
     }
@@ -173,15 +183,14 @@ class VillagerActivityPolicyTest {
     @Test
     void onlyProfessionsKeepsUnemployedActiveInSealedBox() {
         VillagerState none = new VillagerState("", false, false, false, true, 10, 0, 64, 0);
-        assertTrue(policy(false, true, false, false, false, false, Set.of())
-                .shouldBeActive(none, sealedBox(0, 64, 0)));
+        assertTrue(policy(false, true, false, false, false, false, Set.of()).shouldBeActive(none, sealedBox(0, 64, 0)));
     }
 
     @Test
     void onlyWithExperienceKeepsZeroExpActiveInSealedBox() {
         VillagerState zeroExp = new VillagerState("", false, false, false, false, 0, 0, 64, 0);
-        assertTrue(policy(false, false, true, false, false, false, Set.of())
-                .shouldBeActive(zeroExp, sealedBox(0, 64, 0)));
+        assertTrue(
+                policy(false, false, true, false, false, false, Set.of()).shouldBeActive(zeroExp, sealedBox(0, 64, 0)));
     }
 
     @Test
@@ -198,8 +207,8 @@ class VillagerActivityPolicyTest {
         // doors not ignored -> door blocks (a door snapshot is not passable) -> still inactive
         assertFalse(defaultPolicy().shouldBeActive(villager("", 0, 64, 0), grid));
         // doors ignored -> door is a bypass -> walkable -> active
-        assertTrue(policy(false, false, false, false, true, false, Set.of())
-                .shouldBeActive(villager("", 0, 64, 0), grid));
+        assertTrue(
+                policy(false, false, false, false, true, false, Set.of()).shouldBeActive(villager("", 0, 64, 0), grid));
     }
 
     @Test
@@ -209,8 +218,8 @@ class VillagerActivityPolicyTest {
         // non-solid blocks not ignored -> the block stays impassable -> still inactive
         assertFalse(defaultPolicy().shouldBeActive(villager("", 0, 64, 0), grid));
         // non-solid blocks ignored -> the block becomes walkable -> active
-        assertTrue(policy(false, false, false, false, false, true, Set.of())
-                .shouldBeActive(villager("", 0, 64, 0), grid));
+        assertTrue(
+                policy(false, false, false, false, false, true, Set.of()).shouldBeActive(villager("", 0, 64, 0), grid));
     }
 
     @Test
@@ -218,8 +227,8 @@ class VillagerActivityPolicyTest {
         // A non-solid profession block (lectern) is carved out of the ignoreNonSolidBlocks bypass,
         // so it must keep blocking movement even with the feature on -> inactive.
         TestGrid grid = sealedBox(0, 64, 0).set(1, 64, 0, LECTERN);
-        assertFalse(policy(false, false, false, false, false, true, Set.of())
-                .shouldBeActive(villager("", 0, 64, 0), grid));
+        assertFalse(
+                policy(false, false, false, false, false, true, Set.of()).shouldBeActive(villager("", 0, 64, 0), grid));
     }
 
     @Test
@@ -246,15 +255,22 @@ class VillagerActivityPolicyTest {
         assertTrue(p.shouldBeActive(villager("", 0, 64, 0), grid));
         ActivityDecision d = p.evaluate(villager("", 0, 64, 0), grid);
         assertTrue(d.active());
-        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+        assertEquals(
+                BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
 
         // A block at y+2 above each 1-high wall leaves no room to stand on it after jumping.
-        TestGrid lipped = sealedBox(0, 64, 0).set(0, 67, 0, STONE)
-                .set(1, 66, 0, STONE).set(-1, 66, 0, STONE).set(0, 66, 1, STONE).set(0, 66, -1, STONE);
+        TestGrid lipped = sealedBox(0, 64, 0)
+                .set(0, 67, 0, STONE)
+                .set(1, 66, 0, STONE)
+                .set(-1, 66, 0, STONE)
+                .set(0, 66, 1, STONE)
+                .set(0, 66, -1, STONE);
         assertFalse(p.shouldBeActive(villager("", 0, 64, 0), lipped));
         ActivityDecision lippedDecision = p.evaluate(villager("", 0, 64, 0), lipped);
         assertFalse(lippedDecision.active());
-        assertEquals(BlockVerdict.HITBOX_OVERLAP, lippedDecision.movement().directions().get(0).overheadVerdict());
+        assertEquals(
+                BlockVerdict.HITBOX_OVERLAP,
+                lippedDecision.movement().directions().get(0).overheadVerdict());
     }
 
     @Test
@@ -265,15 +281,20 @@ class VillagerActivityPolicyTest {
         assertTrue(p.shouldBeActive(onCarpet(0, 64, 0), grid));
         ActivityDecision d = p.evaluate(onCarpet(0, 64, 0), grid);
         assertTrue(d.active());
-        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+        assertEquals(
+                BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
     }
 
     @Test
     void raisedRoofDoesNotLetVillagersJumpFencesOrJumpFromHoney() {
         VillagerActivityPolicy p = policy(false, false, false, true, false, false, Set.of());
         // Fences and walls are 1.5 high, too tall to jump onto.
-        TestGrid fenced = new TestGrid().set(0, 67, 0, STONE)
-                .set(1, 64, 0, FENCE).set(-1, 64, 0, FENCE).set(0, 64, 1, FENCE).set(0, 64, -1, FENCE);
+        TestGrid fenced = new TestGrid()
+                .set(0, 67, 0, STONE)
+                .set(1, 64, 0, FENCE)
+                .set(-1, 64, 0, FENCE)
+                .set(0, 64, 1, FENCE)
+                .set(0, 64, -1, FENCE);
         assertFalse(p.shouldBeActive(villager("", 0, 64, 0), fenced));
         assertFalse(p.evaluate(villager("", 0, 64, 0), fenced).active());
 
@@ -307,7 +328,7 @@ class VillagerActivityPolicyTest {
         // require the block UNDER each neighbour's feet to be passable. With fences (tall/impassable)
         // under every neighbour, movement is blocked -> inactive.
         TestGrid roofed = new TestGrid()
-                .set(0, 63, 0, HONEY)        // villager's floor -> hasRoof = true
+                .set(0, 63, 0, HONEY) // villager's floor -> hasRoof = true
                 .set(1, 63, 0, FENCE)
                 .set(-1, 63, 0, FENCE)
                 .set(0, 63, 1, FENCE)
@@ -391,7 +412,9 @@ class VillagerActivityPolicyTest {
 
         assertTrue(d.active());
         assertEquals(Outcome.KEPT_ACTIVE, outcomeOf(d, Rule.MOVEMENT));
-        assertTrue(d.decidingCheck().detail().contains("+X (east)"), d.decidingCheck().detail());
+        assertTrue(
+                d.decidingCheck().detail().contains("+X (east)"),
+                d.decidingCheck().detail());
         assertTrue(d.movement().directions().get(0).open());
     }
 
@@ -414,7 +437,10 @@ class VillagerActivityPolicyTest {
         assertEquals(Rule.NOBRAIN_NAME, d.decidingRule());
         assertEquals(Outcome.LOBOTOMIZED, outcomeOf(d, Rule.NOBRAIN_NAME));
         for (int i = 1; i < d.checks().size(); i++) {
-            assertEquals(Outcome.NOT_REACHED, d.checks().get(i).outcome(), d.checks().get(i).rule().name());
+            assertEquals(
+                    Outcome.NOT_REACHED,
+                    d.checks().get(i).outcome(),
+                    d.checks().get(i).rule().name());
         }
     }
 
@@ -425,8 +451,8 @@ class VillagerActivityPolicyTest {
                 .set(-1, 64, 0, DOOR)
                 .set(0, 64, 1, NON_SOLID)
                 .unload(0, -1);
-        ActivityDecision d = policy(false, false, false, false, true, true, Set.of())
-                .evaluate(villager("", 0, 64, 0), grid);
+        ActivityDecision d =
+                policy(false, false, false, false, true, true, Set.of()).evaluate(villager("", 0, 64, 0), grid);
 
         List<DirectionTrace> dirs = d.movement().directions();
         assertEquals(BlockVerdict.BYPASS, dirs.get(0).feetVerdict());
@@ -454,7 +480,11 @@ class VillagerActivityPolicyTest {
     }
 
     private static Outcome outcomeOf(ActivityDecision d, Rule rule) {
-        return d.checks().stream().filter(c -> c.rule() == rule).findFirst().orElseThrow().outcome();
+        return d.checks().stream()
+                .filter(c -> c.rule() == rule)
+                .findFirst()
+                .orElseThrow()
+                .outcome();
     }
 
     /**
@@ -463,20 +493,48 @@ class VillagerActivityPolicyTest {
      */
     @Test
     void booleanPathAlwaysAgreesWithTrace() {
-        BlockSnapshot[] palette = {AIR, AIR, AIR, STONE, STONE, WATER, CARPET, HONEY, DOOR, FENCE, NON_SOLID, LECTERN,
-                new BlockSnapshot(Material.CAVE_AIR, true, false), new BlockSnapshot(Material.WHEAT, true, false),
-                new BlockSnapshot(Material.WHITE_BED, false, true)};
+        BlockSnapshot[] palette = {
+            AIR,
+            AIR,
+            AIR,
+            STONE,
+            STONE,
+            WATER,
+            CARPET,
+            HONEY,
+            DOOR,
+            FENCE,
+            NON_SOLID,
+            LECTERN,
+            new BlockSnapshot(Material.CAVE_AIR, true, false),
+            new BlockSnapshot(Material.WHEAT, true, false),
+            new BlockSnapshot(Material.WHITE_BED, false, true)
+        };
         String[] names = {"", "", "keepme", "mr nobrain", "bob"};
         double[] bodyTops = {64 + 1.95, 64 + 0.0625 + 1.95, 64 + 0.5 + 1.95, 64 + 2.0};
         double[] heights = {1.95, 0.975};
         java.util.Random random = new java.util.Random(1234);
 
         for (int i = 0; i < 20_000; i++) {
-            VillagerActivityPolicy p = policy(random.nextBoolean(), random.nextBoolean(), random.nextBoolean(),
-                    random.nextBoolean(), random.nextBoolean(), random.nextBoolean(), Set.of("keepme"));
-            VillagerState v = new VillagerState(names[random.nextInt(names.length)],
-                    random.nextInt(8) == 0, random.nextInt(8) == 0, random.nextInt(4) == 0, random.nextInt(4) == 0,
-                    random.nextInt(4) == 0 ? 0 : 10, 0, 64, 0, bodyTops[random.nextInt(bodyTops.length)],
+            VillagerActivityPolicy p = policy(
+                    random.nextBoolean(),
+                    random.nextBoolean(),
+                    random.nextBoolean(),
+                    random.nextBoolean(),
+                    random.nextBoolean(),
+                    random.nextBoolean(),
+                    Set.of("keepme"));
+            VillagerState v = new VillagerState(
+                    names[random.nextInt(names.length)],
+                    random.nextInt(8) == 0,
+                    random.nextInt(8) == 0,
+                    random.nextInt(4) == 0,
+                    random.nextInt(4) == 0,
+                    random.nextInt(4) == 0 ? 0 : 10,
+                    0,
+                    64,
+                    0,
+                    bodyTops[random.nextInt(bodyTops.length)],
                     heights[random.nextInt(heights.length)]);
 
             Map<Long, Double> collisionBottoms = new HashMap<>();
@@ -556,13 +614,16 @@ class VillagerActivityPolicyTest {
                 return x == 1 && y == 66 && z == 0 ? 0.5 : super.collisionBottomAt(x, y, z);
             }
         };
-        grid.set(-1, 64, 0, STONE).set(0, 64, 1, STONE).set(0, 64, -1, STONE)
+        grid.set(-1, 64, 0, STONE)
+                .set(0, 64, 1, STONE)
+                .set(0, 64, -1, STONE)
                 .set(1, 66, 0, new BlockSnapshot(Material.OAK_SLAB, false, true));
 
         ActivityDecision d = defaultPolicy().evaluate(onCarpet(0, 64, 0), grid);
 
         assertTrue(d.active());
-        assertEquals(BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
+        assertEquals(
+                BlockVerdict.CLEARS_HITBOX, d.movement().directions().get(0).overheadVerdict());
     }
 
     @Test

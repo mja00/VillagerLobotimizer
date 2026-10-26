@@ -1,7 +1,13 @@
 package dev.mja00.villagerLobotomizer.listeners;
 
+import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
+import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
+import dev.mja00.villagerLobotomizer.LobotomizeStorage;
+import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import java.util.logging.Level;
-
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
@@ -18,18 +24,10 @@ import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.world.ChunkUnloadEvent;
 import org.bukkit.inventory.MerchantInventory;
 
-import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
-import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
-
-import dev.mja00.villagerLobotomizer.LobotomizeStorage;
-import dev.mja00.villagerLobotomizer.VillagerLobotomizer;
-import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.minimessage.MiniMessage;
-
 public class EntityListener implements Listener {
     private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
-    private static final String DEFAULT_TRADE_MESSAGE = "<red>You cannot trade with unlobotomized villagers!</red> <yellow>This villager needs to be lobotomized first.</yellow>";
+    private static final String DEFAULT_TRADE_MESSAGE =
+            "<red>You cannot trade with unlobotomized villagers!</red> <yellow>This villager needs to be lobotomized first.</yellow>";
     private final VillagerLobotomizer plugin;
 
     public EntityListener(VillagerLobotomizer plugin) {
@@ -47,7 +45,12 @@ public class EntityListener implements Listener {
         if (this.plugin.isChunkDebugging()) {
             for (Entity entity : event.getChunk().getEntities()) {
                 if (entity instanceof Villager) {
-                    this.plugin.getLogger().log(Level.INFO, "[Debug] Caught {0} for villager {1} ({2}); The villager should have been added to the storage", new Object[]{event.getEventName(), entity, entity.getUniqueId()});
+                    this.plugin
+                            .getLogger()
+                            .log(
+                                    Level.INFO,
+                                    "[Debug] Caught {0} for villager {1} ({2}); The villager should have been added to the storage",
+                                    new Object[] {event.getEventName(), entity, entity.getUniqueId()});
                 }
             }
         }
@@ -58,7 +61,12 @@ public class EntityListener implements Listener {
         if (this.plugin.isChunkDebugging()) {
             for (Entity entity : event.getChunk().getEntities()) {
                 if (entity instanceof Villager) {
-                    this.plugin.getLogger().log(Level.INFO, "[Debug] Caught {0} for villager {1} ({2}); The villager should have been removed from the storage", new Object[]{event.getEventName(), entity, entity.getUniqueId()});
+                    this.plugin
+                            .getLogger()
+                            .log(
+                                    Level.INFO,
+                                    "[Debug] Caught {0} for villager {1} ({2}); The villager should have been removed from the storage",
+                                    new Object[] {event.getEventName(), entity, entity.getUniqueId()});
                 }
             }
         }
@@ -69,19 +77,37 @@ public class EntityListener implements Listener {
     public final void onAdd(EntityAddToWorldEvent event) {
         if (event.getEntity() instanceof Villager) {
             if (this.plugin.isDebugging()) {
-                this.plugin.getLogger().log(Level.INFO, "[Debug] Caught {0} for villager {1} ({2}); The villager should be added to the storage", new Object[]{event.getEventName(), event.getEntity(), event.getEntity().getUniqueId()});
+                this.plugin
+                        .getLogger()
+                        .log(
+                                Level.INFO,
+                                "[Debug] Caught {0} for villager {1} ({2}); The villager should be added to the storage",
+                                new Object[] {
+                                    event.getEventName(),
+                                    event.getEntity(),
+                                    event.getEntity().getUniqueId()
+                                });
             }
 
-            this.plugin.getStorage().addVillager((Villager)event.getEntity());
+            this.plugin.getStorage().addVillager((Villager) event.getEntity());
         }
     }
 
     @EventHandler
     public final void onRemove(EntityRemoveFromWorldEvent event) {
         if (event.getEntity() instanceof Villager) {
-            this.plugin.getStorage().removeVillager((Villager)event.getEntity());
+            this.plugin.getStorage().removeVillager((Villager) event.getEntity());
             if (this.plugin.isDebugging()) {
-                this.plugin.getLogger().log(Level.INFO, "[Debug] Caught {0} for villager {1} ({2}); The villager should have been removed from the storage", new Object[]{event.getEventName(), event.getEntity(), event.getEntity().getUniqueId()});
+                this.plugin
+                        .getLogger()
+                        .log(
+                                Level.INFO,
+                                "[Debug] Caught {0} for villager {1} ({2}); The villager should have been removed from the storage",
+                                new Object[] {
+                                    event.getEventName(),
+                                    event.getEntity(),
+                                    event.getEntity().getUniqueId()
+                                });
             }
         }
     }
@@ -153,7 +179,8 @@ public class EntityListener implements Listener {
             return;
         }
 
-        // Trading is the only way to gain xp, so blocking 0-xp villagers would keep them from ever qualifying for lobotomy.
+        // Trading is the only way to gain xp, so blocking 0-xp villagers would keep them from ever qualifying for
+        // lobotomy.
         if (this.plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience", false)
                 && villager.getVillagerExperience() == 0) {
             return;
@@ -163,7 +190,8 @@ public class EntityListener implements Listener {
 
         Player player = (Player) event.getPlayer();
 
-        String messageString = this.plugin.getConfig().getString("unlobotomized-villager-trade-message", DEFAULT_TRADE_MESSAGE);
+        String messageString =
+                this.plugin.getConfig().getString("unlobotomized-villager-trade-message", DEFAULT_TRADE_MESSAGE);
         if (messageString == null) {
             messageString = DEFAULT_TRADE_MESSAGE;
         }
@@ -172,13 +200,23 @@ public class EntityListener implements Listener {
             message = MINI_MESSAGE.deserialize(messageString);
         } catch (Exception e) {
             // Fallback to default message if parsing fails
-            this.plugin.getLogger().log(Level.WARNING, "Failed to parse MiniMessage for unlobotomized-villager-trade-message: {0}", e.getMessage());
+            this.plugin
+                    .getLogger()
+                    .log(
+                            Level.WARNING,
+                            "Failed to parse MiniMessage for unlobotomized-villager-trade-message: {0}",
+                            e.getMessage());
             message = MINI_MESSAGE.deserialize(DEFAULT_TRADE_MESSAGE);
         }
         player.sendMessage(message);
 
         if (this.plugin.isDebugging()) {
-            this.plugin.getLogger().log(Level.INFO, "[Debug] Blocked trade with unlobotomized villager {0} by player {1}", new Object[]{villager.getUniqueId(), player.getName()});
+            this.plugin
+                    .getLogger()
+                    .log(
+                            Level.INFO,
+                            "[Debug] Blocked trade with unlobotomized villager {0} by player {1}",
+                            new Object[] {villager.getUniqueId(), player.getName()});
         }
     }
 }

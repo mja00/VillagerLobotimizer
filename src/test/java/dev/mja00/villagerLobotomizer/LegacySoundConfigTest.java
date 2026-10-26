@@ -1,5 +1,12 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
 import org.bukkit.Location;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
@@ -7,14 +14,6 @@ import org.bukkit.entity.Villager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
-
-import java.lang.reflect.Proxy;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * Legacy enum-style sound names in config are rewritten on load, so a bad rewrite permanently loses the user's value.
@@ -64,23 +63,25 @@ class LegacySoundConfigTest extends MockBukkitTestBase {
 
     private static void assertPlaysOnce(String sound, Consumer<Villager> play) {
         List<Object[]> calls = new ArrayList<>();
-        World world = (World) Proxy.newProxyInstance(World.class.getClassLoader(), new Class<?>[]{World.class}, (proxy, method, args) -> {
-            if (method.getName().equals("playSound")) {
-                calls.add(args);
-                return null;
-            }
-            throw new UnsupportedOperationException(method.getName());
-        });
+        World world = (World) Proxy.newProxyInstance(
+                World.class.getClassLoader(), new Class<?>[] {World.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("playSound")) {
+                        calls.add(args);
+                        return null;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
         Location location = new Location(world, 1, 2, 3);
-        Villager villager = (Villager) Proxy.newProxyInstance(Villager.class.getClassLoader(), new Class<?>[]{Villager.class}, (proxy, method, args) -> {
-            if (method.getName().equals("getWorld")) {
-                return world;
-            }
-            if (method.getName().equals("getLocation")) {
-                return location;
-            }
-            throw new UnsupportedOperationException(method.getName());
-        });
+        Villager villager = (Villager) Proxy.newProxyInstance(
+                Villager.class.getClassLoader(), new Class<?>[] {Villager.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("getWorld")) {
+                        return world;
+                    }
+                    if (method.getName().equals("getLocation")) {
+                        return location;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
 
         play.accept(villager);
 

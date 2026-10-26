@@ -1,16 +1,15 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.scoreboard.Scoreboard;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
-
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Debug teams make every tracked villager glow for all players, so toggling debug on must honor
@@ -19,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class DebugTeamsTest extends MockBukkitTestBase {
 
     private VillagerLobotomizer load(boolean createDebugTeams) {
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(new InputStreamReader(
-                getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(
+                new InputStreamReader(getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
         config.set("create-debug-teams", createDebugTeams);
         return MockBukkit.loadWithConfig(VillagerLobotomizer.class, config);
     }

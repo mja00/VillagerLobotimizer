@@ -1,5 +1,19 @@
 package dev.mja00.villagerLobotomizer;
 
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
+import dev.mja00.villagerLobotomizer.policy.BlockClassifier;
+import dev.mja00.villagerLobotomizer.policy.BlockGrid;
+import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
+import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
+import dev.mja00.villagerLobotomizer.policy.VillagerActivityPolicy;
+import dev.mja00.villagerLobotomizer.policy.VillagerState;
+import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
+import dev.mja00.villagerLobotomizer.utils.StringUtils;
+import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
+import io.papermc.paper.registry.RegistryAccess;
+import io.papermc.paper.registry.RegistryKey;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -18,7 +32,8 @@ import java.util.function.Predicate;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
 import org.bukkit.GameMode;
@@ -30,7 +45,6 @@ import org.bukkit.Sound;
 import org.bukkit.SoundCategory;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.util.BoundingBox;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -44,26 +58,10 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import dev.mja00.villagerLobotomizer.policy.ActivityDecision;
-import dev.mja00.villagerLobotomizer.policy.BlockClassifier;
-import dev.mja00.villagerLobotomizer.policy.BlockGrid;
-import dev.mja00.villagerLobotomizer.policy.BlockSnapshot;
-import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
-import dev.mja00.villagerLobotomizer.policy.VillagerActivityPolicy;
-import dev.mja00.villagerLobotomizer.policy.VillagerState;
-import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
-import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
-import dev.mja00.villagerLobotomizer.utils.StringUtils;
-import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
-import io.papermc.paper.registry.RegistryAccess;
-import io.papermc.paper.registry.RegistryKey;
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 public class LobotomizeStorage {
     private final VillagerLobotomizer plugin;
@@ -110,6 +108,7 @@ public class LobotomizeStorage {
             this.pitch = pitch;
         }
     }
+
     private final LobotomizedMarkerStore markerStore;
     private final NamespacedKey lastRestockCheckDayTimeKey;
     private final NamespacedKey lastRestockGameTimeKey;
@@ -156,10 +155,17 @@ public class LobotomizeStorage {
         // check-interval/inactive-check-interval are scheduler periods (ticks) and must be >= 1, or
         // runAtFixedRate throws IllegalArgumentException for every tracked villager. restock-interval
         // and restock-random-range are wall-clock milliseconds and must not be negative.
-        this.checkInterval = validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 150L);
-        this.inactiveCheckInterval = validateInterval("inactive-check-interval", plugin.getConfig().getLong("inactive-check-interval", this.checkInterval), 1L, 150L);
-        this.restockInterval = validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
-        this.restockRandomRange = validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
+        this.checkInterval =
+                validateInterval("check-interval", plugin.getConfig().getLong("check-interval"), 1L, 150L);
+        this.inactiveCheckInterval = validateInterval(
+                "inactive-check-interval",
+                plugin.getConfig().getLong("inactive-check-interval", this.checkInterval),
+                1L,
+                150L);
+        this.restockInterval =
+                validateInterval("restock-interval", plugin.getConfig().getLong("restock-interval"), 0L, 540000L);
+        this.restockRandomRange =
+                validateInterval("restock-random-range", plugin.getConfig().getLong("restock-random-range"), 0L, 0L);
         this.onlyProfessions = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-professions");
         this.onlyWithExperience = plugin.getConfig().getBoolean("only-lobotomize-villagers-with-experience");
         this.lobotomizePassengers = plugin.getConfig().getBoolean("always-lobotomize-villagers-in-vehicles");
@@ -216,7 +222,8 @@ public class LobotomizeStorage {
                 this.exemptNames,
                 BlockClassifier.fromServerRegistry());
         if (this.plugin.isDebugging()) {
-            this.logger.info("[Debug] Block classification: " + this.activityPolicy.blocks().summary());
+            this.logger.info("[Debug] Block classification: "
+                    + this.activityPolicy.blocks().summary());
         }
 
         try {
@@ -229,10 +236,11 @@ public class LobotomizeStorage {
         } catch (IllegalArgumentException | NoSuchElementException var4) {
             plugin.getLogger().warning("Unknown sound name \"" + soundName + "\"");
         } catch (Exception badError) {
-            plugin.getLogger().warning("Unknown error while trying to get sound name \"" + soundName + "\". Villagers won't have any sounds.");
+            plugin.getLogger()
+                    .warning("Unknown error while trying to get sound name \"" + soundName
+                            + "\". Villagers won't have any sounds.");
             plugin.getLogger().warning(badError.toString());
         }
-
 
         try {
             if (this.customLevelUpSound == null && !levelUpSoundName.isEmpty()) {
@@ -244,7 +252,9 @@ public class LobotomizeStorage {
         } catch (IllegalArgumentException | NoSuchElementException var5) {
             plugin.getLogger().warning("Unknown sound name \"" + levelUpSoundName + "\"");
         } catch (Exception badError) {
-            plugin.getLogger().warning("Unknown error while trying to get sound name \"" + levelUpSoundName + "\". Villagers won't have any sounds.");
+            plugin.getLogger()
+                    .warning("Unknown error while trying to get sound name \"" + levelUpSoundName
+                            + "\". Villagers won't have any sounds.");
             plugin.getLogger().warning(badError.toString());
         }
 
@@ -255,18 +265,14 @@ public class LobotomizeStorage {
         // Use Paper's GlobalRegionScheduler for chunk processing. It never touches entities directly;
         // per-chunk entity access is dispatched to the owning region via getRegionScheduler() (see
         // scheduleChunkVillagerProcessing), keeping this Folia thread-ownership safe.
-        this.chunkProcessingTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
-                plugin,
-                SentryTaskWrapper.wrap((task) -> this.processChunks()),
-                5L,
-                5L
-        );
-        this.watchdogTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(
-                plugin,
-                SentryTaskWrapper.wrap((task) -> this.runWatchdog()),
-                WATCHDOG_INTERVAL_TICKS,
-                WATCHDOG_INTERVAL_TICKS
-        );
+        this.chunkProcessingTask = Bukkit.getGlobalRegionScheduler()
+                .runAtFixedRate(plugin, SentryTaskWrapper.wrap((task) -> this.processChunks()), 5L, 5L);
+        this.watchdogTask = Bukkit.getGlobalRegionScheduler()
+                .runAtFixedRate(
+                        plugin,
+                        SentryTaskWrapper.wrap((task) -> this.runWatchdog()),
+                        WATCHDOG_INTERVAL_TICKS,
+                        WATCHDOG_INTERVAL_TICKS);
     }
 
     private static String customResourceSound(String value) {
@@ -277,19 +283,25 @@ public class LobotomizeStorage {
 
     void playRestockSound(Villager villager) {
         if (this.customRestockSound != null) {
-            villager.getWorld().playSound(villager.getLocation(), this.customRestockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+            villager.getWorld()
+                    .playSound(villager.getLocation(), this.customRestockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
         } else if (this.restockSound != null) {
             villager.getWorld().playSound(villager.getLocation(), this.restockSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
         } else {
-            villager.getWorld().playSound(villager.getLocation(), VillagerUtils.PROFESSION_TO_SOUND.get(villager.getProfession()),
-                    SoundCategory.NEUTRAL, 1.0F,
-                    1.0F);
+            villager.getWorld()
+                    .playSound(
+                            villager.getLocation(),
+                            VillagerUtils.PROFESSION_TO_SOUND.get(villager.getProfession()),
+                            SoundCategory.NEUTRAL,
+                            1.0F,
+                            1.0F);
         }
     }
 
     void playLevelUpSound(Villager villager) {
         if (this.customLevelUpSound != null) {
-            villager.getWorld().playSound(villager.getLocation(), this.customLevelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+            villager.getWorld()
+                    .playSound(villager.getLocation(), this.customLevelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
         } else if (this.levelUpSound != null) {
             villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
         }
@@ -368,7 +380,8 @@ public class LobotomizeStorage {
             }
 
             if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId() + ") on chunk load");
+                this.logger.info("[Debug] Re-lobotomized villager " + villager + " (" + villager.getUniqueId()
+                        + ") on chunk load");
             }
         } else {
             // A villager can load asleep with no valid marker (persistence off, or an unusable state
@@ -382,7 +395,8 @@ public class LobotomizeStorage {
             setActive(villager);
 
             if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
+                this.logger.info(
+                        "[Debug] Tracked villager " + villager + " (" + villager.getUniqueId() + ") as active");
             }
         }
 
@@ -418,19 +432,25 @@ public class LobotomizeStorage {
 
         if (wasInactive) {
             // Use Paper's EntityScheduler for thread safety
-            villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((scheduledTask) -> {
-                villager.setAware(true);
-                if (this.silentLobotomizedVillagers) {
-                    villager.setSilent(false);
-                }
-            }), null);
+            villager.getScheduler()
+                    .run(
+                            this.plugin,
+                            SentryTaskWrapper.wrap((scheduledTask) -> {
+                                villager.setAware(true);
+                                if (this.silentLobotomizedVillagers) {
+                                    villager.setSilent(false);
+                                }
+                            }),
+                            null);
         }
 
         if (this.plugin.isDebugging()) {
             if (removed) {
-                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId() + "), marked as active = " + wasActive + ", cancelled scheduler");
+                this.logger.info("[Debug] Untracked villager " + villager + " (" + villager.getUniqueId()
+                        + "), marked as active = " + wasActive + ", cancelled scheduler");
             } else {
-                this.logger.info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId() + "), but it was not tracked");
+                this.logger.info("[Debug] Attempted to untrack villager " + villager + " (" + villager.getUniqueId()
+                        + "), but it was not tracked");
             }
         }
     }
@@ -548,9 +568,9 @@ public class LobotomizeStorage {
 
     /**
      * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
-     * 
+     *
      * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
-     *                  Wake operations are dispatched via each villager's {@code EntityScheduler}, 
+     *                  Wake operations are dispatched via each villager's {@code EntityScheduler},
      *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
      *                  where the scheduler may not run; in this case, mutations are attempted directly
      *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
@@ -611,9 +631,14 @@ public class LobotomizeStorage {
                 // Plugin stays enabled: the entity scheduler will run, so this works cross-region
                 // without throwing a thread-ownership exception per villager.
                 try {
-                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
+                    villager.getScheduler()
+                            .run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
                 } catch (Exception e) {
-                    this.logger.log(java.util.logging.Level.WARNING, "Failed to schedule un-lobotomize for villager " + villager.getUniqueId() + " during reload: " + e.getMessage(), e);
+                    this.logger.log(
+                            java.util.logging.Level.WARNING,
+                            "Failed to schedule un-lobotomize for villager " + villager.getUniqueId()
+                                    + " during reload: " + e.getMessage(),
+                            e);
                 }
                 continue;
             }
@@ -624,13 +649,22 @@ public class LobotomizeStorage {
             } catch (IllegalStateException e) {
                 // If we get a thread violation, try using the entity scheduler as a last resort.
                 try {
-                    villager.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
+                    villager.getScheduler()
+                            .run(this.plugin, SentryTaskWrapper.wrap((task) -> wakeVillager(villager)), null);
                 } catch (Exception schedulerException) {
                     // If both fail, log warning but don't crash the shutdown
-                    this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
+                    this.logger.log(
+                            java.util.logging.Level.WARNING,
+                            "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: "
+                                    + e.getMessage(),
+                            e);
                 }
             } catch (Exception e) {
-                this.logger.log(java.util.logging.Level.WARNING, "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: " + e.getMessage(), e);
+                this.logger.log(
+                        java.util.logging.Level.WARNING,
+                        "Failed to un-lobotomize villager " + villager.getUniqueId() + " during shutdown: "
+                                + e.getMessage(),
+                        e);
             }
         }
     }
@@ -646,8 +680,7 @@ public class LobotomizeStorage {
         }
         clearLobotomizedMarker(villager);
     }
-    
-    
+
     /**
      * Safely processes and potentially transitions a villager between active and inactive states.
      *
@@ -686,8 +719,8 @@ public class LobotomizeStorage {
             }
 
             if (isActive && isInactive) {
-                this.logger.info("[Watchdog] processVillagerSafely saw villager "
-                        + villager.getUniqueId() + " in both sets; reconciling.");
+                this.logger.info("[Watchdog] processVillagerSafely saw villager " + villager.getUniqueId()
+                        + " in both sets; reconciling.");
                 reconcile(villager);
                 return;
             }
@@ -699,7 +732,8 @@ public class LobotomizeStorage {
             }
         } catch (IllegalStateException e) {
             if (this.plugin.isDebugging()) {
-                this.logger.warning("Skipping villager processing for " + villager.getUniqueId() + " due to state change: " + e.getMessage());
+                this.logger.warning("Skipping villager processing for " + villager.getUniqueId()
+                        + " due to state change: " + e.getMessage());
             }
         }
     }
@@ -747,8 +781,8 @@ public class LobotomizeStorage {
             if (!active) {
                 setActive(villager);
                 if (decision != null) {
-                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now active, "
-                            + decision.summary());
+                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId()
+                            + ") is now active, " + decision.summary());
                 }
                 return true; // Transitioned: caller may want to reschedule at new interval
             }
@@ -775,8 +809,8 @@ public class LobotomizeStorage {
                 }
                 setInactive(villager);
                 if (decision != null) {
-                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId() + ") is now inactive, "
-                            + decision.summary());
+                    this.logger.info("[Debug] Villager " + villager + " (" + villager.getUniqueId()
+                            + ") is now inactive, " + decision.summary());
                 }
                 return true; // Transitioned: caller may want to reschedule at new interval
             }
@@ -818,8 +852,8 @@ public class LobotomizeStorage {
             }
         }
         if (dupes.isEmpty()) return;
-        this.logger.warning("[Watchdog] Found " + dupes.size()
-                + " villager(s) in both active and inactive sets; reconciling.");
+        this.logger.warning(
+                "[Watchdog] Found " + dupes.size() + " villager(s) in both active and inactive sets; reconciling.");
         for (Villager v : dupes) {
             reconcile(v);
         }
@@ -835,40 +869,44 @@ public class LobotomizeStorage {
      */
     private void reconcile(@NotNull Villager v) {
         try {
-            v.getScheduler().run(this.plugin, SentryTaskWrapper.wrap((t) -> {
-                // Already queued when flush ran: re-asserting a marker now would outlive the
-                // uninstall sweep that just cleared it.
-                if (this.shuttingDown) {
-                    return;
-                }
-                if (!v.isValid() || v.isDead()) {
-                    untrack(v);
-                    return;
-                }
-                Check check = check(v, this.plugin.isDebugging());
-                ActivityDecision decision = check.trace();
-                boolean shouldBeActive = check.active();
-                if (shouldBeActive) {
-                    setActive(v);
-                    v.setAware(true);
-                    if (this.silentLobotomizedVillagers) {
-                        v.setSilent(false);
-                    }
-                    clearLobotomizedMarker(v);
-                } else {
-                    setInactive(v);
-                    v.setAware(false);
-                    if (this.silentLobotomizedVillagers) {
-                        v.setSilent(true);
-                    }
-                    if (persistLobotomizedState()) {
-                        setLobotomizedMarker(v);
-                    }
-                }
-                this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()
-                        + " to " + (shouldBeActive ? "active" : "inactive")
-                        + (decision != null ? ", " + decision.summary() : ""));
-            }), null);
+            v.getScheduler()
+                    .run(
+                            this.plugin,
+                            SentryTaskWrapper.wrap((t) -> {
+                                // Already queued when flush ran: re-asserting a marker now would outlive the
+                                // uninstall sweep that just cleared it.
+                                if (this.shuttingDown) {
+                                    return;
+                                }
+                                if (!v.isValid() || v.isDead()) {
+                                    untrack(v);
+                                    return;
+                                }
+                                Check check = check(v, this.plugin.isDebugging());
+                                ActivityDecision decision = check.trace();
+                                boolean shouldBeActive = check.active();
+                                if (shouldBeActive) {
+                                    setActive(v);
+                                    v.setAware(true);
+                                    if (this.silentLobotomizedVillagers) {
+                                        v.setSilent(false);
+                                    }
+                                    clearLobotomizedMarker(v);
+                                } else {
+                                    setInactive(v);
+                                    v.setAware(false);
+                                    if (this.silentLobotomizedVillagers) {
+                                        v.setSilent(true);
+                                    }
+                                    if (persistLobotomizedState()) {
+                                        setLobotomizedMarker(v);
+                                    }
+                                }
+                                this.logger.info("[Watchdog] Reconciled villager " + v.getUniqueId()
+                                        + " to " + (shouldBeActive ? "active" : "inactive")
+                                        + (decision != null ? ", " + decision.summary() : ""));
+                            }),
+                            null);
         } catch (IllegalPluginAccessException e) {
             // plugin disabling
         }
@@ -916,29 +954,34 @@ public class LobotomizeStorage {
         }
 
         // Both restocking and leveling require it to be day (in the overworld) with a job site nearby.
-        if (villager.getWorld().getEnvironment() == World.Environment.NORMAL && !villager.getWorld().isDayTime()) {
+        if (villager.getWorld().getEnvironment() == World.Environment.NORMAL
+                && !villager.getWorld().isDayTime()) {
             if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Skipping trade refresh for " + villager.getUniqueId() + " - it's night time in overworld");
+                this.logger.info("[Debug] Skipping trade refresh for " + villager.getUniqueId()
+                        + " - it's night time in overworld");
             }
             return;
         }
 
         if (!VillagerUtils.isJobSiteNearby(villager)) {
             if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Skipping trade refresh for " + villager.getUniqueId() + " - no job site nearby");
+                this.logger.info(
+                        "[Debug] Skipping trade refresh for " + villager.getUniqueId() + " - no job site nearby");
             }
             return;
         }
 
         if (this.plugin.isDebugging()) {
-            this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() +
-                    ": timeSinceLastRestock=" + timeSinceLastRestock + "ms, effectiveInterval=" + effectiveInterval + "ms, restocksToday=" + villager.getRestocksToday());
+            this.logger.info("[Debug] Trade refresh check for " + villager.getUniqueId() + ": timeSinceLastRestock="
+                    + timeSinceLastRestock + "ms, effectiveInterval=" + effectiveInterval + "ms, restocksToday="
+                    + villager.getRestocksToday());
         }
 
         if (intervalPassed && shouldRestock(villager)) {
             lastRestock = now;
             pdc.set(this.key, PersistentDataType.LONG, lastRestock);
-            // Demand is computed from this period's uses, so it must run before they are reset (as vanilla restock does).
+            // Demand is computed from this period's uses, so it must run before they are reset (as vanilla restock
+            // does).
             villager.updateDemand();
             List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
 
@@ -949,17 +992,21 @@ public class LobotomizeStorage {
             villager.setRecipes(recipes);
             villager.setRestocksToday(villager.getRestocksToday() + 1);
             // Vanilla's frozen-time fallback counts 12000 ticks from the last restock, not the last reset.
-            pdc.set(this.lastRestockGameTimeKey, PersistentDataType.LONG, villager.getWorld().getGameTime());
+            pdc.set(
+                    this.lastRestockGameTimeKey,
+                    PersistentDataType.LONG,
+                    villager.getWorld().getGameTime());
 
             if (this.plugin.isDebugging()) {
-                this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: " + villager.getRestocksToday());
+                this.logger.info("[Debug] Villager " + villager.getUniqueId() + " restocked! restocksToday now: "
+                        + villager.getRestocksToday());
             }
 
             playRestockSound(villager);
         } else if (this.plugin.isDebugging()) {
-            this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() +
-                    ": intervalPassed=" + intervalPassed + " (needed " + effectiveInterval + "ms, had " + timeSinceLastRestock + "ms)" +
-                    (intervalPassed ? ", shouldRestock=false" : ""));
+            this.logger.info("[Debug] Trade refresh NOT performed for " + villager.getUniqueId() + ": intervalPassed="
+                    + intervalPassed + " (needed " + effectiveInterval + "ms, had " + timeSinceLastRestock + "ms)"
+                    + (intervalPassed ? ", shouldRestock=false" : ""));
         }
 
         // Level the villager up to match its accumulated experience. Gated on day + job site above
@@ -973,11 +1020,16 @@ public class LobotomizeStorage {
                 villager.addPotionEffect(regenEffect);
 
                 if (this.plugin.isDebugging()) {
-                    this.plugin.getLogger().info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel + " from level " + currentLevel);
+                    this.plugin
+                            .getLogger()
+                            .info("Villager " + villager.getUniqueId() + " was leveled up to level " + expectedLevel
+                                    + " from level " + currentLevel);
                 }
             }
         } catch (IllegalArgumentException e) {
-            this.plugin.getLogger().warning("Failed to level up villager " + villager.getUniqueId() + ": " + e.getMessage());
+            this.plugin
+                    .getLogger()
+                    .warning("Failed to level up villager " + villager.getUniqueId() + ": " + e.getMessage());
         }
     }
 
@@ -990,8 +1042,8 @@ public class LobotomizeStorage {
         if (!this.heroGiftsEnabled || this.shuttingDown || this.inactiveVillagers.isEmpty()) {
             return;
         }
-        for (Villager villager : hero.getWorld().getNearbyEntitiesByType(Villager.class, hero.getLocation(),
-                HeroGiftPolicy.VIEW_RANGE)) {
+        for (Villager villager : hero.getWorld()
+                .getNearbyEntitiesByType(Villager.class, hero.getLocation(), HeroGiftPolicy.VIEW_RANGE)) {
             if (Bukkit.isOwnedByCurrentRegion(villager) && this.inactiveVillagers.contains(villager)) {
                 offerHeroGift(villager, hero);
             }
@@ -1010,7 +1062,9 @@ public class LobotomizeStorage {
         }
         try {
             // An aware villager is running vanilla's gift behavior itself.
-            if (villager.isAware() || villager.isTrading() || villager.isSleeping()
+            if (villager.isAware()
+                    || villager.isTrading()
+                    || villager.isSleeping()
                     || hero.getWorld() != villager.getWorld()) {
                 return;
             }
@@ -1020,14 +1074,15 @@ public class LobotomizeStorage {
             if (!canSeeHero(villager, hero, distanceSquared)) {
                 return;
             }
-            HeroGiftPolicy.GiftClock clock = this.heroGiftClocks.computeIfAbsent(villager.getUniqueId(),
+            HeroGiftPolicy.GiftClock clock = this.heroGiftClocks.computeIfAbsent(
+                    villager.getUniqueId(),
                     id -> new HeroGiftPolicy.GiftClock(HeroGiftPolicy.firstGiftDelay(this.random)));
             boolean inRange = HeroGiftPolicy.withinThrowingDistance(
                     heroLocation.getBlockX() - villagerLocation.getBlockX(),
                     heroLocation.getBlockY() - villagerLocation.getBlockY(),
                     heroLocation.getBlockZ() - villagerLocation.getBlockZ());
-            HeroGiftPolicy.Step step = HeroGiftPolicy.onSighting(clock, villager.getWorld().getGameTime(),
-                    hero.getUniqueId(), distanceSquared, inRange);
+            HeroGiftPolicy.Step step = HeroGiftPolicy.onSighting(
+                    clock, villager.getWorld().getGameTime(), hero.getUniqueId(), distanceSquared, inRange);
             if (step == HeroGiftPolicy.Step.WAIT) {
                 return;
             }
@@ -1048,15 +1103,18 @@ public class LobotomizeStorage {
             HeroGiftPolicy.startNextCooldown(clock, this.random);
             deliverHeroGift(villager, hero, clock.remainingTicks());
         } catch (RuntimeException e) {
-            this.logger.log(java.util.logging.Level.WARNING, e,
+            this.logger.log(
+                    java.util.logging.Level.WARNING,
+                    e,
                     () -> "Could not give a hero gift from villager " + villager.getUniqueId());
         }
     }
 
     private boolean canSeeHero(@NotNull Villager villager, @NotNull Player hero, double distanceSquared) {
-        return HeroGiftPolicy.isCandidate(distanceSquared,
-                hero.hasPotionEffect(PotionEffectType.HERO_OF_THE_VILLAGE),
-                hero.getGameMode() == GameMode.SPECTATOR)
+        return HeroGiftPolicy.isCandidate(
+                        distanceSquared,
+                        hero.hasPotionEffect(PotionEffectType.HERO_OF_THE_VILLAGE),
+                        hero.getGameMode() == GameMode.SPECTATOR)
                 && this.heroVisibility.test(villager, hero);
     }
 
@@ -1064,8 +1122,8 @@ public class LobotomizeStorage {
      * The closest other hero the villager can see, if any is closer than {@code recipient}. Only
      * heroes owned by this region are considered; on Folia any hero in view of the villager is.
      */
-    private @Nullable Player closerVisibleHero(@NotNull Villager villager, @NotNull Player recipient,
-                                               double recipientDistanceSquared) {
+    private @Nullable Player closerVisibleHero(
+            @NotNull Villager villager, @NotNull Player recipient, double recipientDistanceSquared) {
         HeroTracker heroes = this.plugin.getHeroTracker();
         if (heroes == null) {
             return null;
@@ -1101,8 +1159,8 @@ public class LobotomizeStorage {
             return;
         }
         Location current = villager.getLocation();
-        TurnedHead head = this.turnedHeads.computeIfAbsent(villager.getUniqueId(),
-                id -> new TurnedHead(villager, current.getYaw(), current.getPitch()));
+        TurnedHead head = this.turnedHeads.computeIfAbsent(
+                villager.getUniqueId(), id -> new TurnedHead(villager, current.getYaw(), current.getPitch()));
         head.lastFacedTick = now;
         eyes.setDirection(toHero);
         villager.setRotation(eyes.getYaw(), eyes.getPitch());
@@ -1113,8 +1171,13 @@ public class LobotomizeStorage {
 
     private boolean scheduleTurnBack(@NotNull Villager villager, long delayTicks) {
         try {
-            return villager.getScheduler().runDelayed(this.plugin,
-                    SentryTaskWrapper.wrap(task -> turnBackWhenIdle(villager)), null, delayTicks) != null;
+            return villager.getScheduler()
+                            .runDelayed(
+                                    this.plugin,
+                                    SentryTaskWrapper.wrap(task -> turnBackWhenIdle(villager)),
+                                    null,
+                                    delayTicks)
+                    != null;
         } catch (IllegalPluginAccessException e) {
             return false;
         }
@@ -1138,8 +1201,11 @@ public class LobotomizeStorage {
                 continue;
             }
             try {
-                villager.getScheduler().run(this.plugin,
-                        SentryTaskWrapper.wrap(task -> villager.setRotation(head.yaw, head.pitch)), null);
+                villager.getScheduler()
+                        .run(
+                                this.plugin,
+                                SentryTaskWrapper.wrap(task -> villager.setRotation(head.yaw, head.pitch)),
+                                null);
             } catch (IllegalPluginAccessException e) {
                 // Shutting down: the plugin can no longer schedule work.
             }
@@ -1174,13 +1240,20 @@ public class LobotomizeStorage {
      * throw, drops it at the hero's feet instead so it can never land inside the cell.
      */
     private void deliverHeroGift(@NotNull Villager villager, @NotNull Player hero, long cooldownTicks) {
-        LootTables table = HeroGiftPolicy.giftTable(!villager.isAdult(), villager.getProfession().key().value());
+        LootTables table = HeroGiftPolicy.giftTable(
+                !villager.isAdult(), villager.getProfession().key().value());
         Collection<ItemStack> items = this.heroGiftLoot.roll(villager, table, this.random);
         Location from = villager.getEyeLocation().subtract(0.0, HeroGiftPolicy.THROW_HEIGHT_BELOW_EYES, 0.0);
         Location heroLocation = hero.getLocation();
-        Vector velocity = heroLocation.toVector().subtract(villager.getLocation().toVector());
-        velocity = velocity.lengthSquared() < 1.0E-6 ? new Vector() : velocity.normalize().multiply(HeroGiftPolicy.THROW_SPEED);
-        boolean thrown = HeroGiftPolicy.throwEscapes(from.toVector(), velocity, villager.getLocation().toVector(),
+        Vector velocity =
+                heroLocation.toVector().subtract(villager.getLocation().toVector());
+        velocity = velocity.lengthSquared() < 1.0E-6
+                ? new Vector()
+                : velocity.normalize().multiply(HeroGiftPolicy.THROW_SPEED);
+        boolean thrown = HeroGiftPolicy.throwEscapes(
+                from.toVector(),
+                velocity,
+                villager.getLocation().toVector(),
                 this.throwCollider.apply(villager.getWorld()));
         for (ItemStack item : items) {
             if (item == null || item.isEmpty()) {
@@ -1201,10 +1274,17 @@ public class LobotomizeStorage {
             }
         }
         if (this.plugin.isDebugging()) {
-            this.logger.log(java.util.logging.Level.INFO,
+            this.logger.log(
+                    java.util.logging.Level.INFO,
                     "[Debug] Villager {0} {1} a hero gift ({2}, {3} stack(s)) to {4}; next after {5} ticks with a hero in view",
-                    new Object[]{villager.getUniqueId(), thrown ? "threw" : "dropped", table.name(),
-                            String.valueOf(items.size()), hero.getName(), String.valueOf(cooldownTicks)});
+                    new Object[] {
+                        villager.getUniqueId(),
+                        thrown ? "threw" : "dropped",
+                        table.name(),
+                        String.valueOf(items.size()),
+                        hero.getName(),
+                        String.valueOf(cooldownTicks)
+                    });
         }
     }
 
@@ -1323,7 +1403,7 @@ public class LobotomizeStorage {
             return false;
         });
     }
-    
+
     /**
      * Schedules villager processing for a chunk using region-appropriate scheduling.
      *
@@ -1354,10 +1434,13 @@ public class LobotomizeStorage {
                         if (this.inactiveVillagers.contains(villager) || this.activeVillagers.contains(villager)) {
                             boolean isActive = this.activeVillagers.contains(villager);
                             if (this.processVillager(villager, isActive)) {
-                                // Later periodic checks see no transition, so only this path can move the task to the new state's interval.
-                                this.rescheduleVillagerTask(villager, isActive ? this.inactiveCheckInterval : this.checkInterval);
+                                // Later periodic checks see no transition, so only this path can move the task to the
+                                // new state's interval.
+                                this.rescheduleVillagerTask(
+                                        villager, isActive ? this.inactiveCheckInterval : this.checkInterval);
                                 if (this.plugin.isDebugging()) {
-                                    this.logger.info("[Debug] Processed villager " + villager + " (" + villager.getUniqueId() + ") in chunk " + cx + ", " + cz);
+                                    this.logger.info("[Debug] Processed villager " + villager + " ("
+                                            + villager.getUniqueId() + ") in chunk " + cx + ", " + cz);
                                 }
                             }
                         }
@@ -1372,7 +1455,6 @@ public class LobotomizeStorage {
         }
     }
 
-
     /** A decision plus its rule trace, which is only built on request since it allocates per check. */
     private record Check(boolean active, @Nullable ActivityDecision trace) {
         private static final Check ACTIVE = new Check(true, null);
@@ -1381,7 +1463,8 @@ public class LobotomizeStorage {
 
     private Check check(Villager villager, boolean trace) {
         Location loc = villager.getLocation();
-        return check(villager, loc.getY(), loc.getBlockX(), Location.locToBlock(loc.getY() + 0.51), loc.getBlockZ(), trace);
+        return check(
+                villager, loc.getY(), loc.getBlockX(), Location.locToBlock(loc.getY() + 0.51), loc.getBlockZ(), trace);
     }
 
     private Check check(Villager villager, double feetY, int blockX, int blockY, int blockZ, boolean trace) {
@@ -1444,7 +1527,9 @@ public class LobotomizeStorage {
                 villager.getVehicle() instanceof Vehicle,
                 villager.getProfession() == Villager.Profession.NONE,
                 villager.getVillagerExperience(),
-                blockX, blockY, blockZ,
+                blockX,
+                blockY,
+                blockZ,
                 feetY + height,
                 height);
     }
@@ -1529,7 +1614,8 @@ public class LobotomizeStorage {
      * @return the converted sound name, or an empty string if the input is null
      */
     private String convertLegacySoundName(String soundName, String configKey, Registry<@NotNull Sound> soundRegistry) {
-        Stream<String> knownKeys = soundRegistry.keyStream()
+        Stream<String> knownKeys = soundRegistry
+                .keyStream()
                 .filter(key -> key.getNamespace().equals(NamespacedKey.MINECRAFT))
                 .map(NamespacedKey::getKey);
         String converted = StringUtils.convertLegacySoundNameFormat(soundName, knownKeys);
@@ -1599,13 +1685,13 @@ public class LobotomizeStorage {
             }
 
             try {
-                ScheduledTask task = villager.getScheduler().runAtFixedRate(
-                        this.plugin,
-                        SentryTaskWrapper.wrap((scheduledTask) -> this.processVillagerSafely(villager)),
-                        null,
-                        interval,
-                        interval
-                );
+                ScheduledTask task = villager.getScheduler()
+                        .runAtFixedRate(
+                                this.plugin,
+                                SentryTaskWrapper.wrap((scheduledTask) -> this.processVillagerSafely(villager)),
+                                null,
+                                interval,
+                                interval);
                 // A removed entity's retired scheduler returns null; drop it rather than leave it tracked with no task.
                 if (task == null) {
                     untrack(villager);

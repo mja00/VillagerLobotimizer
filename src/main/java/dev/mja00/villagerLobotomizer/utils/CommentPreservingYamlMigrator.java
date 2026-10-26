@@ -1,12 +1,11 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.yaml.snakeyaml.Yaml;
-
 import java.io.*;
 import java.util.*;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.yaml.snakeyaml.Yaml;
 
 /**
  * A YAML migrator that preserves comments while merging configurations.
@@ -53,7 +52,14 @@ public class CommentPreservingYamlMigrator {
             Map<String, Object> mergedMap = new LinkedHashMap<>();
             Map<String, String> mergedComments = new LinkedHashMap<>();
 
-            mergeRecursive("", existingMap, defaultMap, mergedMap, existingData.comments, defaultData.comments, mergedComments);
+            mergeRecursive(
+                    "",
+                    existingMap,
+                    defaultMap,
+                    mergedMap,
+                    existingData.comments,
+                    defaultData.comments,
+                    mergedComments);
 
             logger.fine("Merged configuration has " + mergedComments.size() + " comments");
 
@@ -72,9 +78,14 @@ public class CommentPreservingYamlMigrator {
      * Recursively merges default YAML configuration into existing configuration, preserving comments and extra keys.
      */
     @SuppressWarnings("unchecked")
-    private void mergeRecursive(String path, Map<String, Object> existing, Map<String, Object> defaults,
-                               Map<String, Object> merged, Map<String, String> existingComments,
-                               Map<String, String> defaultComments, Map<String, String> mergedComments) {
+    private void mergeRecursive(
+            String path,
+            Map<String, Object> existing,
+            Map<String, Object> defaults,
+            Map<String, Object> merged,
+            Map<String, String> existingComments,
+            Map<String, String> defaultComments,
+            Map<String, String> mergedComments) {
 
         // First, add all keys from defaults to maintain order
         for (String key : defaults.keySet()) {
@@ -86,9 +97,14 @@ public class CommentPreservingYamlMigrator {
                 Map<String, Object> nestedMerged = new LinkedHashMap<>();
                 merged.put(key, nestedMerged);
 
-                mergeRecursive(keyPath, (Map<String, Object>) existingValue,
-                             (Map<String, Object>) defaultValue, nestedMerged,
-                             existingComments, defaultComments, mergedComments);
+                mergeRecursive(
+                        keyPath,
+                        (Map<String, Object>) existingValue,
+                        (Map<String, Object>) defaultValue,
+                        nestedMerged,
+                        existingComments,
+                        defaultComments,
+                        mergedComments);
 
                 // Preserve existing comment or use default comment
                 String comment = existingComments.get(keyPath);
@@ -167,7 +183,9 @@ public class CommentPreservingYamlMigrator {
                 } else {
                     pendingComments.add(comment);
                 }
-            } else if (line.trim().contains(":") && !line.trim().startsWith("#") && !line.trim().startsWith("-")) {
+            } else if (line.trim().contains(":")
+                    && !line.trim().startsWith("#")
+                    && !line.trim().startsWith("-")) {
                 foundFirstKey = true;
 
                 // Key line: attach pending comments to it
@@ -271,7 +289,8 @@ public class CommentPreservingYamlMigrator {
      * @param headerComments comments to include at the start of the output
      * @return the formatted YAML string with comments
      */
-    private String generateYamlWithComments(Map<String, Object> data, Map<String, String> comments, List<String> headerComments) {
+    private String generateYamlWithComments(
+            Map<String, Object> data, Map<String, String> comments, List<String> headerComments) {
         StringBuilder result = new StringBuilder();
 
         for (String comment : headerComments) {
@@ -294,8 +313,12 @@ public class CommentPreservingYamlMigrator {
      * @param pathPrefix the current dot-separated key path prefix for looking up comments
      */
     @SuppressWarnings("unchecked")
-    private void generateYamlSection(Map<String, Object> data, Map<String, String> comments,
-                                   StringBuilder result, String pathPrefix, int indentLevel) {
+    private void generateYamlSection(
+            Map<String, Object> data,
+            Map<String, String> comments,
+            StringBuilder result,
+            String pathPrefix,
+            int indentLevel) {
         String indent = "  ".repeat(indentLevel);
 
         for (Map.Entry<String, Object> entry : data.entrySet()) {
@@ -314,10 +337,17 @@ public class CommentPreservingYamlMigrator {
             } else if (value instanceof List<?> list) {
                 result.append(indent).append(key).append(":\n");
                 for (Object item : list) {
-                    result.append(indent).append("  - ").append(formatValue(item)).append("\n");
+                    result.append(indent)
+                            .append("  - ")
+                            .append(formatValue(item))
+                            .append("\n");
                 }
             } else {
-                result.append(indent).append(key).append(": ").append(formatValue(value)).append("\n");
+                result.append(indent)
+                        .append(key)
+                        .append(": ")
+                        .append(formatValue(value))
+                        .append("\n");
             }
         }
     }
@@ -336,6 +366,5 @@ public class CommentPreservingYamlMigrator {
         return value.toString();
     }
 
-    private record CommentedYamlData(Map<String, String> comments, List<String> headerComments) {
-    }
+    private record CommentedYamlData(Map<String, String> comments, List<String> headerComments) {}
 }

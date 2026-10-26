@@ -1,12 +1,12 @@
 package dev.mja00.villagerLobotomizer.utils;
 
 import com.google.common.collect.ImmutableMap;
-import org.bukkit.Bukkit;
 import java.lang.reflect.Method;
 import java.util.Map;
-
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
-public class VersionUtils   {
+
+public class VersionUtils {
 
     private static final Map<String, SupportStatus> unsupportedServers;
     private static final String PFX = make("8(;4>`");
@@ -102,8 +102,7 @@ public class VersionUtils   {
         STUPID_PLUGIN(false),
         NMS_CLEANROOM(false),
         UNSTABLE(false),
-        OUTDATED(false)
-        ;
+        OUTDATED(false);
 
         private final boolean supported;
 

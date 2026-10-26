@@ -5,6 +5,7 @@ plugins {
     id("io.papermc.hangar-publish-plugin") version "0.1.+"
     id("com.gradleup.shadow") version "9.3.+"
     id("com.modrinth.minotaur") version "2.+"
+    id("com.diffplug.spotless") version "8.10.4"
 }
 
 group = "dev.mja00"
@@ -69,6 +70,14 @@ tasks.withType<JavaCompile>().configureEach {
     }
 }
 
+// palantir-java-format breaks on JDK 27 (palantir/palantir-java-format#1785) and 2.102.0 on 21, so the
+// Gradle daemon is pinned to 21 in gradle/gradle-daemon-jvm.properties.
+spotless {
+    java {
+        palantirJavaFormat("2.101.0")
+    }
+}
+
 tasks {
     processResources {
         val props = mapOf("version" to version)
@@ -85,6 +94,8 @@ tasks {
     runServer {
         dependsOn(shadowJar)
         minecraftVersion("26.3")
+        // The daemon runs on 21, but Minecraft 26.x needs Java 25.
+        javaLauncher = project.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
 
         // Set system property to mark this as a development environment for Sentry
         systemProperty("villagerlobotimizer.dev", "true")

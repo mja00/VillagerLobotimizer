@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
-
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -200,10 +199,13 @@ public class VillagerUtils {
      * @return {@code true} if the villager is allowed to restock today and has recipes requiring restocking,
      *         {@code false} otherwise
      */
-    public static boolean shouldRestock(Villager villager, NamespacedKey lastRestockCheckDayTimeKey, NamespacedKey lastRestockGameTimeKey) {
+    public static boolean shouldRestock(
+            Villager villager, NamespacedKey lastRestockCheckDayTimeKey, NamespacedKey lastRestockGameTimeKey) {
         PersistentDataContainer pdc = villager.getPersistentDataContainer();
-        long lastRestockCheckDayTime = pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
-        long lastRestockGameTime = pdc.getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
+        long lastRestockCheckDayTime =
+                pdc.getOrDefault(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
+        long lastRestockGameTime =
+                pdc.getOrDefault(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, 0L);
         World world = villager.getWorld();
         long fullTime = world.getFullTime();
         long gameTime = world.getGameTime();

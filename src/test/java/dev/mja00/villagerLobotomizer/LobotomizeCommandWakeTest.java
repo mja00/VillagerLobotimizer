@@ -1,5 +1,8 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Villager;
@@ -8,9 +11,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LobotomizeCommandWakeTest extends MockBukkitTestBase {
 
@@ -38,7 +38,8 @@ class LobotomizeCommandWakeTest extends MockBukkitTestBase {
         server.getScheduler().performTicks(2);
 
         assertTrue(villager.isAware(), "wake must restore AI even when the villager is untracked");
-        assertFalse(villager.getPersistentDataContainer().has(markerKey, PersistentDataType.BYTE),
+        assertFalse(
+                villager.getPersistentDataContainer().has(markerKey, PersistentDataType.BYTE),
                 "wake must clear the marker so the villager is not re-lobotomized");
     }
 
@@ -52,7 +53,8 @@ class LobotomizeCommandWakeTest extends MockBukkitTestBase {
         new LobotomizeCommand(plugin).wakeVillager(villager);
         server.getScheduler().performTicks(2);
 
-        assertFalse(plugin.getStorage().getActive().contains(villager)
+        assertFalse(
+                plugin.getStorage().getActive().contains(villager)
                         || plugin.getStorage().getLobotomized().contains(villager),
                 "a queued reload add must not re-track a villager the player just woke");
     }

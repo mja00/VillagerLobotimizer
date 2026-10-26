@@ -10,5 +10,4 @@ import java.util.UUID;
  * @param chunkX   chunk X it was last seen in
  * @param chunkZ   chunk Z it was last seen in
  */
-public record MarkedVillager(UUID entityId, UUID worldId, int chunkX, int chunkZ) {
-}
+public record MarkedVillager(UUID entityId, UUID worldId, int chunkX, int chunkZ) {}

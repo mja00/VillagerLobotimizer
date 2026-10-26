@@ -1,8 +1,8 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.*;
+
+import org.junit.jupiter.api.Test;
 
 /**
  * Tests for SentryContextProvider.
@@ -55,20 +55,21 @@ class SentryContextProviderTest {
         String version = SentryContextProvider.getJavaVersion();
         // Java version should always be available and contain digits (not "unknown")
         assertNotEquals("unknown", version, "Java version should be available in test environment");
-        assertTrue(version.matches(".*\\d.*"),
-            "Java version should contain digits, got: " + version);
+        assertTrue(version.matches(".*\\d.*"), "Java version should contain digits, got: " + version);
     }
 
     @Test
     void methodsHandleUninitializedEnvironmentGracefully() {
         // All methods should complete without throwing exceptions
         // even if Bukkit is not initialized (returns "unknown" as fallback)
-        assertDoesNotThrow(() -> {
-            SentryContextProvider.getServerBrand();
-            SentryContextProvider.getServerVersion();
-            SentryContextProvider.getMinecraftVersion();
-            SentryContextProvider.getBukkitVersion();
-            SentryContextProvider.getJavaVersion();
-        }, "All methods should handle uninitialized environment gracefully");
+        assertDoesNotThrow(
+                () -> {
+                    SentryContextProvider.getServerBrand();
+                    SentryContextProvider.getServerVersion();
+                    SentryContextProvider.getMinecraftVersion();
+                    SentryContextProvider.getBukkitVersion();
+                    SentryContextProvider.getJavaVersion();
+                },
+                "All methods should handle uninitialized environment gracefully");
     }
 }

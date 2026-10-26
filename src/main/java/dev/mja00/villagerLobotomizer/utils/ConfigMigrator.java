@@ -1,11 +1,5 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.jetbrains.annotations.NotNull;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -16,6 +10,11 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Set;
 import java.util.logging.Logger;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
 public class ConfigMigrator {
     private final JavaPlugin plugin;
@@ -56,8 +55,8 @@ public class ConfigMigrator {
             return;
         }
 
-        logger.info("Config migration needed: current version " + existingVersion +
-                   " -> target version " + CURRENT_CONFIG_VERSION);
+        logger.info("Config migration needed: current version " + existingVersion + " -> target version "
+                + CURRENT_CONFIG_VERSION);
 
         try {
             createBackup(configFile);
@@ -112,7 +111,8 @@ public class ConfigMigrator {
         if (!migratedYaml.contains("config-version:")) {
             migratedYaml = "config-version: " + CURRENT_CONFIG_VERSION + "\n" + migratedYaml;
         } else {
-            migratedYaml = migratedYaml.replaceFirst("config-version:\\s*\\d+", "config-version: " + CURRENT_CONFIG_VERSION);
+            migratedYaml =
+                    migratedYaml.replaceFirst("config-version:\\s*\\d+", "config-version: " + CURRENT_CONFIG_VERSION);
         }
         return migratedYaml;
     }
@@ -192,13 +192,15 @@ public class ConfigMigrator {
         }
     }
 
-    private void mergeSection(ConfigurationSection existing, ConfigurationSection defaults, ConfigurationSection merged) {
+    private void mergeSection(
+            ConfigurationSection existing, ConfigurationSection defaults, ConfigurationSection merged) {
         if (defaults == null) return;
 
         for (String key : defaults.getKeys(false)) {
             if (defaults.isConfigurationSection(key)) {
                 ConfigurationSection defaultSubSection = defaults.getConfigurationSection(key);
-                ConfigurationSection existingSubSection = existing != null ? existing.getConfigurationSection(key) : null;
+                ConfigurationSection existingSubSection =
+                        existing != null ? existing.getConfigurationSection(key) : null;
                 ConfigurationSection mergedSubSection = merged.createSection(key);
 
                 if (existingSubSection != null && defaultSubSection != null) {
@@ -212,7 +214,8 @@ public class ConfigMigrator {
                     merged.set(key, existing.get(key));
                 } else {
                     merged.set(key, defaults.get(key));
-                    logger.info("Added new config option: " + merged.getCurrentPath() + "." + key + " = " + defaults.get(key));
+                    logger.info("Added new config option: " + merged.getCurrentPath() + "." + key + " = "
+                            + defaults.get(key));
                 }
             }
         }

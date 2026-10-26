@@ -1,7 +1,18 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import io.papermc.paper.threadedregions.scheduler.EntityScheduler;
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.function.Consumer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -20,18 +31,6 @@ import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.VillagerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-import java.util.function.Consumer;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
 /**
  * Per-villager task scheduling and the chunk-update path. Villagers here carry a recording scheduler
  * because MockBukkit's task cancel is unimplemented (any reschedule would skip the test) and its
@@ -49,8 +48,8 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
 
     @BeforeEach
     void loadPlugin() {
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(new InputStreamReader(
-                getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(
+                new InputStreamReader(getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
         config.set("check-interval", CHECK_INTERVAL);
         config.set("inactive-check-interval", INACTIVE_CHECK_INTERVAL);
         config.set("always-active-names", List.of(ALWAYS_ACTIVE_NAME));
@@ -82,12 +81,13 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
     void villagerWhoseSchedulerIsRetiredIsNotLeftTracked() {
         TestVillager villager = spawnVillager(true);
 
-        assertDoesNotThrow(() -> plugin.getStorage().addVillager(villager),
+        assertDoesNotThrow(
+                () -> plugin.getStorage().addVillager(villager),
                 "a removed entity's null task must not escape and abort a bulk add loop");
-        assertFalse(plugin.getStorage().getActive().contains(villager),
+        assertFalse(
+                plugin.getStorage().getActive().contains(villager),
                 "a villager with no task must not stay in the active set");
-        assertFalse(plugin.getStorage().getLobotomized().contains(villager),
-                "or in the inactive set");
+        assertFalse(plugin.getStorage().getLobotomized().contains(villager), "or in the inactive set");
     }
 
     @Test
@@ -95,15 +95,19 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
         TestVillager villager = spawnVillager(false);
         markLobotomized(villager);
         plugin.getStorage().addVillager(villager);
-        assertEquals(INACTIVE_CHECK_INTERVAL, villager.scheduler.lastPeriod(),
+        assertEquals(
+                INACTIVE_CHECK_INTERVAL,
+                villager.scheduler.lastPeriod(),
                 "precondition: a marked villager is scheduled at the inactive interval");
 
         villager.customName(Component.text(ALWAYS_ACTIVE_NAME));
         triggerChunkUpdate(villager);
 
-        assertTrue(plugin.getStorage().getActive().contains(villager),
-                "precondition: the chunk update woke the villager");
-        assertEquals(CHECK_INTERVAL, villager.scheduler.lastPeriod(),
+        assertTrue(
+                plugin.getStorage().getActive().contains(villager), "precondition: the chunk update woke the villager");
+        assertEquals(
+                CHECK_INTERVAL,
+                villager.scheduler.lastPeriod(),
                 "a chunk-triggered wake must reschedule at check-interval, not keep the inactive one");
     }
 
@@ -125,10 +129,13 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
 
         triggerChunkUpdate(villager);
 
-        assertEquals(List.of(12), villager.usesSeenByUpdateDemand,
+        assertEquals(
+                List.of(12),
+                villager.usesSeenByUpdateDemand,
                 "demand must be computed from the uses traded since the last restock");
         assertEquals(0, villager.getRecipes().get(0).getUses(), "and the restock must still reset uses");
-        assertTrue(villager.getPersistentDataContainer().get(gameTimeKey, PersistentDataType.LONG) > seededReset,
+        assertTrue(
+                villager.getPersistentDataContainer().get(gameTimeKey, PersistentDataType.LONG) > seededReset,
                 "the frozen-time reset window must restart from this restock, as vanilla's does");
     }
 
@@ -184,13 +191,18 @@ class LobotomizeStorageSchedulingTest extends MockBukkitTestBase {
         }
 
         @Override
-        public ScheduledTask runDelayed(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task, Runnable retired, long delay) {
+        public ScheduledTask runDelayed(
+                @NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task, Runnable retired, long delay) {
             return task(plugin);
         }
 
         @Override
-        public ScheduledTask runAtFixedRate(@NotNull Plugin plugin, @NotNull Consumer<ScheduledTask> task, Runnable retired,
-                                            long initialDelay, long period) {
+        public ScheduledTask runAtFixedRate(
+                @NotNull Plugin plugin,
+                @NotNull Consumer<ScheduledTask> task,
+                Runnable retired,
+                long initialDelay,
+                long period) {
             this.periods.add(period);
             return task(plugin);
         }
