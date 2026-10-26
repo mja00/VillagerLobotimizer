@@ -35,6 +35,7 @@ silent-lobotomized-villagers: false
 restock-sound: ""
 
 #The sound played when a villager is leveled up. Leave empty ("") for no sound.
+# A non-minecraft namespaced resource-pack event (example: my_pack:ui.reward) is also supported.
 level-up-sound: "entity.villager.celebrate"
 
 #Debug mode. Prints debug messages to the console.

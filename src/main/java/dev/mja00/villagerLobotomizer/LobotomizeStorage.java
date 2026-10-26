@@ -133,6 +133,7 @@ public class LobotomizeStorage {
     private final VillagerActivityPolicy activityPolicy;
     private Sound restockSound;
     private Sound levelUpSound;
+    private String customLevelUpSound;
     private final Logger logger;
     private final Random random = new Random();
     private volatile boolean shuttingDown = false;
@@ -171,7 +172,10 @@ public class LobotomizeStorage {
 
         Registry<@NotNull Sound> soundRegistry = RegistryAccess.registryAccess().getRegistry(RegistryKey.SOUND_EVENT);
         soundName = convertLegacySoundName(soundName, "restock-sound", soundRegistry);
-        levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound", soundRegistry);
+        this.customLevelUpSound = customResourceSound(levelUpSoundName);
+        if (this.customLevelUpSound == null) {
+            levelUpSoundName = convertLegacySoundName(levelUpSoundName, "level-up-sound", soundRegistry);
+        }
 
         if (soundName == null) {
             soundName = "";
@@ -227,7 +231,7 @@ public class LobotomizeStorage {
 
 
         try {
-            if (!levelUpSoundName.isEmpty()) {
+            if (this.customLevelUpSound == null && !levelUpSoundName.isEmpty()) {
                 NamespacedKey key = new NamespacedKey(NamespacedKey.MINECRAFT, levelUpSoundName);
                 this.levelUpSound = soundRegistry.getOrThrow(key);
             } else {
@@ -259,6 +263,20 @@ public class LobotomizeStorage {
                 WATCHDOG_INTERVAL_TICKS,
                 WATCHDOG_INTERVAL_TICKS
         );
+    }
+
+    private static String customResourceSound(String value) {
+        if (value == null || !value.matches("[a-z0-9._-]+:[a-z0-9/._-]+")) return null;
+        NamespacedKey key = NamespacedKey.fromString(value);
+        return key != null && !NamespacedKey.MINECRAFT.equals(key.getNamespace()) ? key.asString() : null;
+    }
+
+    void playLevelUpSound(Villager villager) {
+        if (this.customLevelUpSound != null) {
+            villager.getWorld().playSound(villager.getLocation(), this.customLevelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+        } else if (this.levelUpSound != null) {
+            villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
+        }
     }
 
     public @NotNull Set<Villager> getLobotomized() {
@@ -940,9 +958,7 @@ public class LobotomizeStorage {
             if (needsLevelUp) {
                 int increaseAmount = Math.max(0, expectedLevel - currentLevel);
                 villager.increaseLevel(increaseAmount);
-                if (this.levelUpSound != null) {
-                    villager.getWorld().playSound(villager.getLocation(), this.levelUpSound, SoundCategory.NEUTRAL, 1.0F, 1.0F);
-                }
+                playLevelUpSound(villager);
                 PotionEffect regenEffect = new PotionEffect(PotionEffectType.REGENERATION, 200, 0, false);
                 villager.addPotionEffect(regenEffect);
 
