@@ -1,7 +1,12 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
 import dev.mja00.villagerLobotomizer.storage.MarkedVillager;
+import java.sql.SQLException;
+import java.util.List;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Villager;
@@ -10,12 +15,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import java.sql.SQLException;
-import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The rule the uninstall sweep depends on: a row exists exactly when the plugin has written the PDC
@@ -51,8 +50,10 @@ class LobotomizeStorageMarkerTest extends MockBukkitTestBase {
         plugin.getStorage().addVillager(villager);
         store.drainNow();
 
-        assertEquals(List.of(new MarkedVillager(villager.getUniqueId(), world.getUID(), 1, 2)),
-                store.loadAll(), "the row should record where the villager was found");
+        assertEquals(
+                List.of(new MarkedVillager(villager.getUniqueId(), world.getUID(), 1, 2)),
+                store.loadAll(),
+                "the row should record where the villager was found");
     }
 
     @Test

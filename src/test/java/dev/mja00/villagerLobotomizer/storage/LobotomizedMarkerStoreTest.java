@@ -1,7 +1,9 @@
 package dev.mja00.villagerLobotomizer.storage;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -9,11 +11,8 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.UUID;
 import java.util.logging.Logger;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Persistence and buffering behaviour of {@link LobotomizedMarkerStore}. No MockBukkit needed: the
@@ -27,8 +26,8 @@ class LobotomizedMarkerStoreTest {
     Path dataFolder;
 
     private LobotomizedMarkerStore openStore() {
-        LobotomizedMarkerStore store = new LobotomizedMarkerStore(
-                dataFolder.resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME), LOGGER);
+        LobotomizedMarkerStore store =
+                new LobotomizedMarkerStore(dataFolder.resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME), LOGGER);
         assertTrue(store.open(), "store should open in a temp folder");
         return store;
     }
@@ -45,7 +44,9 @@ class LobotomizedMarkerStoreTest {
 
         LobotomizedMarkerStore reopened = openStore();
         try {
-            assertEquals(List.of(new MarkedVillager(entity, world, 3, -7)), reopened.loadAll(),
+            assertEquals(
+                    List.of(new MarkedVillager(entity, world, 3, -7)),
+                    reopened.loadAll(),
                     "a drained row should survive a reopen");
             assertEquals(1, reopened.getKnownRowCount());
         } finally {
@@ -83,7 +84,9 @@ class LobotomizedMarkerStoreTest {
             store.markerWritten(entity, world, 9, 9);
             store.drainNow();
 
-            assertEquals(List.of(new MarkedVillager(entity, world, 9, 9)), store.loadAll(),
+            assertEquals(
+                    List.of(new MarkedVillager(entity, world, 9, 9)),
+                    store.loadAll(),
                     "the newest intent should be the one written");
         } finally {
             store.close();
@@ -183,8 +186,8 @@ class LobotomizedMarkerStoreTest {
             // "lost" markers on a store that is about to write them.
             store.markerWritten(UUID.randomUUID(), UUID.randomUUID(), 1, 1);
             assertEquals(1, store.pendingCount(), "precondition: the write is still buffered");
-            assertEquals(0, store.getUnrecordedChangeCount(),
-                    "a pending write on a healthy store is not a lost marker");
+            assertEquals(
+                    0, store.getUnrecordedChangeCount(), "a pending write on a healthy store is not a lost marker");
         } finally {
             store.close();
         }
@@ -223,7 +226,8 @@ class LobotomizedMarkerStoreTest {
         store.drainNow();
         store.close();
 
-        assertFalse(Files.exists(dataFolder.resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME)),
+        assertFalse(
+                Files.exists(dataFolder.resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME)),
                 "a drain after deletion must not resurrect the state file");
     }
 }

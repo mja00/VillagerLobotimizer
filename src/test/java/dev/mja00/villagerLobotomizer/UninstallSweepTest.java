@@ -1,6 +1,14 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import java.lang.reflect.Proxy;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.UUID;
 import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
@@ -10,15 +18,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import java.lang.reflect.Proxy;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Behaviour of the uninstall sweep. Chunk loading is injected because MockBukkit throws from
@@ -84,7 +83,11 @@ class UninstallSweepTest extends MockBukkitTestBase {
     }
 
     private boolean stateFileExists() {
-        return plugin.getDataFolder().toPath().resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME).toFile().exists();
+        return plugin.getDataFolder()
+                .toPath()
+                .resolve(LobotomizedMarkerStore.DATABASE_FILE_NAME)
+                .toFile()
+                .exists();
     }
 
     @Test
@@ -203,7 +206,8 @@ class UninstallSweepTest extends MockBukkitTestBase {
         assertTrue(plugin.reloadPluginState() >= 0, "reload must be accepted once the sweep has stopped");
         server.getScheduler().performTicks(1);
         Villager villager = markedVillager();
-        assertTrue(plugin.getStorage().getActive().contains(villager)
+        assertTrue(
+                plugin.getStorage().getActive().contains(villager)
                         || plugin.getStorage().getLobotomized().contains(villager),
                 "the rebuilt storage tracks villagers again");
     }
@@ -218,8 +222,7 @@ class UninstallSweepTest extends MockBukkitTestBase {
     void reloadIsRefusedWhileUninstalling() {
         assertTrue(plugin.startUninstall(server.getConsoleSender()));
 
-        assertEquals(-1, plugin.reloadPluginState(),
-                "a reload would re-lobotomize villagers the sweep is clearing");
+        assertEquals(-1, plugin.reloadPluginState(), "a reload would re-lobotomize villagers the sweep is clearing");
     }
 
     @Test
@@ -231,8 +234,7 @@ class UninstallSweepTest extends MockBukkitTestBase {
         WorldMock other2 = server.addSimpleWorld("other2");
         other1.loadChunk(0, 0);
         other2.loadChunk(0, 0);
-        List<Villager> villagers = List.of(
-                markedVillagerAt(world), markedVillagerAt(other1), markedVillagerAt(other2));
+        List<Villager> villagers = List.of(markedVillagerAt(world), markedVillagerAt(other1), markedVillagerAt(other2));
         store.drainNow();
 
         UninstallSweep sweep = newSweep();
@@ -254,7 +256,7 @@ class UninstallSweepTest extends MockBukkitTestBase {
 
         // The accessor takes the request and never answers, like a chunk load that stalls. Nothing
         // was confirmed absent, so the rows must survive or the advertised re-run has nothing to retry.
-        UninstallSweep sweep = new UninstallSweep(plugin, store, null, (w, x, z, callback) -> { });
+        UninstallSweep sweep = new UninstallSweep(plugin, store, null, (w, x, z, callback) -> {});
         sweep.setStallTimeoutForTesting(0L);
         pumpUntilFinished(sweep);
 
@@ -299,8 +301,11 @@ class UninstallSweepTest extends MockBukkitTestBase {
                 return;
             }
             Chunk real = w.getChunkAt(x, z);
-            callback.accept((Chunk) Proxy.newProxyInstance(Chunk.class.getClassLoader(), new Class<?>[]{Chunk.class},
-                    (proxy, method, args) -> method.getName().equals("isEntitiesLoaded") ? false : method.invoke(real, args)));
+            callback.accept((Chunk) Proxy.newProxyInstance(
+                    Chunk.class.getClassLoader(),
+                    new Class<?>[] {Chunk.class},
+                    (proxy, method, args) ->
+                            method.getName().equals("isEntitiesLoaded") ? false : method.invoke(real, args)));
         });
         pumpUntilFinished(sweep);
 

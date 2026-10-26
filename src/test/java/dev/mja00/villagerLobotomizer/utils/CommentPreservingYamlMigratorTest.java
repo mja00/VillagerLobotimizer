@@ -1,15 +1,14 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.junit.jupiter.api.Test;
-import org.yaml.snakeyaml.Yaml;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
 
 class CommentPreservingYamlMigratorTest {
     private final CommentPreservingYamlMigrator migrator =
@@ -34,7 +33,8 @@ class CommentPreservingYamlMigratorTest {
 
         String merged = migrator.mergeWithComments(existingYaml, defaultYaml);
 
-        assertTrue(merged.contains("#Keep user comment for nested value"),
+        assertTrue(
+                merged.contains("#Keep user comment for nested value"),
                 () -> "Expected merged YAML to contain nested user comment:\n" + merged);
     }
 
@@ -56,7 +56,8 @@ class CommentPreservingYamlMigratorTest {
 
         String merged = migrator.mergeWithComments(existingYaml, defaultYaml);
 
-        assertTrue(merged.contains("#Default cooldown comment"),
+        assertTrue(
+                merged.contains("#Default cooldown comment"),
                 () -> "Expected merged YAML to contain default nested comment:\n" + merged);
     }
 

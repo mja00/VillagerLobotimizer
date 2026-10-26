@@ -1,5 +1,10 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.stream.Collectors;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
@@ -11,12 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import java.util.stream.Collectors;
-
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * MockBukkit runs every region on one thread, so only the same-region and console paths of
@@ -47,9 +46,10 @@ class LobotomizeCommandReplyTest extends MockBukkitTestBase {
         }
         assertTrue(plugin.getStorage().getLobotomized().contains(villager), "precondition: tracked lobotomized");
 
-        String report = new LobotomizeCommand(plugin).buildVillagerDetails(villager).stream()
-                .map(PlainTextComponentSerializer.plainText()::serialize)
-                .collect(Collectors.joining("\n"));
+        String report = new LobotomizeCommand(plugin)
+                .buildVillagerDetails(villager).stream()
+                        .map(PlainTextComponentSerializer.plainText()::serialize)
+                        .collect(Collectors.joining("\n"));
 
         assertTrue(report.contains("Hero gift: no hero seen since it loaded"), report);
     }
@@ -66,6 +66,7 @@ class LobotomizeCommandReplyTest extends MockBukkitTestBase {
 
     @Test
     void replyToTheConsoleIsDirect() {
-        assertDoesNotThrow(() -> new LobotomizeCommand(plugin).reply(server.getConsoleSender(), Component.text("hello")));
+        assertDoesNotThrow(
+                () -> new LobotomizeCommand(plugin).reply(server.getConsoleSender(), Component.text("hello")));
     }
 }

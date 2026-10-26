@@ -1,3 +1,5 @@
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     java
     id("io.papermc.paperweight.userdev") version "2.0.0-beta.21"
@@ -5,10 +7,12 @@ plugins {
     id("io.papermc.hangar-publish-plugin") version "0.1.+"
     id("com.gradleup.shadow") version "9.3.+"
     id("com.modrinth.minotaur") version "2.+"
+    id("com.diffplug.spotless") version "8.10.4"
+    id("net.ltgt.errorprone") version "5.1.1"
 }
 
 group = "dev.mja00"
-version = "1.18.0"
+version = "1.18.1"
 
 repositories {
     mavenCentral()
@@ -43,6 +47,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v1.21:4.110.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    errorprone("com.google.errorprone:error_prone_core:2.51.0")
 }
 
 // Keep the paperweight server (NMS) artifact off the test classpath so MockBukkit's server
@@ -67,6 +72,19 @@ tasks.withType<JavaCompile>().configureEach {
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible) {
         options.release.set(targetJavaVersion)
     }
+
+    // Fail on any Error Prone or javac warning so lint findings can't pile up unnoticed.
+    options.compilerArgs.add("-Werror")
+    // Bukkit worlds, registry entries and scheduled tasks are singletons, so == is the intended check.
+    options.errorprone.disable("ReferenceEquality")
+}
+
+// palantir-java-format breaks on JDK 27 (palantir/palantir-java-format#1785) and 2.102.0 on 21, so the
+// Gradle daemon is pinned to 21 in gradle/gradle-daemon-jvm.properties.
+spotless {
+    java {
+        palantirJavaFormat("2.101.0")
+    }
 }
 
 tasks {
@@ -85,6 +103,8 @@ tasks {
     runServer {
         dependsOn(shadowJar)
         minecraftVersion("26.3")
+        // The daemon runs on 21, but Minecraft 26.x needs Java 25.
+        javaLauncher = project.javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
 
         // Set system property to mark this as a development environment for Sentry
         systemProperty("villagerlobotimizer.dev", "true")

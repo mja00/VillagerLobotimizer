@@ -1,12 +1,12 @@
 package dev.mja00.villagerLobotomizer.utils;
 
 import com.google.common.collect.ImmutableMap;
-import org.bukkit.Bukkit;
 import java.lang.reflect.Method;
 import java.util.Map;
-
+import org.bukkit.Bukkit;
 import org.jetbrains.annotations.NotNull;
-public class VersionUtils   {
+
+public class VersionUtils {
 
     private static final Map<String, SupportStatus> unsupportedServers;
     private static final String PFX = make("8(;4>`");
@@ -47,17 +47,16 @@ public class VersionUtils   {
 
                 if (entry.getKey().startsWith(PFX)) {
                     if (Bukkit.getName().equalsIgnoreCase(entry.getKey().replaceFirst(PFX, ""))) {
-                        supportStatusClass = entry.getKey();
-                        return supportStatus = entry.getValue();
+                        return remember(entry);
                     }
                     continue;
                 }
 
                 final boolean inverted = entry.getKey().contains("!");
-                final String clazz = entry.getKey().replace("!", "").split("#")[0];
+                final String clazz = entry.getKey().replace("!", "").split("#", -1)[0];
                 String method = "";
                 if (entry.getKey().contains("#")) {
-                    method = entry.getKey().split("#")[1];
+                    method = entry.getKey().split("#", -1)[1];
                 }
                 try {
                     final Class<?> lolClass = Class.forName(clazz);
@@ -66,8 +65,7 @@ public class VersionUtils   {
                         for (final Method mth : lolClass.getDeclaredMethods()) {
                             if (mth.getName().equals(method)) {
                                 if (!inverted) {
-                                    supportStatusClass = entry.getKey();
-                                    return supportStatus = entry.getValue();
+                                    return remember(entry);
                                 }
                             }
                         }
@@ -75,19 +73,23 @@ public class VersionUtils   {
                     }
 
                     if (!inverted) {
-                        supportStatusClass = entry.getKey();
-                        return supportStatus = entry.getValue();
+                        return remember(entry);
                     }
                 } catch (final ClassNotFoundException ignored) {
                     if (inverted) {
-                        supportStatusClass = entry.getKey();
-                        return supportStatus = entry.getValue();
+                        return remember(entry);
                     }
                 }
             }
 
-            return supportStatus = SupportStatus.FULL;
+            supportStatus = SupportStatus.FULL;
         }
+        return supportStatus;
+    }
+
+    private static SupportStatus remember(Map.Entry<String, SupportStatus> entry) {
+        supportStatusClass = entry.getKey();
+        supportStatus = entry.getValue();
         return supportStatus;
     }
 
@@ -102,8 +104,7 @@ public class VersionUtils   {
         STUPID_PLUGIN(false),
         NMS_CLEANROOM(false),
         UNSTABLE(false),
-        OUTDATED(false)
-        ;
+        OUTDATED(false);
 
         private final boolean supported;
 
@@ -130,7 +131,7 @@ public class VersionUtils   {
     private static @NotNull String make(@NotNull String in) {
         final char[] c = in.toCharArray();
         for (int i = 0; i < c.length; i++) {
-            c[i] ^= 0x5A;
+            c[i] = (char) (c[i] ^ 0x5A);
         }
         return new String(c);
     }

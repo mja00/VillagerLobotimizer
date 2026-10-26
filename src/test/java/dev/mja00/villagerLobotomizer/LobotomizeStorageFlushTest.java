@@ -1,6 +1,13 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import dev.mja00.villagerLobotomizer.storage.LobotomizedMarkerStore;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -9,14 +16,6 @@ import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.sql.SQLException;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What survives a shutdown. The reported bug was that nothing did: a nightly reboot woke every
@@ -32,8 +31,8 @@ class LobotomizeStorageFlushTest extends MockBukkitTestBase {
     private NamespacedKey markerKey;
 
     private void load(boolean persist) {
-        YamlConfiguration config = YamlConfiguration.loadConfiguration(new InputStreamReader(
-                getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(
+                new InputStreamReader(getClass().getResourceAsStream("/config.yml"), StandardCharsets.UTF_8));
         config.set("persist-lobotomized-state", persist);
         plugin = MockBukkit.loadWithConfig(VillagerLobotomizer.class, config);
         world = server.addSimpleWorld("test");
@@ -141,7 +140,8 @@ class LobotomizeStorageFlushTest extends MockBukkitTestBase {
         server.getScheduler().performTicks(TICKS_FOR_SCHEDULED_WAKE);
 
         assertTrue(villager.isAware(), "the reload wake should have run");
-        assertFalse(plugin.getStorage().getLobotomized().contains(villager),
+        assertFalse(
+                plugin.getStorage().getLobotomized().contains(villager),
                 "an awake villager must not be tracked as lobotomized, or it is never re-checked as a transition");
         assertTrue(plugin.getStorage().getActive().contains(villager), "it is re-tracked as active instead");
     }

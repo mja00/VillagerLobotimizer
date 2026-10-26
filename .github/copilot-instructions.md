@@ -26,6 +26,11 @@ VillagerLobotimizer is a Minecraft Paper plugin (compiled for Java 21) that opti
 - Built plugin JAR will be in `build/libs/VillagerLobotimizer-<version>.jar`
 - Uses shadow plugin, so the actual artifact is the shaded JAR (no classifier)
 
+### Linting and Formatting
+- `./gradlew spotlessApply` formats Java sources with palantir-java-format; `build` runs `spotlessCheck` and fails on unformatted code.
+- Error Prone runs on every `compileJava`/`compileTestJava` with `-Werror`, so any finding fails the build. `ReferenceEquality` is disabled because Bukkit worlds, registry entries and tasks are compared by identity.
+- The Gradle daemon is pinned to Java 21 (`gradle/gradle-daemon-jvm.properties`) because palantir-java-format breaks on JDK 27; `runServer` gets a Java 25 toolchain, downloaded via the foojay resolver if missing.
+
 ### Running Test Server
 - **CRITICAL**: Server download and startup takes 10-20 minutes. NEVER CANCEL. Set timeout to 60+ minutes.
 - `./gradlew runServer` -- downloads a Paper server for Minecraft 26.3 (requires Java 25) and starts it with the plugin installed
@@ -152,7 +157,7 @@ curl -I https://repo.papermc.io/repository/maven-public/
 ### Development Workflow
 1. Make code changes in `src/main/java/`
 2. Update configuration in `src/main/resources/` if needed  
-3. Build: `./gradlew build --no-daemon`
+3. Format and build: `./gradlew spotlessApply build --no-daemon`
 4. Test: `./gradlew runServer` and validate plugin behavior
 5. For CI testing: push to PR and verify GitHub Actions pass
 

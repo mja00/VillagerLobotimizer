@@ -1,14 +1,13 @@
 package dev.mja00.villagerLobotomizer.utils;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import io.sentry.Sentry;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.function.Consumer;
-
-import static org.junit.jupiter.api.Assertions.*;
 
 class SentryTaskWrapperTest {
 
@@ -39,9 +38,12 @@ class SentryTaskWrapperTest {
         Consumer<ScheduledTask> wrapped = SentryTaskWrapper.wrap(failingTask);
 
         // Verify that the exception is re-thrown
-        assertThrows(RuntimeException.class, () -> {
-            wrapped.accept(null); // Pass null since we don't actually need a real ScheduledTask for this test
-        }, "Wrapped task should re-throw exceptions");
+        assertThrows(
+                RuntimeException.class,
+                () -> {
+                    wrapped.accept(null); // Pass null since we don't actually need a real ScheduledTask for this test
+                },
+                "Wrapped task should re-throw exceptions");
     }
 
     @Test
@@ -58,8 +60,7 @@ class SentryTaskWrapperTest {
             wrapped.accept(null);
         });
 
-        assertEquals(expectedMessage, exception.getMessage(),
-            "Exception message should be preserved after wrapping");
+        assertEquals(expectedMessage, exception.getMessage(), "Exception message should be preserved after wrapping");
     }
 
     @Test
@@ -71,9 +72,12 @@ class SentryTaskWrapperTest {
         Consumer<ScheduledTask> wrapped = SentryTaskWrapper.wrap(failingTask);
 
         // Verify that the exception type is preserved
-        assertThrows(IllegalArgumentException.class, () -> {
-            wrapped.accept(null);
-        }, "Exception type should be preserved after wrapping");
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                    wrapped.accept(null);
+                },
+                "Exception type should be preserved after wrapping");
     }
 
     @Test
@@ -87,8 +91,7 @@ class SentryTaskWrapperTest {
         Consumer<ScheduledTask> wrapped = SentryTaskWrapper.wrap(successfulTask);
 
         // Should not throw
-        assertDoesNotThrow(() -> wrapped.accept(null),
-            "Wrapped task should not throw when inner task succeeds");
+        assertDoesNotThrow(() -> wrapped.accept(null), "Wrapped task should not throw when inner task succeeds");
 
         assertTrue(executed[0], "Task should have been executed");
     }
@@ -105,8 +108,11 @@ class SentryTaskWrapperTest {
         Consumer<ScheduledTask> wrapped = SentryTaskWrapper.wrap(failingTask);
 
         // Should still re-throw even when Sentry is disabled
-        assertThrows(RuntimeException.class, () -> {
-            wrapped.accept(null);
-        }, "Should re-throw exceptions even when Sentry is not enabled");
+        assertThrows(
+                RuntimeException.class,
+                () -> {
+                    wrapped.accept(null);
+                },
+                "Should re-throw exceptions even when Sentry is not enabled");
     }
 }

@@ -1,12 +1,11 @@
 package dev.mja00.villagerLobotomizer.policy;
 
 import dev.mja00.villagerLobotomizer.utils.VillagerUtils;
+import java.util.EnumSet;
 import org.bukkit.Material;
 import org.bukkit.Registry;
 import org.bukkit.Tag;
 import org.bukkit.block.data.Ageable;
-
-import java.util.EnumSet;
 
 /**
  * Holds the precomputed Material sets the activity policy tests membership against.
@@ -64,8 +63,8 @@ public record BlockClassifier(
 
         EnumSet<Material> professionBlocks = VillagerUtils.professionStationMaterials();
 
-        return new BlockClassifier(impassableRegular, impassableTall,
-                impassableAll, cropBlocks, doorBlocks, professionBlocks);
+        return new BlockClassifier(
+                impassableRegular, impassableTall, impassableAll, cropBlocks, doorBlocks, professionBlocks);
     }
 
     /** Set sizes, for debug output: an empty or tiny set points at a registry/version problem. */

@@ -10,24 +10,6 @@ import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
 import dev.mja00.villagerLobotomizer.utils.VersionUtils;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import io.sentry.Sentry;
-import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.bstats.bukkit.Metrics;
-import org.bstats.charts.MultiLineChart;
-import org.bstats.charts.SimplePie;
-import org.bstats.charts.SingleLineChart;
-import org.bukkit.Bukkit;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.Player;
-import org.bukkit.entity.Villager;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.PluginManager;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.World;
-import org.bukkit.scoreboard.ScoreboardManager;
-import org.bukkit.scoreboard.Team;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,8 +17,25 @@ import java.net.http.HttpResponse;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.MultiLineChart;
+import org.bstats.charts.SimplePie;
+import org.bstats.charts.SingleLineChart;
+import org.bukkit.Bukkit;
+import org.bukkit.World;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Player;
+import org.bukkit.entity.Villager;
+import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.Team;
 
 public class VillagerLobotomizer extends JavaPlugin {
     private boolean debugging = false;
@@ -44,7 +43,10 @@ public class VillagerLobotomizer extends JavaPlugin {
     private volatile LobotomizeStorage storage;
     private HeroTracker heroTracker;
     private boolean isFolia;
-    static final HttpRequest request = HttpRequest.newBuilder().GET().uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version")).build();
+    static final HttpRequest request = HttpRequest.newBuilder()
+            .GET()
+            .uri(URI.create("https://api.modrinth.com/v3/project/villagerlobotomy/version"))
+            .build();
     static final HttpClient client = HttpClient.newHttpClient();
     static final Gson gson = new Gson();
     public boolean needsUpdate = false;
@@ -55,6 +57,7 @@ public class VillagerLobotomizer extends JavaPlugin {
     private boolean disableChunkVillagerUpdate;
     /** How often buffered marker changes are written; short enough that a crash loses little. */
     private static final long MARKER_STORE_DRAIN_SECONDS = 5L;
+
     private boolean sentryEnabled = false;
     private LobotomizedMarkerStore markerStore;
     private final AtomicBoolean uninstalling = new AtomicBoolean();
@@ -117,46 +120,58 @@ public class VillagerLobotomizer extends JavaPlugin {
         // Check to see if plugman (or its fork Plugmanx) is installed. If so send a warning.
         PluginManager pluginManager = this.getServer().getPluginManager();
         for (Plugin plugin : pluginManager.getPlugins()) {
-            String pluginName = plugin.getName().toLowerCase();
+            String pluginName = plugin.getName().toLowerCase(Locale.ROOT);
             String pluginVersion = plugin.getPluginMeta().getVersion();
             if (pluginName.contains("plugman")) {
-                int pluginMajor = pluginVersion.split("\\.")[0].matches("\\d+") ? Integer.parseInt(pluginVersion.split("\\.")[0]) : 0;
+                String majorPart = pluginVersion.split("\\.", -1)[0];
+                int pluginMajor = majorPart.matches("\\d+") ? Integer.parseInt(majorPart) : 0;
                 if (pluginMajor < 2) {
                     this.getLogger().warning("------------------------------");
-                    this.getLogger().warning("Plugman is installed. While this plugin will not fully break with it installed, commands will stop working after a reload.");
-                    this.getLogger().warning("This is due to the way commands are registered for Brigadier. Plugman does not support plugins that use Brigadier commands.");
-                    this.getLogger().warning("A workaround is running \"/minecraft:reload\" after reloading this plugin, however this may break other plugins.");
+                    this.getLogger()
+                            .warning(
+                                    "Plugman is installed. While this plugin will not fully break with it installed, commands will stop working after a reload.");
+                    this.getLogger()
+                            .warning(
+                                    "This is due to the way commands are registered for Brigadier. Plugman does not support plugins that use Brigadier commands.");
+                    this.getLogger()
+                            .warning(
+                                    "A workaround is running \"/minecraft:reload\" after reloading this plugin, however this may break other plugins.");
                     this.getLogger().warning("-------------------------------");
                 } else {
                     // They're running a version that doesn't break Brig but still put a little warning in
-                    this.getLogger().warning("Plugman is installed, things may act weirdly. If you experience any issues, try restarting your server entirely.");
+                    this.getLogger()
+                            .warning(
+                                    "Plugman is installed, things may act weirdly. If you experience any issues, try restarting your server entirely.");
                 }
                 break;
             }
         }
 
         switch (VersionUtils.getServerSupportStatus()) {
-            case NMS_CLEANROOM:
-                this.getLogger().severe("You are running a server that does not properly support Bukkit plugins that rely on internal Mojang code.");
-                break;
-            case DANGEROUS_FORK:
-                this.getLogger().severe("You are running a server fork that is known to be extremely dangerous and lead to data loss. It is strongly recommended you switch to a more stable server software like Paper.");
-                break;
-            case STUPID_PLUGIN:
-                this.getLogger().severe("You are using plugins known to cause severe issues with VillagerLobotomy and other plugins.");
-                break;
-            case UNSTABLE:
-                this.getLogger().severe("You are running a server that does not properly support Bukkit plugins. Bukkit plugins should not be used with Forge/Fabric mods!");
-                break;
-            case OUTDATED:
-                this.getLogger().severe("You are running an unsupported server version!");
-                break;
-            case LIMITED:
-                this.getLogger().info("You are running a server with limited API functionality. Some features may become unavailable.");
-                break;
-            case FULL:
+            case NMS_CLEANROOM ->
+                this.getLogger()
+                        .severe(
+                                "You are running a server that does not properly support Bukkit plugins that rely on internal Mojang code.");
+            case DANGEROUS_FORK ->
+                this.getLogger()
+                        .severe(
+                                "You are running a server fork that is known to be extremely dangerous and lead to data loss. It is strongly recommended you switch to a more stable server software like Paper.");
+            case STUPID_PLUGIN ->
+                this.getLogger()
+                        .severe(
+                                "You are using plugins known to cause severe issues with VillagerLobotomy and other plugins.");
+            case UNSTABLE ->
+                this.getLogger()
+                        .severe(
+                                "You are running a server that does not properly support Bukkit plugins. Bukkit plugins should not be used with Forge/Fabric mods!");
+            case OUTDATED -> this.getLogger().severe("You are running an unsupported server version!");
+            case LIMITED ->
+                this.getLogger()
+                        .info(
+                                "You are running a server with limited API functionality. Some features may become unavailable.");
+            case FULL -> {
                 // Fully supported, no warning needed
-                break;
+            }
         }
 
         if (VersionUtils.getSupportStatusClass() != null) {
@@ -176,7 +191,8 @@ public class VillagerLobotomizer extends JavaPlugin {
     private void createDebuggingTeams() {
         // Folia doesn't support scoreboard teams (global state that can't be regionized)
         if (this.isFolia) {
-            this.getLogger().warning("Debug teams are not supported on Folia - scoreboard operations are not available.");
+            this.getLogger()
+                    .warning("Debug teams are not supported on Folia - scoreboard operations are not available.");
             this.getLogger().warning("Debug mode will still work, but villagers will not glow or be added to teams.");
             return;
         }
@@ -205,7 +221,8 @@ public class VillagerLobotomizer extends JavaPlugin {
     }
 
     private void setupMetrics(Metrics metrics) {
-        // Currently bstats' site doesn't support creating multiline charts, so we need to also split this into 3 single line charts
+        // Currently bstats' site doesn't support creating multiline charts, so we need to also split this into 3 single
+        // line charts
         metrics.addCustomChart(new MultiLineChart("villagers", () -> {
             Map<String, Integer> returnMap = new HashMap<>();
             LobotomizeStorage storage = getStorage();
@@ -218,9 +235,14 @@ public class VillagerLobotomizer extends JavaPlugin {
             return returnMap;
         }));
 
-        metrics.addCustomChart(new SingleLineChart("active_villagers", () -> getStorage().getActive().size()));
-        metrics.addCustomChart(new SingleLineChart("inactive_villagers", () -> getStorage().getLobotomized().size()));
-        metrics.addCustomChart(new SingleLineChart("total_villagers", () -> getStorage().getActive().size() + getStorage().getLobotomized().size()));
+        metrics.addCustomChart(new SingleLineChart(
+                "active_villagers", () -> getStorage().getActive().size()));
+        metrics.addCustomChart(new SingleLineChart(
+                "inactive_villagers", () -> getStorage().getLobotomized().size()));
+        metrics.addCustomChart(new SingleLineChart(
+                "total_villagers",
+                () -> getStorage().getActive().size()
+                        + getStorage().getLobotomized().size()));
         metrics.addCustomChart(new SimplePie("is_folia", () -> this.isFolia ? "yes" : "no"));
     }
 
@@ -244,7 +266,8 @@ public class VillagerLobotomizer extends JavaPlugin {
                 Team inactiveTeam = scoreboardManager.getMainScoreboard().getTeam(this.inactiveVillagersTeamName);
                 clearTeam(inactiveTeam);
             } else {
-                this.getLogger().warning("Scoreboard manager unavailable during shutdown; debug teams cannot be cleaned up.");
+                this.getLogger()
+                        .warning("Scoreboard manager unavailable during shutdown; debug teams cannot be cleaned up.");
             }
         }
 
@@ -255,7 +278,8 @@ public class VillagerLobotomizer extends JavaPlugin {
                     this.getLogger().info("Sentry shutdown complete");
                 }
             } catch (Exception e) {
-                this.getLogger().log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
+                this.getLogger()
+                        .log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
             }
         }
     }
@@ -271,8 +295,9 @@ public class VillagerLobotomizer extends JavaPlugin {
         if (ensureMarkerStore() == null) {
             return;
         }
-        this.getLogger().info("Lobotomized villagers stay lobotomized across restarts. "
-                + "Run '/lobotomy uninstall' before removing the plugin so they get their AI back");
+        this.getLogger()
+                .info("Lobotomized villagers stay lobotomized across restarts. "
+                        + "Run '/lobotomy uninstall' before removing the plugin so they get their AI back");
     }
 
     /**
@@ -298,7 +323,7 @@ public class VillagerLobotomizer extends JavaPlugin {
     }
 
     /**
-     * @return the marker store, or {@code null} when persistence is disabled or unavailable
+     * Returns the marker store, or {@code null} when persistence is disabled or unavailable.
      */
     public LobotomizedMarkerStore getMarkerStore() {
         return this.markerStore;
@@ -327,19 +352,24 @@ public class VillagerLobotomizer extends JavaPlugin {
         if (store == null) {
             this.uninstalling.set(false);
             requester.sendMessage(Component.text("Could not open the state file, so the uninstall cannot "
-                    + "verify every lobotomized villager. Fix the error in console and try again.")
+                            + "verify every lobotomized villager. Fix the error in console and try again.")
                     .color(NamedTextColor.RED));
             return false;
         }
         long unrecorded = store.getUnrecordedChangeCount();
         if (unrecorded > 0) {
-            requester.sendMessage(Component.text(unrecorded + " villager(s) were marked while state writes "
-                    + "were failing and have no record; the sweep may not reach all of them in unloaded chunks.")
+            requester.sendMessage(Component.text(
+                            unrecorded + " villager(s) were marked while state writes "
+                                    + "were failing and have no record; the sweep may not reach all of them in unloaded chunks.")
                     .color(NamedTextColor.YELLOW));
         }
         try {
-            new UninstallSweep(this, store, requester instanceof Player player ? player.getUniqueId() : null,
-                    UninstallSweep.paperChunkAccessor()).start();
+            new UninstallSweep(
+                            this,
+                            store,
+                            requester instanceof Player player ? player.getUniqueId() : null,
+                            UninstallSweep.paperChunkAccessor())
+                    .start();
             return true;
         } catch (Exception e) {
             this.uninstalling.set(false);
@@ -358,8 +388,12 @@ public class VillagerLobotomizer extends JavaPlugin {
             return;
         }
         this.markerStore = null;
-        Bukkit.getGlobalRegionScheduler().runDelayed(this,
-                SentryTaskWrapper.wrap((task) -> Bukkit.getPluginManager().disablePlugin(this)), 1L);
+        Bukkit.getGlobalRegionScheduler()
+                .runDelayed(
+                        this,
+                        SentryTaskWrapper.wrap(
+                                (task) -> Bukkit.getPluginManager().disablePlugin(this)),
+                        1L);
     }
 
     /**
@@ -445,7 +479,6 @@ public class VillagerLobotomizer extends JavaPlugin {
         return this.heroTracker;
     }
 
-
     /**
      * Checks Modrinth for a newer version of the plugin and flags if an update is available.
      */
@@ -456,7 +489,8 @@ public class VillagerLobotomizer extends JavaPlugin {
         VillagerLobotomizer plugin = this;
         Bukkit.getAsyncScheduler().runNow(this, (task) -> {
             String responseBody = null;
-            CompletableFuture<HttpResponse<String>> response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
+            CompletableFuture<HttpResponse<String>> response =
+                    client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
             try {
                 responseBody = response.thenApply(HttpResponse::body).get(5, TimeUnit.SECONDS);
             } catch (InterruptedException | ExecutionException | java.util.concurrent.TimeoutException e) {
@@ -482,10 +516,12 @@ public class VillagerLobotomizer extends JavaPlugin {
                 return;
             }
 
-
-            int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(currentVersion, latestVersion.getVersionNumber());
+            int comparison = dev.mja00.villagerLobotomizer.utils.StringUtils.compareSemVer(
+                    currentVersion, latestVersion.getVersionNumber());
             if (comparison < 0) {
-                plugin.getLogger().info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber() + ")");
+                plugin.getLogger()
+                        .info("A new version of VillagerLobotomizer is available! (" + latestVersion.getVersionNumber()
+                                + ")");
                 plugin.getLogger().info("You can download it here: https://modrinth.com/plugin/villagerlobotomy");
                 plugin.needsUpdate = true;
             } else if (comparison > 0) {
@@ -556,7 +592,8 @@ public class VillagerLobotomizer extends JavaPlugin {
                         this.getLogger().info("Sentry shutdown complete (disabled via config)");
                     }
                 } catch (Exception e) {
-                    this.getLogger().log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
+                    this.getLogger()
+                            .log(java.util.logging.Level.WARNING, "Error during Sentry shutdown: " + e.getMessage(), e);
                 }
             }
             this.sentryEnabled = false;
@@ -578,7 +615,8 @@ public class VillagerLobotomizer extends JavaPlugin {
 
         try {
             Sentry.init(options -> {
-                options.setDsn("https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
+                options.setDsn(
+                        "https://fdd79b92bf9f83a2f9699e844c080019@o1234338.ingest.us.sentry.io/4510592886702080");
                 options.setEnvironment(environment);
                 options.setRelease("villagerlobotimizer@" + this.getPluginMeta().getVersion());
 
@@ -590,7 +628,11 @@ public class VillagerLobotomizer extends JavaPlugin {
                     options.setTag("java.version", SentryContextProvider.getJavaVersion());
                     options.setTag("folia.enabled", String.valueOf(this.isFolia));
                 } catch (Exception e) {
-                    this.getLogger().log(java.util.logging.Level.WARNING, "Failed to set Sentry context tags: " + e.getMessage(), e);
+                    this.getLogger()
+                            .log(
+                                    java.util.logging.Level.WARNING,
+                                    "Failed to set Sentry context tags: " + e.getMessage(),
+                                    e);
                 }
 
                 options.setAttachStacktrace(true);
@@ -645,7 +687,8 @@ public class VillagerLobotomizer extends JavaPlugin {
         try {
             newStorage = new LobotomizeStorage(this);
         } catch (Exception e) {
-            this.getLogger().severe("Failed to reload storage; keeping previous storage instance. Error: " + e.getMessage());
+            this.getLogger()
+                    .severe("Failed to reload storage; keeping previous storage instance. Error: " + e.getMessage());
             if (this.isDebugging()) {
                 this.getLogger().log(java.util.logging.Level.SEVERE, "Storage reload stack trace", e);
             }
@@ -698,6 +741,7 @@ public class VillagerLobotomizer extends JavaPlugin {
      * @return false if the villager was already removed and its scheduler retired
      */
     public boolean queueAddVillager(LobotomizeStorage target, Villager villager) {
-        return villager.getScheduler().run(this, SentryTaskWrapper.wrap(task -> target.addVillager(villager)), null) != null;
+        return villager.getScheduler().run(this, SentryTaskWrapper.wrap(task -> target.addVillager(villager)), null)
+                != null;
     }
 }

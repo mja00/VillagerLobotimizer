@@ -1,12 +1,14 @@
 package dev.mja00.villagerLobotomizer;
 
+import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
+import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
-
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -19,11 +21,6 @@ import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.potion.PotionEffectType;
 import org.jetbrains.annotations.NotNull;
-
-import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
-import dev.mja00.villagerLobotomizer.utils.SentryTaskWrapper;
-
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 
 /**
  * Tracks online players with Hero of the Village and runs a scan on each one's own thread every
@@ -71,10 +68,13 @@ public class HeroTracker implements Listener {
         this.heroes.add(id);
         this.scanTasks.computeIfAbsent(id, ignored -> {
             try {
-                return player.getScheduler().runAtFixedRate(this.plugin,
-                        SentryTaskWrapper.wrap(task -> runScan(player, task)),
-                        () -> this.scanTasks.remove(id),
-                        HeroGiftPolicy.SCAN_INTERVAL_TICKS, HeroGiftPolicy.SCAN_INTERVAL_TICKS);
+                return player.getScheduler()
+                        .runAtFixedRate(
+                                this.plugin,
+                                SentryTaskWrapper.wrap(task -> runScan(player, task)),
+                                () -> this.scanTasks.remove(id),
+                                HeroGiftPolicy.SCAN_INTERVAL_TICKS,
+                                HeroGiftPolicy.SCAN_INTERVAL_TICKS);
             } catch (IllegalPluginAccessException e) {
                 // Plugin disabling: there is nothing left to scan for.
                 return null;

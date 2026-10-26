@@ -1,21 +1,21 @@
 package dev.mja00.villagerLobotomizer.utils;
 
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.jetbrains.annotations.NotNull;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Set;
 import java.util.logging.Logger;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.NotNull;
 
 public class ConfigMigrator {
     private final JavaPlugin plugin;
@@ -56,8 +56,8 @@ public class ConfigMigrator {
             return;
         }
 
-        logger.info("Config migration needed: current version " + existingVersion +
-                   " -> target version " + CURRENT_CONFIG_VERSION);
+        logger.info("Config migration needed: current version " + existingVersion + " -> target version "
+                + CURRENT_CONFIG_VERSION);
 
         try {
             createBackup(configFile);
@@ -112,13 +112,15 @@ public class ConfigMigrator {
         if (!migratedYaml.contains("config-version:")) {
             migratedYaml = "config-version: " + CURRENT_CONFIG_VERSION + "\n" + migratedYaml;
         } else {
-            migratedYaml = migratedYaml.replaceFirst("config-version:\\s*\\d+", "config-version: " + CURRENT_CONFIG_VERSION);
+            migratedYaml =
+                    migratedYaml.replaceFirst("config-version:\\s*\\d+", "config-version: " + CURRENT_CONFIG_VERSION);
         }
         return migratedYaml;
     }
 
     private void createBackup(File configFile) throws IOException {
-        String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());
+        String timestamp =
+                LocalDateTime.now(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss"));
         File backupFile = new File(plugin.getDataFolder(), "config_backup_" + timestamp + ".yml");
         Files.copy(configFile.toPath(), backupFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
         logger.info("Created config backup: " + backupFile.getName());
@@ -129,7 +131,7 @@ public class ConfigMigrator {
         if (resource == null) {
             throw new IOException("Default config.yml resource not found in plugin jar");
         }
-        return YamlConfiguration.loadConfiguration(new InputStreamReader(resource));
+        return YamlConfiguration.loadConfiguration(new InputStreamReader(resource, StandardCharsets.UTF_8));
     }
 
     private String getDefaultConfigAsString() throws IOException {
@@ -144,7 +146,7 @@ public class ConfigMigrator {
         FileConfiguration merged = new YamlConfiguration();
 
         addMissingKeys(existing, defaults, merged);
-        removeObsoleteKeys(existing, defaults, merged);
+        removeObsoleteKeys(existing, defaults);
 
         return merged;
     }
@@ -181,7 +183,7 @@ public class ConfigMigrator {
         }
     }
 
-    private void removeObsoleteKeys(FileConfiguration existing, FileConfiguration defaults, FileConfiguration merged) {
+    private void removeObsoleteKeys(FileConfiguration existing, FileConfiguration defaults) {
         Set<String> existingKeys = existing.getKeys(true);
         Set<String> defaultKeys = defaults.getKeys(true);
 
@@ -192,13 +194,15 @@ public class ConfigMigrator {
         }
     }
 
-    private void mergeSection(ConfigurationSection existing, ConfigurationSection defaults, ConfigurationSection merged) {
+    private void mergeSection(
+            ConfigurationSection existing, ConfigurationSection defaults, ConfigurationSection merged) {
         if (defaults == null) return;
 
         for (String key : defaults.getKeys(false)) {
             if (defaults.isConfigurationSection(key)) {
                 ConfigurationSection defaultSubSection = defaults.getConfigurationSection(key);
-                ConfigurationSection existingSubSection = existing != null ? existing.getConfigurationSection(key) : null;
+                ConfigurationSection existingSubSection =
+                        existing != null ? existing.getConfigurationSection(key) : null;
                 ConfigurationSection mergedSubSection = merged.createSection(key);
 
                 if (existingSubSection != null && defaultSubSection != null) {
@@ -212,7 +216,8 @@ public class ConfigMigrator {
                     merged.set(key, existing.get(key));
                 } else {
                     merged.set(key, defaults.get(key));
-                    logger.info("Added new config option: " + merged.getCurrentPath() + "." + key + " = " + defaults.get(key));
+                    logger.info("Added new config option: " + merged.getCurrentPath() + "." + key + " = "
+                            + defaults.get(key));
                 }
             }
         }

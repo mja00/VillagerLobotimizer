@@ -1,10 +1,18 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
+import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy.GiftClock;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -22,15 +30,6 @@ import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy;
-import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy.GiftClock;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Drives {@link LobotomizeStorage#offerHeroGift} directly for the rules, and the hero's scan for the
@@ -122,8 +121,9 @@ class HeroGiftTest extends MockBukkitTestBase {
         offerAt(1000L);
         offerAt(1000L + SCAN);
 
-        assertTrue(villager.getPersistentDataContainer().getKeys().stream()
-                        .noneMatch(key -> key.getKey().toLowerCase().contains("gift")),
+        assertTrue(
+                villager.getPersistentDataContainer().getKeys().stream()
+                        .noneMatch(key -> key.getKey().toLowerCase(Locale.ROOT).contains("gift")),
                 "like vanilla's, the timer restarts whenever the villager loads");
     }
 
@@ -173,7 +173,8 @@ class HeroGiftTest extends MockBukkitTestBase {
 
         plugin.getStorage().flush(LobotomizeStorage.FlushMode.RELOAD);
 
-        assertEquals(90f, villager.getLocation().getYaw(), 0.5f, "the replacement storage must not inherit a turned head");
+        assertEquals(
+                90f, villager.getLocation().getYaw(), 0.5f, "the replacement storage must not inherit a turned head");
     }
 
     @Test

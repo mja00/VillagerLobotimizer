@@ -1,13 +1,13 @@
 package dev.mja00.villagerLobotomizer;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.bukkit.Location;
 import org.bukkit.entity.Villager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.world.WorldMock;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A villager tracked as active but left without AI must be woken. Before this repair the wake only
@@ -39,9 +39,7 @@ class ProcessVillagerRepairTest extends MockBukkitTestBase {
 
         plugin.getStorage().addVillager(villager);
 
-        assertTrue(villager.isAware(),
-                "a villager loaded asleep with no marker should be woken as it is tracked");
-        assertTrue(plugin.getStorage().getActive().contains(villager),
-                "and it should be tracked as active");
+        assertTrue(villager.isAware(), "a villager loaded asleep with no marker should be woken as it is tracked");
+        assertTrue(plugin.getStorage().getActive().contains(villager), "and it should be tracked as active");
     }
 }
