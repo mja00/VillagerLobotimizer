@@ -80,8 +80,8 @@ Keep commits focused. One logical change per commit makes review and bisecting e
 Before requesting review:
 
 - [ ] Branch is **not** your fork's default branch
-- [ ] `./gradlew build` passes locally
-- [ ] `./gradlew test` passes locally
+- [ ] `./gradlew spotlessApply` has been run (formatting)
+- [ ] `./gradlew build` passes locally (formatting check, Error Prone, tests)
 - [ ] New config options have defaults in `src/main/resources/config.yml`
 - [ ] New commands are registered in `LobotomizeCommand.java` and have permissions in `plugin.yml`
 - [ ] Debug logging is gated behind `plugin.isDebugging()` or `plugin.isChunkDebugging()`
@@ -111,7 +111,8 @@ If your change adds scheduling, make sure it works on both Paper and Folia. Some
 
 - Early returns and guard clauses over deep nesting.
 - Default to no comments; only add one when the *why* is non-obvious.
-- Match the surrounding code's formatting.
+- Formatting is enforced by Spotless with palantir-java-format: run `./gradlew spotlessApply` rather than formatting by hand.
+- Error Prone runs on every compile and any warning fails the build. Fix the finding, or use a narrow `@SuppressWarnings("CheckName")` with a reason when it is a false positive.
 - New PDC keys: `new NamespacedKey(plugin, "keyName")`.
 
 ## Testing

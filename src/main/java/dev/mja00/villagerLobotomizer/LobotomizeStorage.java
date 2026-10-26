@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -512,6 +513,7 @@ public class LobotomizeStorage {
      * @deprecated use {@link #flush(FlushMode)}; kept because this is public API other plugins may call
      */
     @Deprecated
+    @SuppressWarnings("InlineMeSuggester") // @InlineMe would add a dependency just for this shim
     public final void flush(boolean reloading) {
         flush(reloading ? FlushMode.RELOAD : FlushMode.SHUTDOWN);
     }
@@ -569,9 +571,9 @@ public class LobotomizeStorage {
     /**
      * Stops tracking all villagers, cancels their scheduled tasks, and restores their activity state.
      *
-     * @param reloading {@code true} when the plugin remains enabled (such as during a config reload).
+     * @param mode      {@link FlushMode#RELOAD} when the plugin remains enabled (such as during a config reload).
      *                  Wake operations are dispatched via each villager's {@code EntityScheduler},
-     *                  ensuring safe cross-region (Folia) execution. {@code false} during plugin shutdown,
+     *                  ensuring safe cross-region (Folia) execution. {@link FlushMode#SHUTDOWN} during plugin shutdown,
      *                  where the scheduler may not run; in this case, mutations are attempted directly
      *                  and the persistent lobotomized marker is relied upon for re-evaluation on chunk load.
      */
@@ -1518,7 +1520,7 @@ public class LobotomizeStorage {
         Component customName = villager.customName();
         String name = customName == null
                 ? ""
-                : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase();
+                : PlainTextComponentSerializer.plainText().serialize(customName).toLowerCase(Locale.ROOT);
         double height = villager.getHeight();
         return new VillagerState(
                 name,
@@ -1556,7 +1558,7 @@ public class LobotomizeStorage {
             private int cachedChunkX;
             private int cachedChunkZ;
 
-            /**
+            /*
              * Gets a block snapshot at the specified world coordinates, caching chunk lookups for efficiency.
              *
              * @return a snapshot of the block at the coordinates, or null if the chunk is not loaded

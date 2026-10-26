@@ -120,12 +120,11 @@ public class VillagerLobotomizer extends JavaPlugin {
         // Check to see if plugman (or its fork Plugmanx) is installed. If so send a warning.
         PluginManager pluginManager = this.getServer().getPluginManager();
         for (Plugin plugin : pluginManager.getPlugins()) {
-            String pluginName = plugin.getName().toLowerCase();
+            String pluginName = plugin.getName().toLowerCase(Locale.ROOT);
             String pluginVersion = plugin.getPluginMeta().getVersion();
             if (pluginName.contains("plugman")) {
-                int pluginMajor = pluginVersion.split("\\.")[0].matches("\\d+")
-                        ? Integer.parseInt(pluginVersion.split("\\.")[0])
-                        : 0;
+                String majorPart = pluginVersion.split("\\.", -1)[0];
+                int pluginMajor = majorPart.matches("\\d+") ? Integer.parseInt(majorPart) : 0;
                 if (pluginMajor < 2) {
                     this.getLogger().warning("------------------------------");
                     this.getLogger()
@@ -149,37 +148,30 @@ public class VillagerLobotomizer extends JavaPlugin {
         }
 
         switch (VersionUtils.getServerSupportStatus()) {
-            case NMS_CLEANROOM:
+            case NMS_CLEANROOM ->
                 this.getLogger()
                         .severe(
                                 "You are running a server that does not properly support Bukkit plugins that rely on internal Mojang code.");
-                break;
-            case DANGEROUS_FORK:
+            case DANGEROUS_FORK ->
                 this.getLogger()
                         .severe(
                                 "You are running a server fork that is known to be extremely dangerous and lead to data loss. It is strongly recommended you switch to a more stable server software like Paper.");
-                break;
-            case STUPID_PLUGIN:
+            case STUPID_PLUGIN ->
                 this.getLogger()
                         .severe(
                                 "You are using plugins known to cause severe issues with VillagerLobotomy and other plugins.");
-                break;
-            case UNSTABLE:
+            case UNSTABLE ->
                 this.getLogger()
                         .severe(
                                 "You are running a server that does not properly support Bukkit plugins. Bukkit plugins should not be used with Forge/Fabric mods!");
-                break;
-            case OUTDATED:
-                this.getLogger().severe("You are running an unsupported server version!");
-                break;
-            case LIMITED:
+            case OUTDATED -> this.getLogger().severe("You are running an unsupported server version!");
+            case LIMITED ->
                 this.getLogger()
                         .info(
                                 "You are running a server with limited API functionality. Some features may become unavailable.");
-                break;
-            case FULL:
+            case FULL -> {
                 // Fully supported, no warning needed
-                break;
+            }
         }
 
         if (VersionUtils.getSupportStatusClass() != null) {
@@ -331,7 +323,7 @@ public class VillagerLobotomizer extends JavaPlugin {
     }
 
     /**
-     * @return the marker store, or {@code null} when persistence is disabled or unavailable
+     * Returns the marker store, or {@code null} when persistence is disabled or unavailable.
      */
     public LobotomizedMarkerStore getMarkerStore() {
         return this.markerStore;

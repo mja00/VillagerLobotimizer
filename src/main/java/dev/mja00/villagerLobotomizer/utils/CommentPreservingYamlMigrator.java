@@ -202,7 +202,6 @@ public class CommentPreservingYamlMigrator {
                 }
             } else if (line.trim().isEmpty()) {
                 // Empty line, keep pending comments for next key
-                continue;
             } else if (foundFirstKey && !line.trim().startsWith("-")) {
                 // Non-key, non-comment line - clear pending comments
                 pendingComments.clear();
@@ -220,8 +219,8 @@ public class CommentPreservingYamlMigrator {
      * @return          the dot-separated key path representing the nested structure, or an empty string if no keys are found
      */
     private String extractKeyPath(String[] lines, int lineIndex) {
-        Stack<String> pathStack = new Stack<>();
-        Stack<Integer> indentStack = new Stack<>();
+        Deque<String> pathStack = new ArrayDeque<>();
+        Deque<Integer> indentStack = new ArrayDeque<>();
 
         for (int i = 0; i <= lineIndex; i++) {
             String line = lines[i];
@@ -233,27 +232,29 @@ public class CommentPreservingYamlMigrator {
         return pathStack.isEmpty() ? "" : String.join(".", pathStack);
     }
 
-    private void updatePath(String line, Stack<String> pathStack, Stack<Integer> indentStack) {
+    // Stacks grow at the tail so String.join walks the path root-first.
+    private void updatePath(String line, Deque<String> pathStack, Deque<Integer> indentStack) {
         int indent = getIndentLevel(line);
         String key = extractKey(line);
 
         if (key == null) return;
 
         // Pop elements until we find the correct parent level
-        while (!indentStack.isEmpty() && indentStack.peek() >= indent) {
-            indentStack.pop();
+        while (!indentStack.isEmpty() && indentStack.peekLast() >= indent) {
+            indentStack.removeLast();
             if (!pathStack.isEmpty()) {
-                pathStack.pop();
+                pathStack.removeLast();
             }
         }
 
-        pathStack.push(key);
-        indentStack.push(indent);
+        pathStack.addLast(key);
+        indentStack.addLast(indent);
     }
 
     private int getIndentLevel(String line) {
         int indent = 0;
-        for (char c : line.toCharArray()) {
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
             if (c == ' ') indent++;
             else if (c == '\t') indent += 4; // Treat tab as 4 spaces
             else break;
@@ -270,7 +271,7 @@ public class CommentPreservingYamlMigrator {
     private String extractKey(String line) {
         String trimmed = line.trim();
         if (trimmed.contains(":")) {
-            String key = trimmed.split(":")[0].trim();
+            String key = trimmed.split(":", -1)[0].trim();
             if (key.startsWith("\"") && key.endsWith("\"")) {
                 key = key.substring(1, key.length() - 1);
             } else if (key.startsWith("'") && key.endsWith("'")) {

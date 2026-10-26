@@ -18,6 +18,7 @@ import io.papermc.paper.command.brigadier.argument.resolvers.selector.EntitySele
 import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import net.kyori.adventure.text.Component;
@@ -359,8 +360,6 @@ public class LobotomizeCommand {
      * @return the villager in the player's line of sight, or {@code null} if none is targeted
      */
     private @Nullable Entity getTargeted(Player player) {
-        Entity target = null;
-
         RayTraceResult ray = player.getWorld()
                 .rayTraceEntities(
                         player.getEyeLocation(),
@@ -368,9 +367,7 @@ public class LobotomizeCommand {
                         16.0F,
                         0.0F,
                         (ex) -> ex instanceof Villager);
-        target = ray == null ? null : ray.getHitEntity();
-
-        return target;
+        return ray == null ? null : ray.getHitEntity();
     }
 
     /**
@@ -519,10 +516,10 @@ public class LobotomizeCommand {
 
         Set<String> configKeys = plugin.getConfig().getKeys(true);
 
-        String remaining = builder.getRemaining().toLowerCase();
+        String remaining = builder.getRemaining().toLowerCase(Locale.ROOT);
 
         configKeys.stream()
-                .filter(key -> key.toLowerCase().startsWith(remaining))
+                .filter(key -> key.toLowerCase(Locale.ROOT).startsWith(remaining))
                 .forEach(builder::suggest);
 
         return builder.buildFuture();
@@ -562,41 +559,45 @@ public class LobotomizeCommand {
         Object currentValue = this.plugin.getConfig().get(key);
 
         try {
-            if (currentValue instanceof Boolean) {
-                if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+            switch (currentValue) {
+                case Boolean ignored -> {
+                    if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                        source.getSender()
+                                .sendMessage(Component.text(
+                                                "'" + key + "' expects a boolean value (true/false), but got: " + value)
+                                        .color(NamedTextColor.RED));
+                        return 0;
+                    }
+                    boolean boolValue = Boolean.parseBoolean(value);
+                    this.plugin.getConfig().set(key, boolValue);
+                }
+                case Number ignored -> {
+                    Number parsed = switch (currentValue) {
+                        case Long l -> Long.valueOf(value);
+                        case Integer i -> Integer.valueOf(value);
+                        case Double d -> Double.valueOf(value);
+                        case Float f -> Float.valueOf(value);
+                        default -> null;
+                    };
+                    if (parsed != null) {
+                        this.plugin.getConfig().set(key, parsed);
+                    }
+                }
+                case String ignored -> this.plugin.getConfig().set(key, value);
+                case List<?> ignored -> {
+                    // List editing unsupported via command
                     source.getSender()
                             .sendMessage(Component.text(
-                                            "'" + key + "' expects a boolean value (true/false), but got: " + value)
+                                            "Setting list values is not supported yet. Use the config file directly.")
+                                    .color(NamedTextColor.YELLOW));
+                    return 0;
+                }
+                case null, default -> {
+                    source.getSender()
+                            .sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.")
                                     .color(NamedTextColor.RED));
                     return 0;
                 }
-                boolean boolValue = Boolean.parseBoolean(value);
-                this.plugin.getConfig().set(key, boolValue);
-            } else if (currentValue instanceof Number) {
-                Number parsed = switch (currentValue) {
-                    case Long l -> Long.valueOf(value);
-                    case Integer i -> Integer.valueOf(value);
-                    case Double d -> Double.valueOf(value);
-                    case Float f -> Float.valueOf(value);
-                    default -> null;
-                };
-                if (parsed != null) {
-                    this.plugin.getConfig().set(key, parsed);
-                }
-            } else if (currentValue instanceof String) {
-                this.plugin.getConfig().set(key, value);
-            } else if (currentValue instanceof List) {
-                // List editing unsupported via command
-                source.getSender()
-                        .sendMessage(Component.text(
-                                        "Setting list values is not supported yet. Use the config file directly.")
-                                .color(NamedTextColor.YELLOW));
-                return 0;
-            } else {
-                source.getSender()
-                        .sendMessage(Component.text("Cannot set value for '" + key + "': unsupported type.")
-                                .color(NamedTextColor.RED));
-                return 0;
             }
 
             this.plugin.saveConfig();

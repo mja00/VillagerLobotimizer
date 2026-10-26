@@ -7,7 +7,7 @@ globs: build.gradle.kts,settings.gradle.kts,gradle.properties
 - Use the Gradle wrapper.
 
 ```bash
-./gradlew build
+./gradlew spotlessApply build
 ```
 
 - Start a dev server with the plugin installed:

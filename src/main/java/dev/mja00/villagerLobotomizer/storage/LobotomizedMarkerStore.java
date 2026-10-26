@@ -309,7 +309,11 @@ public final class LobotomizedMarkerStore implements AutoCloseable {
         }
     }
 
-    /** @throws SQLException if the store is closed: an empty list would be mistaken for an empty table */
+    /**
+     * Reads every stored marker.
+     *
+     * @throws SQLException if the store is closed: an empty list would be mistaken for an empty table
+     */
     public @NotNull List<MarkedVillager> loadAll() throws SQLException {
         synchronized (this.ioLock) {
             if (this.closed || this.connection == null) {

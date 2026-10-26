@@ -11,6 +11,7 @@ import dev.mja00.villagerLobotomizer.policy.HeroGiftPolicy.GiftClock;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -122,7 +123,7 @@ class HeroGiftTest extends MockBukkitTestBase {
 
         assertTrue(
                 villager.getPersistentDataContainer().getKeys().stream()
-                        .noneMatch(key -> key.getKey().toLowerCase().contains("gift")),
+                        .noneMatch(key -> key.getKey().toLowerCase(Locale.ROOT).contains("gift")),
                 "like vanilla's, the timer restarts whenever the villager loads");
     }
 

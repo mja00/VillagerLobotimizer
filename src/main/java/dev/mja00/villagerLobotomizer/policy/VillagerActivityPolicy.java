@@ -488,9 +488,13 @@ public final class VillagerActivityPolicy {
 
         ActivityDecision finish(Rule rule, boolean active, String detail, MovementTrace movement) {
             this.checks.add(new RuleCheck(rule, active ? Outcome.KEPT_ACTIVE : Outcome.LOBOTOMIZED, detail));
-            Rule[] rules = Rule.values();
-            for (int i = rule.ordinal() + 1; i < rules.length; i++) {
-                this.checks.add(new RuleCheck(rules[i], Outcome.NOT_REACHED, ""));
+            boolean reached = false;
+            for (Rule later : Rule.values()) {
+                if (reached) {
+                    this.checks.add(new RuleCheck(later, Outcome.NOT_REACHED, ""));
+                } else if (later == rule) {
+                    reached = true;
+                }
             }
             return new ActivityDecision(active, rule, this.checks, movement);
         }

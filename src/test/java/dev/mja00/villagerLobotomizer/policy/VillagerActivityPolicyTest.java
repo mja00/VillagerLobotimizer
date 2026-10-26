@@ -10,6 +10,7 @@ import dev.mja00.villagerLobotomizer.policy.ActivityDecision.BlockVerdict;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.DirectionTrace;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Outcome;
 import dev.mja00.villagerLobotomizer.policy.ActivityDecision.Rule;
+import dev.mja00.villagerLobotomizer.policy.ActivityDecision.RuleCheck;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
@@ -385,10 +386,8 @@ class VillagerActivityPolicyTest {
 
         assertFalse(d.active());
         assertEquals(Rule.MOVEMENT, d.decidingRule());
-        assertEquals(Rule.values().length, d.checks().size());
-        for (int i = 0; i < Rule.values().length; i++) {
-            assertEquals(Rule.values()[i], d.checks().get(i).rule());
-        }
+        assertEquals(
+                List.of(Rule.values()), d.checks().stream().map(RuleCheck::rule).toList());
         assertEquals(Outcome.PASSED, outcomeOf(d, Rule.NOBRAIN_NAME));
         assertEquals(Outcome.DISABLED, outcomeOf(d, Rule.IN_VEHICLE));
         assertEquals(Outcome.DISABLED, outcomeOf(d, Rule.ROOF));

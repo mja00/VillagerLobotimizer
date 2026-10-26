@@ -3,7 +3,8 @@ VillagerLobotimizer is a Minecraft Paper plugin (Java 21) that disables villager
 Note: The project is misspelled on purpose. You'll need to use VillagerLobotomizer and not VillagerLobotimizer.
 
 ## Commands
-- Build: `./gradlew build`
+- Build: `./gradlew build` (also runs `spotlessCheck` and Error Prone with `-Werror`)
+- Format: `./gradlew spotlessApply`
 - Test Server: `./gradlew runServer`
 - In-game: `/lobotomy info|debug|wake|reload|uninstall`
 

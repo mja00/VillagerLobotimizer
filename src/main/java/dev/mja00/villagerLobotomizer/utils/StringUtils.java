@@ -20,8 +20,8 @@ public class StringUtils {
             return 0;
         }
 
-        String[] v1Parts = version1.split("\\.");
-        String[] v2Parts = version2.split("\\.");
+        String[] v1Parts = version1.split("\\.", -1);
+        String[] v2Parts = version2.split("\\.", -1);
         int length = Math.max(v1Parts.length, v2Parts.length);
 
         for (int i = 0; i < length; i++) {

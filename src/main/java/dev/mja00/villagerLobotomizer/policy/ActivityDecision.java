@@ -121,6 +121,8 @@ public record ActivityDecision(boolean active, Rule decidingRule, List<RuleCheck
             boolean open) {}
 
     /**
+     * How the movement rule saw the villager's surroundings.
+     *
      * @param floor      the block under the villager, or {@code null} when unloaded
      * @param roof       the first non-air block one or two layers above the villager's head, or {@code null} when unloaded
      * @param roofed     whether a roof (or honey floor) makes the under-feet block of each neighbour count
