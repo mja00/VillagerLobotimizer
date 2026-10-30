@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.mja00.villagerLobotomizer.MockBukkitTestBase;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -14,6 +16,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.MerchantRecipe;
 import org.bukkit.persistence.PersistentDataType;
 import org.junit.jupiter.api.Test;
+import org.mockbukkit.mockbukkit.ServerMock;
+import org.mockbukkit.mockbukkit.entity.VillagerMock;
 import org.mockbukkit.mockbukkit.world.WorldMock;
 
 class VillagerUtilsTest extends MockBukkitTestBase {
@@ -162,5 +166,87 @@ class VillagerUtilsTest extends MockBukkitTestBase {
                 VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY),
                 "12000 game ticks after the last reset the counter resets even though day time is frozen");
         assertEquals(0, villager.getRestocksToday());
+    }
+
+    @Test
+    void newDayCatchesUpOneDemandUpdatePerMissedRestockOnClearedUses() {
+        UpdateCountingVillager villager = spawnCountingVillager();
+        WorldMock world = (WorldMock) villager.getWorld();
+        MerchantRecipe used = new MerchantRecipe(new ItemStack(Material.EMERALD), 12);
+        used.setUses(5);
+        villager.setRecipes(List.of(used));
+        world.setGameTime(20_000L);
+        villager.getPersistentDataContainer().set(LAST_RESET_GAME_TIME_KEY, PersistentDataType.LONG, 1_000L);
+        villager.setRestocksToday(1);
+
+        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY);
+
+        assertEquals(
+                List.of(0),
+                villager.usesSeenByUpdateDemand,
+                "one restock was missed, and vanilla clears uses before applying it");
+        assertEquals(0, villager.getRecipes().get(0).getUses());
+        assertEquals(0, villager.getRestocksToday());
+    }
+
+    @Test
+    void newDayOwesTwoDemandUpdatesWhenNothingRestockedToday() {
+        UpdateCountingVillager villager = spawnCountingVillager();
+        ((WorldMock) villager.getWorld()).setGameTime(20_000L);
+        villager.getPersistentDataContainer().set(LAST_RESET_GAME_TIME_KEY, PersistentDataType.LONG, 1_000L);
+
+        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY);
+
+        assertEquals(List.of(0, 0), villager.usesSeenByUpdateDemand);
+    }
+
+    @Test
+    void newDayOwesNoDemandUpdateAfterTwoRestocks() {
+        UpdateCountingVillager villager = spawnCountingVillager();
+        ((WorldMock) villager.getWorld()).setGameTime(20_000L);
+        villager.getPersistentDataContainer().set(LAST_RESET_GAME_TIME_KEY, PersistentDataType.LONG, 1_000L);
+        villager.setRestocksToday(2);
+
+        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY);
+
+        assertTrue(villager.usesSeenByUpdateDemand.isEmpty(), "both restocks already updated demand");
+    }
+
+    @Test
+    void firstCheckOfAnUntrackedVillagerSkipsTheCatchUp() {
+        UpdateCountingVillager villager = spawnCountingVillager();
+        ((WorldMock) villager.getWorld()).setGameTime(20_000L);
+
+        VillagerUtils.shouldRestock(villager, LAST_RESTOCK_KEY, LAST_RESET_GAME_TIME_KEY);
+
+        assertTrue(
+                villager.usesSeenByUpdateDemand.isEmpty(),
+                "with no recorded reset there is no previous day to catch up on");
+    }
+
+    private UpdateCountingVillager spawnCountingVillager() {
+        WorldMock world = server.addSimpleWorld("test");
+        UpdateCountingVillager villager = new UpdateCountingVillager(server);
+        villager.setLocation(new Location(world, 0, 64, 0));
+        server.registerEntity(villager);
+        return villager;
+    }
+
+    /** MockBukkit has no demand, so record the uses each update sees instead. */
+    private static final class UpdateCountingVillager extends VillagerMock {
+        final List<Integer> usesSeenByUpdateDemand = new ArrayList<>();
+
+        UpdateCountingVillager(ServerMock server) {
+            super(server, UUID.randomUUID());
+        }
+
+        @Override
+        public void updateDemand() {
+            int uses = 0;
+            for (MerchantRecipe recipe : getRecipes()) {
+                uses += recipe.getUses();
+            }
+            this.usesSeenByUpdateDemand.add(uses);
+        }
     }
 }
