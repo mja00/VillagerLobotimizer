@@ -1,6 +1,8 @@
 package dev.mja00.villagerLobotomizer.utils;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +19,9 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.util.BoundingBox;
 
 public class VillagerUtils {
+    /** Vanilla's daily restock cap; also how many demand updates a villager owes per day. */
+    private static final int MAX_RESTOCKS_PER_DAY = 2;
+
     public static final Map<Villager.Profession, Material> PROFESSION_TO_STATION;
     public static final Map<Villager.Profession, Sound> PROFESSION_TO_SOUND;
 
@@ -187,7 +192,7 @@ public class VillagerUtils {
      */
     public static boolean allowedToRestock(Villager villager) {
         int numberOfRestocksToday = villager.getRestocksToday();
-        return numberOfRestocksToday < 2;
+        return numberOfRestocksToday < MAX_RESTOCKS_PER_DAY;
     }
 
     /**
@@ -219,9 +224,35 @@ public class VillagerUtils {
         pdc.set(lastRestockCheckDayTimeKey, org.bukkit.persistence.PersistentDataType.LONG, fullTime);
         if (reset) {
             pdc.set(lastRestockGameTimeKey, org.bukkit.persistence.PersistentDataType.LONG, gameTime);
+            // A zero reset time means this is the first check, so there is no previous day to catch up on.
+            if (lastRestockGameTime > 0L) {
+                catchUpDemand(villager);
+            }
             villager.setRestocksToday(0);
         }
 
         return allowedToRestock(villager) && needsToRestock(villager);
+    }
+
+    /**
+     * Applies the demand updates a villager missed today, as vanilla's {@code Villager#catchUpDemand} does when the
+     * restock counter resets on a new day. Unused trades lose demand without needing a restock, which is how prices
+     * fall back toward their base value. Uses are cleared first so each update sees them as unused, matching vanilla.
+     */
+    private static void catchUpDemand(Villager villager) {
+        int missedUpdates = MAX_RESTOCKS_PER_DAY - villager.getRestocksToday();
+        if (missedUpdates <= 0) {
+            return;
+        }
+
+        List<MerchantRecipe> recipes = new ArrayList<>(villager.getRecipes());
+        for (MerchantRecipe recipe : recipes) {
+            recipe.setUses(0);
+        }
+        villager.setRecipes(recipes);
+
+        for (int i = 0; i < missedUpdates; i++) {
+            villager.updateDemand();
+        }
     }
 }
